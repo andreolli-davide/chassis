@@ -23,8 +23,10 @@ from chassis.capabilities.registry import (
 )
 from chassis.core.errors import CapabilityNotFound, CapabilityVersionMismatch
 from chassis.core.scope import EffectRecord, Scope
+from chassis.hooks.registry import HookRegistry, ScopedHooks
 from chassis.plugins.manifest import PluginManifest
 from chassis.tasks.manager import ScopedTasks
+from chassis.tools.registry import ScopedTools, ToolRegistry
 
 __all__ = ["Plugin", "PluginContext", "plugin"]
 
@@ -46,12 +48,14 @@ class PluginContext:
         "_capabilities",
         "_config",
         "_entry_id",
+        "_hooks",
         "_instance_id",
         "_manifest",
         "_registry",
         "_resolved",
         "_scope",
         "_tasks",
+        "_tools",
     )
 
     def __init__(
@@ -64,6 +68,8 @@ class PluginContext:
         scope: Scope,
         registry: CapabilityRegistry,
         resolved: Mapping[str, CapabilityRegistration],
+        tools: ToolRegistry,
+        hooks: HookRegistry,
     ) -> None:
         self._instance_id = instance_id
         self._entry_id = entry_id
@@ -74,6 +80,8 @@ class PluginContext:
         self._resolved = dict(resolved)
         self._capabilities = ScopedCapabilities(registry, scope, instance_id, manifest.name)
         self._tasks = ScopedTasks(scope)
+        self._tools = ScopedTools(tools, scope, instance_id, manifest.name)
+        self._hooks = ScopedHooks(hooks, scope, instance_id)
 
     @property
     def instance_id(self) -> str:
@@ -120,6 +128,22 @@ class PluginContext:
         """Task API bound to this plugin's scope."""
 
         return self._tasks
+
+    @property
+    def tools(self) -> ScopedTools:
+        """Tool registration bound to this plugin's scope.
+
+        Registration is reversible: closing the plugin scope unregisters the tool,
+        so plugins never write matching unregistration code.
+        """
+
+        return self._tools
+
+    @property
+    def hooks(self) -> ScopedHooks:
+        """Hook registration bound to this plugin's scope."""
+
+        return self._hooks
 
     def require(self, capability: CapabilityKey | str) -> Any:
         """Return the provider object resolved for a required capability.

@@ -49,10 +49,18 @@ from chassis.core.generation import RuntimeGeneration
 from chassis.core.generations import GenerationManager
 from chassis.core.scope import Scope
 from chassis.diagnostics import Diagnostics
+from chassis.hooks.registry import HookRegistry, HookSnapshot
 from chassis.plugins.base import Plugin
 from chassis.plugins.lifecycle import PluginInstance, PluginState
 from chassis.plugins.registry import PluginEntry, PluginRegistry
 from chassis.plugins.resolver import DependencyResolver, ResolutionPlan
+from chassis.policy.engine import AllowAllPolicy, PolicyEngine
+from chassis.secrets.base import SecretProvider
+from chassis.secrets.env import EnvSecretProvider
+from chassis.secrets.redaction import SecretRedactor
+from chassis.telemetry.base import NoopTelemetry, Telemetry
+from chassis.tools.executor import ApprovalGate, ToolExecutor
+from chassis.tools.registry import ToolRegistry, ToolSnapshot
 
 __all__ = ["Harness", "HarnessState", "ReconcileResult"]
 
@@ -98,6 +106,12 @@ class Harness:
         task_shutdown_timeout: float | None = 5.0,
         shutdown_grace_seconds: float | None = 30.0,
         generation_history_limit: int = 32,
+        policy: PolicyEngine | None = None,
+        secrets: SecretProvider | None = None,
+        approvals: ApprovalGate | None = None,
+        telemetry: Telemetry | None = None,
+        redactor: SecretRedactor | None = None,
+        tool_timeout_seconds: float | None = None,
     ) -> None:
         self._name = name
         self._state = HarnessState.CREATED
@@ -105,8 +119,26 @@ class Harness:
             name, description="harness", task_shutdown_timeout=task_shutdown_timeout
         )
         self._capability_registry = CapabilityRegistry()
-        self._plugin_registry = PluginRegistry(capabilities=self._capability_registry)
+        self._tool_registry = ToolRegistry()
+        self._hook_registry = HookRegistry()
+        self._plugin_registry = PluginRegistry(
+            capabilities=self._capability_registry,
+            tools=self._tool_registry,
+            hooks=self._hook_registry,
+        )
         self._generations = GenerationManager(history_limit=generation_history_limit)
+        self._policy: PolicyEngine = policy if policy is not None else AllowAllPolicy()
+        self._secrets: SecretProvider = secrets if secrets is not None else EnvSecretProvider()
+        self._telemetry: Telemetry = telemetry if telemetry is not None else NoopTelemetry()
+        self._redactor = redactor if redactor is not None else SecretRedactor()
+        self._tool_executor = ToolExecutor(
+            policy=self._policy,
+            approvals=approvals,
+            hooks=self._hook_registry,
+            telemetry=self._telemetry,
+            redactor=self._redactor,
+            default_timeout_seconds=tool_timeout_seconds,
+        )
         self._resolver = DependencyResolver()
         self._provider_preference: dict[str, str] = {}
         self._compose_lock = asyncio.Lock()
@@ -142,6 +174,40 @@ class Harness:
     @property
     def generation_manager(self) -> GenerationManager:
         return self._generations
+
+    @property
+    def tools(self) -> ToolRegistry:
+        """Live tool registry; registrations are owned by plugin scopes."""
+
+        return self._tool_registry
+
+    @property
+    def hooks(self) -> HookRegistry:
+        """Live hook registry; registrations are owned by plugin scopes."""
+
+        return self._hook_registry
+
+    @property
+    def tool_executor(self) -> ToolExecutor:
+        """The harness-controlled tool execution boundary."""
+
+        return self._tool_executor
+
+    @property
+    def policy(self) -> PolicyEngine:
+        return self._policy
+
+    @property
+    def secrets(self) -> SecretProvider:
+        return self._secrets
+
+    @property
+    def telemetry(self) -> Telemetry:
+        return self._telemetry
+
+    @property
+    def redactor(self) -> SecretRedactor:
+        return self._redactor
 
     @property
     def current_generation(self) -> RuntimeGeneration | None:
@@ -494,6 +560,25 @@ class Harness:
     def _generation_id_or_empty(self) -> str:
         current = self._generations.current
         return "" if current is None else current.generation_id
+
+    def tool_snapshot(self, generation: RuntimeGeneration) -> ToolSnapshot:
+        """Tools reachable from ``generation``, as an immutable view.
+
+        A run executes against the tools of the generation it acquired: a plugin
+        that left the composition stops contributing tools to new runs without
+        disturbing runs already in flight.
+        """
+
+        return self._tool_registry.snapshot(
+            generation.generation_id, owner_ids=generation.instance_ids
+        )
+
+    def hook_snapshot(self, generation: RuntimeGeneration) -> HookSnapshot:
+        """Hooks reachable from ``generation``, as an immutable view."""
+
+        return self._hook_registry.snapshot(
+            generation.generation_id, owner_ids=generation.instance_ids
+        )
 
     # ------------------------------------------------------------- dry-run plan
 

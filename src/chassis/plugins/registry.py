@@ -24,10 +24,12 @@ from chassis.core.errors import (
     PluginSetupError,
 )
 from chassis.core.scope import Scope
+from chassis.hooks.registry import HookRegistry
 from chassis.plugins.base import Plugin, PluginContext
 from chassis.plugins.lifecycle import PluginHealth, PluginInstance, PluginState
 from chassis.plugins.manifest import PluginManifest
 from chassis.plugins.resolver import PluginCandidate
+from chassis.tools.registry import ToolRegistry
 
 __all__ = ["PluginEntry", "PluginRegistry"]
 
@@ -51,8 +53,16 @@ class PluginEntry:
 class PluginRegistry:
     """Tracks desired entries and mounted instances."""
 
-    def __init__(self, *, capabilities: CapabilityRegistry) -> None:
+    def __init__(
+        self,
+        *,
+        capabilities: CapabilityRegistry,
+        tools: ToolRegistry,
+        hooks: HookRegistry,
+    ) -> None:
         self._capabilities = capabilities
+        self._tools = tools
+        self._hooks = hooks
         self._entries: dict[str, PluginEntry] = {}
         self._instances: dict[str, PluginInstance] = {}
         self._by_entry: dict[str, list[str]] = {}
@@ -238,6 +248,8 @@ class PluginRegistry:
             scope=scope,
             registry=self._capabilities,
             resolved=resolved,
+            tools=self._tools,
+            hooks=self._hooks,
         )
         instance.context = context
 
