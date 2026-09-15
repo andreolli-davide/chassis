@@ -9,9 +9,112 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 
+from chassis.capabilities import (
+    ARTIFACTS,
+    DATABASE,
+    MEMORY,
+    MODEL,
+    POLICY,
+    SANDBOX,
+    SCHEDULER,
+    SECRETS,
+    TOOLS,
+    CapabilityKey,
+    CapabilityRegistration,
+    CapabilityRegistry,
+    CapabilityRequirement,
+    ScopedCapabilities,
+)
+from chassis.core.errors import (
+    BudgetExceeded,
+    CapabilityNotFound,
+    CapabilityVersionMismatch,
+    ChassisError,
+    CleanupFailure,
+    ConfigurationError,
+    EffectCleanupError,
+    GenerationConflictError,
+    GraphBuildError,
+    HookExecutionError,
+    PluginCycleError,
+    PluginDependencyError,
+    PluginLoadError,
+    PluginSetupError,
+    PolicyDenied,
+    ReplayMismatch,
+    ScopeClosedError,
+    SecretResolutionError,
+    ToolExecutionError,
+)
+from chassis.core.scope import EffectRecord, Scope, ScopeState
+from chassis.diagnostics import Diagnostics
+from chassis.harness import Harness, HarnessState, ReconcileResult
+from chassis.plugins import (
+    DependencyResolver,
+    Plugin,
+    PluginContext,
+    PluginHealth,
+    PluginInstance,
+    PluginManifest,
+    PluginState,
+    ResolutionPlan,
+    plugin,
+)
+
 try:
     __version__ = version("chassis")
 except PackageNotFoundError:  # pragma: no cover - only when running from a source tree
     __version__ = "0.0.0"
 
-__all__ = ["__version__"]
+__all__ = [
+    "ARTIFACTS",
+    "DATABASE",
+    "MEMORY",
+    "MODEL",
+    "POLICY",
+    "SANDBOX",
+    "SCHEDULER",
+    "SECRETS",
+    "TOOLS",
+    "BudgetExceeded",
+    "CapabilityKey",
+    "CapabilityNotFound",
+    "CapabilityRegistration",
+    "CapabilityRegistry",
+    "CapabilityRequirement",
+    "CapabilityVersionMismatch",
+    "ChassisError",
+    "CleanupFailure",
+    "ConfigurationError",
+    "DependencyResolver",
+    "Diagnostics",
+    "EffectCleanupError",
+    "EffectRecord",
+    "GenerationConflictError",
+    "GraphBuildError",
+    "Harness",
+    "HarnessState",
+    "HookExecutionError",
+    "Plugin",
+    "PluginContext",
+    "PluginCycleError",
+    "PluginDependencyError",
+    "PluginHealth",
+    "PluginInstance",
+    "PluginLoadError",
+    "PluginManifest",
+    "PluginSetupError",
+    "PluginState",
+    "PolicyDenied",
+    "ReconcileResult",
+    "ReplayMismatch",
+    "ResolutionPlan",
+    "Scope",
+    "ScopeClosedError",
+    "ScopeState",
+    "ScopedCapabilities",
+    "SecretResolutionError",
+    "ToolExecutionError",
+    "__version__",
+    "plugin",
+]

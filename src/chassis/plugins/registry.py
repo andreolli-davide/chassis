@@ -1,0 +1,306 @@
+"""Plugin instances: desired entries, mounting, rollback, and disposal.
+
+The registry owns *instances*, not composition. It does not decide which plugins
+belong in the current runtime generation -- that is the resolver's job -- and it
+does not decide when an instance is unreachable -- that is the generation
+manager's job. Its responsibility is the mechanical lifecycle:
+
+- create exactly one scope per instance;
+- run ``setup`` and, on failure, roll back every effect it created;
+- run ``teardown`` and close the scope on disposal;
+- never leave a partially configured instance visible.
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+
+from chassis.capabilities.registry import CapabilityRegistration, CapabilityRegistry
+from chassis.core.errors import (
+    EffectCleanupError,
+    PluginLoadError,
+    PluginSetupError,
+)
+from chassis.core.scope import Scope
+from chassis.plugins.base import Plugin, PluginContext
+from chassis.plugins.lifecycle import PluginHealth, PluginInstance, PluginState
+from chassis.plugins.manifest import PluginManifest
+from chassis.plugins.resolver import PluginCandidate
+
+__all__ = ["PluginEntry", "PluginRegistry"]
+
+
+@dataclass(frozen=True, slots=True)
+class PluginEntry:
+    """A desired plugin: stable identity plus the implementation to mount."""
+
+    entry_id: str
+    plugin: Plugin
+    manifest: PluginManifest
+    config: Mapping[str, object] = field(default_factory=dict)
+
+
+class PluginRegistry:
+    """Tracks desired entries and mounted instances."""
+
+    def __init__(self, *, capabilities: CapabilityRegistry) -> None:
+        self._capabilities = capabilities
+        self._entries: dict[str, PluginEntry] = {}
+        self._instances: dict[str, PluginInstance] = {}
+        self._by_entry: dict[str, str] = {}
+
+    # ------------------------------------------------------------- desired state
+
+    def install(
+        self,
+        plugin: Plugin | type[Plugin],
+        *,
+        entry_id: str | None = None,
+        config: Mapping[str, object] | None = None,
+    ) -> PluginEntry:
+        """Register a desired plugin entry.
+
+        Accepts either a plugin instance (``MyPlugin(api_key=...)``) or a plugin
+        class (what the :func:`~chassis.plugins.base.plugin` decorator produces).
+        A class is instantiated with the supplied configuration mapping.
+
+        Args:
+            plugin: Plugin instance or plugin class.
+            entry_id: Stable identity of the desired entry. Defaults to a unique
+                name derived from the manifest, so two installs of the same
+                implementation stay distinguishable.
+            config: Effective configuration, for diagnostics and snapshots.
+        """
+
+        plugin_instance = plugin(config) if isinstance(plugin, type) else plugin
+        manifest = getattr(plugin_instance, "manifest", None)
+        if not isinstance(manifest, PluginManifest):
+            raise PluginLoadError(
+                "plugin does not declare a PluginManifest",
+                plugin=type(plugin_instance).__name__,
+            )
+        resolved_entry_id = entry_id or self._default_entry_id(manifest)
+        if resolved_entry_id in self._entries:
+            raise PluginLoadError(
+                "duplicate plugin entry id", entry_id=resolved_entry_id, plugin=manifest.name
+            )
+        effective_config = dict(config if config is not None else plugin_instance.config)
+        entry = PluginEntry(
+            entry_id=resolved_entry_id,
+            plugin=plugin_instance,
+            manifest=manifest,
+            config=effective_config,
+        )
+        self._entries[resolved_entry_id] = entry
+        return entry
+
+    def uninstall(self, entry_id: str) -> bool:
+        """Remove a desired entry.
+
+        A mounted instance is *not* destroyed here: it stays reachable until the
+        next reconciliation decides it is no longer part of the composition.
+        """
+
+        return self._entries.pop(entry_id, None) is not None
+
+    def entry(self, entry_id: str) -> PluginEntry | None:
+        return self._entries.get(entry_id)
+
+    def entries(self) -> tuple[PluginEntry, ...]:
+        return tuple(self._entries[entry_id] for entry_id in sorted(self._entries))
+
+    # ---------------------------------------------------------------- instances
+
+    def instance(self, entry_id: str) -> PluginInstance | None:
+        instance_id = self._by_entry.get(entry_id)
+        if instance_id is None:
+            return None
+        return self._instances.get(instance_id)
+
+    def instance_by_id(self, instance_id: str) -> PluginInstance | None:
+        return self._instances.get(instance_id)
+
+    def instances(self) -> tuple[PluginInstance, ...]:
+        return tuple(self._instances[instance_id] for instance_id in sorted(self._instances))
+
+    @property
+    def active_instance_ids(self) -> tuple[str, ...]:
+        return tuple(
+            instance.instance_id
+            for instance in self.instances()
+            if instance.state is PluginState.ACTIVE
+        )
+
+    def candidates(self) -> tuple[PluginCandidate, ...]:
+        """Desired entries plus live registrations, for the dependency resolver."""
+
+        candidates: list[PluginCandidate] = []
+        for entry in self.entries():
+            instance = self.instance(entry.entry_id)
+            active = instance is not None and instance.state is PluginState.ACTIVE
+            registrations = (
+                self._registrations_of(instance) if instance is not None and active else ()
+            )
+            candidates.append(
+                PluginCandidate(
+                    entry_id=entry.entry_id,
+                    manifest=entry.manifest,
+                    instance_id=None if instance is None else instance.instance_id,
+                    active=active,
+                    registrations=registrations,
+                )
+            )
+        return tuple(candidates)
+
+    # -------------------------------------------------------------- lifecycle
+
+    async def mount(
+        self,
+        entry: PluginEntry,
+        resolved: Mapping[str, CapabilityRegistration],
+    ) -> PluginInstance:
+        """Create the instance scope, run setup, and mark the instance active.
+
+        If setup fails, every effect created during setup is reverted and the
+        instance is marked ``FAILED``: no partially configured plugin survives a
+        failed mount.
+        """
+
+        if self.instance(entry.entry_id) is not None:
+            raise PluginLoadError("plugin entry is already mounted", entry_id=entry.entry_id)
+        instance_id = f"plugin_{uuid.uuid4().hex[:12]}"
+        scope = Scope(f"plugin:{entry.entry_id}", description=entry.manifest.identity)
+        instance = PluginInstance(
+            instance_id=instance_id,
+            entry_id=entry.entry_id,
+            manifest=entry.manifest,
+            plugin=entry.plugin,
+            scope=scope,
+            config=entry.config,
+            resolved=resolved,
+        )
+        self._instances[instance_id] = instance
+        self._by_entry[entry.entry_id] = instance_id
+
+        context = PluginContext(
+            instance_id=instance_id,
+            entry_id=entry.entry_id,
+            manifest=entry.manifest,
+            config=entry.config,
+            scope=scope,
+            registry=self._capabilities,
+            resolved=resolved,
+        )
+        instance.context = context
+
+        instance.transition(PluginState.LOADING)
+        try:
+            await entry.plugin.setup(context)
+        except BaseException as error:
+            await self._rollback(instance, error)
+            if isinstance(error, Exception):
+                raise PluginSetupError(
+                    f"plugin {entry.manifest.name!r} failed during setup",
+                    plugin=entry.manifest.name,
+                    entry_id=entry.entry_id,
+                    instance_id=instance_id,
+                    error=type(error).__name__,
+                ) from error
+            raise
+        instance.transition(PluginState.ACTIVE)
+        instance.health = PluginHealth.HEALTHY
+        return instance
+
+    async def dispose(self, instance: PluginInstance) -> None:
+        """Run teardown, close the instance scope, and mark the instance disposed.
+
+        Refuses to dispose an instance that is still reachable from a runtime
+        generation (invariant I6).
+        """
+
+        if instance.state is PluginState.DISPOSED:
+            return
+        if instance.generation_refs > 0:
+            raise PluginLoadError(
+                "refusing to dispose a plugin instance reachable from a live generation",
+                plugin=instance.manifest.name,
+                instance_id=instance.instance_id,
+                generation_refs=instance.generation_refs,
+            )
+
+        teardown_error: BaseException | None = None
+        if instance.state is PluginState.ACTIVE:
+            instance.transition(PluginState.UNLOADING)
+            context = instance.context
+            if context is not None:
+                try:
+                    await instance.plugin.teardown(context)
+                except Exception as error:
+                    teardown_error = error
+                    instance.health = PluginHealth.UNHEALTHY
+                    instance.scope.record_failure(f"teardown of {instance.manifest.name!r}", error)
+        elif instance.state is PluginState.PENDING:
+            instance.transition(PluginState.DISPOSED)
+            await instance.scope.aclose()
+            self._forget(instance)
+            return
+
+        if instance.state is PluginState.LOADING:
+            # A mount that never completed is rolled back by `mount`; disposal is
+            # only meaningful once the instance reached ACTIVE or FAILED.
+            raise PluginLoadError(
+                "cannot dispose a plugin instance while it is loading",
+                plugin=instance.manifest.name,
+                instance_id=instance.instance_id,
+            )
+
+        try:
+            await instance.scope.aclose()
+        finally:
+            if instance.state in (PluginState.UNLOADING, PluginState.FAILED):
+                instance.transition(PluginState.DISPOSED)
+            self._forget(instance)
+        if teardown_error is not None:
+            instance.error = teardown_error
+
+    async def _rollback(self, instance: PluginInstance, setup_error: BaseException) -> None:
+        try:
+            await instance.scope.aclose()
+        except EffectCleanupError as cleanup_error:
+            instance.scope.record_failure("setup rollback", cleanup_error)
+        finally:
+            instance.transition(PluginState.FAILED)
+            instance.health = PluginHealth.UNHEALTHY
+            instance.error = setup_error
+
+    # ---------------------------------------------------------------- helpers
+
+    def _forget(self, instance: PluginInstance) -> None:
+        """Drop a physically disposed instance from the registry.
+
+        Ownership has already been transferred to its scope's cleanup, so keeping
+        the instance would only allow stale lookups; what was disposed is reported
+        by the reconcile result that performed it.
+        """
+
+        self._instances.pop(instance.instance_id, None)
+        if self._by_entry.get(instance.entry_id) == instance.instance_id:
+            del self._by_entry[instance.entry_id]
+
+    def _registrations_of(self, instance: PluginInstance) -> tuple[CapabilityRegistration, ...]:
+        return tuple(
+            registration
+            for registration in self._capabilities.registrations()
+            if registration.provider_id == instance.instance_id
+        )
+
+    def _default_entry_id(self, manifest: PluginManifest) -> str:
+        base = manifest.name
+        if base not in self._entries:
+            return base
+        suffix = 2
+        while f"{base}-{suffix}" in self._entries:
+            suffix += 1
+        return f"{base}-{suffix}"
