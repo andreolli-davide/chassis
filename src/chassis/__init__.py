@@ -23,10 +23,12 @@ from chassis.capabilities import (
     CapabilityRegistration,
     CapabilityRegistry,
     CapabilityRequirement,
+    CapabilitySnapshot,
     ScopedCapabilities,
 )
 from chassis.core.errors import (
     BudgetExceeded,
+    CapabilityAmbiguous,
     CapabilityNotFound,
     CapabilityVersionMismatch,
     ChassisError,
@@ -46,6 +48,8 @@ from chassis.core.errors import (
     SecretResolutionError,
     ToolExecutionError,
 )
+from chassis.core.generation import GenerationState, RuntimeGeneration
+from chassis.core.generations import GenerationManager
 from chassis.core.scope import EffectRecord, Scope, ScopeState
 from chassis.diagnostics import Diagnostics
 from chassis.harness import Harness, HarnessState, ReconcileResult
@@ -77,11 +81,13 @@ __all__ = [
     "SECRETS",
     "TOOLS",
     "BudgetExceeded",
+    "CapabilityAmbiguous",
     "CapabilityKey",
     "CapabilityNotFound",
     "CapabilityRegistration",
     "CapabilityRegistry",
     "CapabilityRequirement",
+    "CapabilitySnapshot",
     "CapabilityVersionMismatch",
     "ChassisError",
     "CleanupFailure",
@@ -91,6 +97,8 @@ __all__ = [
     "EffectCleanupError",
     "EffectRecord",
     "GenerationConflictError",
+    "GenerationManager",
+    "GenerationState",
     "GraphBuildError",
     "Harness",
     "HarnessState",
@@ -109,6 +117,7 @@ __all__ = [
     "ReconcileResult",
     "ReplayMismatch",
     "ResolutionPlan",
+    "RuntimeGeneration",
     "Scope",
     "ScopeClosedError",
     "ScopeState",

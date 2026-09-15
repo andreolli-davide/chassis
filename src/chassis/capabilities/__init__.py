@@ -25,6 +25,7 @@ from chassis.capabilities.registry import (
     ResolutionStatus,
     ScopedCapabilities,
 )
+from chassis.capabilities.snapshot import CapabilitySnapshot
 
 __all__ = [
     "ARTIFACTS",
@@ -41,6 +42,7 @@ __all__ = [
     "CapabilityRegistry",
     "CapabilityRequirement",
     "CapabilityResolution",
+    "CapabilitySnapshot",
     "ResolutionStatus",
     "ScopedCapabilities",
     "parse_specifier",

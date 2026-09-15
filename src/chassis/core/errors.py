@@ -17,6 +17,7 @@ from typing import Any
 
 __all__ = [
     "BudgetExceeded",
+    "CapabilityAmbiguous",
     "CapabilityNotFound",
     "CapabilityVersionMismatch",
     "ChassisError",
@@ -137,6 +138,16 @@ class PluginCycleError(ChassisError):
     """Raised when capability dependencies contain a cycle."""
 
     code = "plugin_cycle"
+
+
+class CapabilityAmbiguous(ChassisError):
+    """Raised when a capability has more than one provider where one is required.
+
+    Ambiguity is diagnosed rather than resolved arbitrarily; callers either
+    disambiguate explicitly or observe the diagnostic.
+    """
+
+    code = "capability_ambiguous"
 
 
 class CapabilityNotFound(ChassisError):
