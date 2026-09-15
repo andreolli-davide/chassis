@@ -66,6 +66,16 @@ class SecretRedactor:
                 text = text.replace(value, REDACTED)
         return text
 
+    def redact_and_report(self, text: str) -> tuple[str, bool]:
+        """Redact ``text`` and report whether anything was actually replaced.
+
+        Used where a caller must know that redaction happened -- for example to
+        mark a normalized tool failure as containing redacted material.
+        """
+
+        redacted = self.redact(text)
+        return redacted, redacted != text
+
     def redact_value(self, value: Any) -> Any:
         """Recursively redact strings inside mappings, sequences, and tuples."""
 

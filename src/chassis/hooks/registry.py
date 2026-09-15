@@ -28,7 +28,7 @@ from chassis.hooks.types import (
     HookResult,
 )
 
-__all__ = ["HookRegistry", "HookSnapshot"]
+__all__ = ["HookRegistry", "HookSnapshot", "ScopedHooks"]
 
 
 class HookSnapshot:
@@ -227,3 +227,48 @@ class HookRegistry:
                 break
 
         return HookResult(event=event, payload=current, stopped=stopped, failures=tuple(failures))
+
+
+class ScopedHooks:
+    """Plugin-facing facade bound to one plugin instance scope."""
+
+    __slots__ = ("_owner_id", "_registry", "_scope")
+
+    def __init__(self, registry: HookRegistry, scope: Scope, owner_id: str) -> None:
+        self._registry = registry
+        self._scope = scope
+        self._owner_id = owner_id
+
+    def register(
+        self,
+        event: HookEvent,
+        handler: HookHandler,
+        *,
+        mode: HookMode = HookMode.OBSERVE,
+        priority: int = 0,
+        error_policy: HookErrorPolicy = HookErrorPolicy.RECORD,
+    ) -> HookRegistration:
+        """Register a handler for the lifetime of the plugin scope."""
+
+        return self._registry.register(
+            scope=self._scope,
+            event=event,
+            handler=handler,
+            mode=mode,
+            priority=priority,
+            error_policy=error_policy,
+            owner_id=self._owner_id,
+        )
+
+    def unregister(self, registration_id: str) -> bool:
+        """Remove a registration early, before the scope closes."""
+
+        return self._registry.unregister(registration_id)
+
+    @property
+    def registrations(self) -> tuple[HookRegistration, ...]:
+        """Hook registrations this plugin currently owns."""
+
+        return tuple(
+            item for item in self._registry.registrations() if item.owner_id == self._owner_id
+        )

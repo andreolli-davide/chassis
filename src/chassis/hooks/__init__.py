@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from chassis.hooks.registry import HookRegistry, HookSnapshot
+from chassis.hooks.registry import HookRegistry, HookSnapshot, ScopedHooks
 from chassis.hooks.types import (
     HookErrorPolicy,
     HookEvent,
@@ -23,4 +23,5 @@ __all__ = [
     "HookRegistry",
     "HookResult",
     "HookSnapshot",
+    "ScopedHooks",
 ]
