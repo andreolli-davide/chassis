@@ -157,6 +157,10 @@ class AgentRegistry:
                 thread_id=agent_request.thread_id,
                 metadata=agent_request.metadata,
             )
+            graph_digest = _definition_digest(runtime, run_context)
+            snapshot = harness.snapshot_for(
+                generation, agent=agent, graph_definition_hash=graph_digest
+            )
             started = time.monotonic()
             async with harness.telemetry.span(
                 "agent.run",
@@ -164,10 +168,17 @@ class AgentRegistry:
                     "agent": agent,
                     "generation_id": generation.generation_id,
                     "thread_id": agent_request.thread_id,
+                    "chassis_version": snapshot.chassis_version,
+                    "snapshot_digest": snapshot.digest(),
+                    "plugin_graph_hash": snapshot.plugin_graph_hash,
+                    "graph_definition_hash": graph_digest,
+                    "tool_schema_hash": snapshot.tool_schema_hash,
                 },
             ):
                 result = await runtime.invoke(agent_request, run_context)
-            return _with_duration(result, time.monotonic() - started)
+            return _with_duration(
+                _with_snapshot(result, snapshot.digest()), time.monotonic() - started
+            )
 
     async def stream(
         self,
@@ -262,6 +273,26 @@ class ScopedAgents:
         """Remove an agent early, before the scope closes."""
 
         return self._registry.unregister(name)
+
+
+def _definition_digest(runtime: AgentRuntime, run_context: HarnessRunContext) -> str | None:
+    """Ask a runtime for its graph-definition digest, when it has one.
+
+    Optional on purpose: a backend without compiled graphs simply contributes
+    nothing to the snapshot.
+    """
+
+    digest = getattr(runtime, "definition_digest", None)
+    if not callable(digest):
+        return None
+    value = digest(run_context)
+    return value if isinstance(value, str) else None
+
+
+def _with_snapshot(result: AgentResult, digest: str) -> AgentResult:
+    from dataclasses import replace
+
+    return replace(result, metadata={**dict(result.metadata), "snapshot_digest": digest})
 
 
 def _with_duration(result: AgentResult, duration: float) -> AgentResult:

@@ -53,6 +53,7 @@ from chassis.core.generations import GenerationManager
 from chassis.core.scope import Scope
 from chassis.diagnostics import Diagnostics
 from chassis.hooks.registry import HookRegistry, HookSnapshot
+from chassis.persistence.snapshots import RuntimeSnapshot
 from chassis.plugins.base import Plugin, PluginContext, plugin
 from chassis.plugins.lifecycle import PluginInstance, PluginState
 from chassis.plugins.registry import PluginEntry, PluginRegistry
@@ -771,6 +772,48 @@ class Harness:
             telemetry=self._telemetry,
             redactor=self._redactor,
             budget=environment_budget(effective_limits),
+        )
+
+    def snapshot_for(
+        self,
+        generation: RuntimeGeneration,
+        *,
+        agent: str | None = None,
+        graph_definition_hash: str | None = None,
+        prompt_hash: str | None = None,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> RuntimeSnapshot:
+        """Attributable metadata for one runtime generation.
+
+        Configuration is redacted before it is hashed, so a snapshot explains the
+        composition without carrying secret material.
+        """
+
+        return RuntimeSnapshot.from_generation(
+            generation,
+            tools=self.tool_snapshot(generation),
+            redactor=self._redactor,
+            agent=agent,
+            graph_definition_hash=graph_definition_hash,
+            prompt_hash=prompt_hash,
+            metadata=metadata,
+        )
+
+    def run_snapshot(self, run_context: Any) -> RuntimeSnapshot:
+        """Snapshot for the generation a run context belongs to.
+
+        The generation is looked up by id so the snapshot describes exactly the
+        composition the run acquired.
+        """
+
+        for generation in self._generations.all_generations():
+            if generation.generation_id == run_context.generation_id:
+                return self.snapshot_for(
+                    generation, agent=getattr(run_context, "agent", None) or None
+                )
+        raise HarnessStateError(
+            "run context refers to an unknown generation",
+            generation_id=run_context.generation_id,
         )
 
     def tool_snapshot(self, generation: RuntimeGeneration) -> ToolSnapshot:

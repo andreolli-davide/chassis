@@ -111,6 +111,15 @@ class LangGraphAgent:
             build_time_versions=self._build_time_versions(run_context),
         )
 
+    def definition_digest(self, run_context: HarnessRunContext) -> str:
+        """Digest of the graph definition this run compiles against.
+
+        Runtime snapshots use it as ``graph_definition_hash``, which is what makes a
+        run attributable to a specific compiled graph.
+        """
+
+        return self.cache_key(run_context).digest()
+
     def graph(self, run_context: HarnessRunContext) -> CompiledStateGraph[Any, Any, Any, Any]:
         """Return the compiled graph for this run, compiling it on a miss.
 

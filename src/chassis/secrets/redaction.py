@@ -7,12 +7,13 @@ through a :class:`SecretRedactor` first (invariant I11).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
 from chassis.secrets.base import SecretValue
 
-__all__ = ["REDACTED", "SecretRedactor", "redact"]
+__all__ = ["REDACTED", "SECRET_KEY_PATTERN", "SecretRedactor", "redact", "redact_config"]
 
 #: Marker substituted for secret material.
 REDACTED = "<redacted>"
@@ -100,3 +101,35 @@ def redact(payload: Any, values: Iterable[str]) -> Any:
     """One-shot helper for redacting a payload against a set of secret values."""
 
     return SecretRedactor(values).redact_value(payload)
+
+
+#: Configuration keys whose values are treated as secret regardless of whether the
+#: redactor has seen them. Heuristics are not a substitute for a provider, but they
+#: stop the obvious cases -- an API key sitting in a plugin config -- from being
+#: hashed or traced.
+SECRET_KEY_PATTERN = re.compile(
+    r"(?:^|_)(?:api_?key|apikey|secret|token|password|passwd|credential|private_key|"
+    r"access_key|client_secret)(?:$|_)",
+    re.IGNORECASE,
+)
+
+
+def redact_config(config: Any, redactor: SecretRedactor) -> Any:
+    """Redact a configuration payload before it is hashed or emitted.
+
+    Two mechanisms apply: keys that look like secrets are replaced outright, and
+    any value the redactor already knows is scrubbed wherever it appears.
+    """
+
+    def walk(value: Any, key: str | None = None) -> Any:
+        if key is not None and isinstance(key, str) and SECRET_KEY_PATTERN.search(key):
+            return REDACTED
+        if isinstance(value, Mapping):
+            return {item_key: walk(item, str(item_key)) for item_key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [walk(item) for item in value]
+        if isinstance(value, (set, frozenset)):
+            return sorted(walk(item) for item in value)
+        return redactor.redact_value(value)
+
+    return walk(config)

@@ -16,9 +16,12 @@ from chassis.persistence.hashing import (
     tool_schema_hash,
     tool_schema_payload,
 )
+from chassis.persistence.snapshots import RuntimeSnapshot, chassis_version
 
 __all__ = [
+    "RuntimeSnapshot",
     "canonical_json",
+    "chassis_version",
     "hash_text",
     "prompt_hash",
     "schema_hash",
