@@ -41,6 +41,8 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = ["error"]
 addopts = "-ra --strict-markers --strict-config"
+# Allow tests to share helpers through `tests.*` modules.
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
