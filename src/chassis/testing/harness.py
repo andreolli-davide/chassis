@@ -21,6 +21,7 @@ from chassis.plugins.lifecycle import PluginInstance
 from chassis.policy.engine import PolicyEngine
 from chassis.runtime import RunEnvironment
 from chassis.secrets.base import SecretProvider
+from chassis.telemetry.base import TeeTelemetry, Telemetry
 from chassis.telemetry.recording import RecordingTelemetry
 from chassis.testing.fakes import FakePolicy, FakeSecrets, FakeTelemetry
 from chassis.tools.metadata import ToolPolicy
@@ -57,21 +58,22 @@ class TestHarness(Harness):
         *,
         policy: PolicyEngine | None = None,
         secrets: SecretProvider | None = None,
-        telemetry: RecordingTelemetry | None = None,
+        telemetry: Telemetry | None = None,
         tools: Sequence[BaseTool] = (),
         tool_policies: Mapping[str, ToolPolicy] | None = None,
         plugins: Sequence[Plugin | type[Plugin]] = (),
         **kwargs: Any,
     ) -> None:
-        resolved_telemetry = telemetry if telemetry is not None else FakeTelemetry()
+        recording = FakeTelemetry()
+        sink: Telemetry = recording if telemetry is None else TeeTelemetry(recording, telemetry)
         super().__init__(
             name=kwargs.pop("name", "test-harness"),
             policy=policy if policy is not None else FakePolicy(),
             secrets=secrets if secrets is not None else FakeSecrets(),
-            telemetry=resolved_telemetry,
+            telemetry=sink,
             **kwargs,
         )
-        self._recording = resolved_telemetry
+        self._recording = recording
         for index, plugin_type in enumerate(plugins):
             self.install(plugin_type, entry_id=f"plugin-{index + 1}")
         if tools:

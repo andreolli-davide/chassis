@@ -13,10 +13,10 @@ implementations must not be trusted to remove secrets themselves.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from typing import Any, Protocol, runtime_checkable
 
-__all__ = ["NoopSpan", "NoopTelemetry", "Span", "Telemetry"]
+__all__ = ["NoopSpan", "NoopTelemetry", "Span", "TeeTelemetry", "Telemetry"]
 
 
 @runtime_checkable
@@ -69,6 +69,66 @@ class NoopSpan:
 
     def record_error(self, error: BaseException) -> None:
         return None
+
+
+class TeeTelemetry:
+    """Fans one signal out to several backends.
+
+    Useful whenever two sinks must both see the same span -- recording for
+    assertions while sending to LangSmith, or fanning out to OpenTelemetry.
+    Failures in one backend do not prevent the others from receiving the signal.
+    """
+
+    def __init__(self, *backends: Telemetry) -> None:
+        if not backends:
+            raise ValueError("TeeTelemetry requires at least one backend")
+        self._backends = backends
+
+    @property
+    def backends(self) -> tuple[Telemetry, ...]:
+        return self._backends
+
+    @asynccontextmanager
+    async def span(self, name: str, attributes: Mapping[str, Any] | None = None):  # type: ignore[no-untyped-def]
+        async with AsyncExitStack() as stack:
+            spans = [
+                await stack.enter_async_context(backend.span(name, attributes))
+                for backend in self._backends
+            ]
+            yield _FanOutSpan(tuple(spans))
+
+    def event(self, name: str, attributes: Mapping[str, Any] | None = None) -> None:
+        for backend in self._backends:
+            try:
+                backend.event(name, attributes)
+            except Exception:
+                continue
+
+
+class _FanOutSpan:
+    """Span that forwards to every backend's span."""
+
+    __slots__ = ("_spans",)
+
+    def __init__(self, spans: tuple[Span, ...]) -> None:
+        self._spans = spans
+
+    def set_attribute(self, key: str, value: Any) -> None:
+        self.set_attributes({key: value})
+
+    def set_attributes(self, attributes: Mapping[str, Any]) -> None:
+        for span in self._spans:
+            try:
+                span.set_attributes(attributes)
+            except Exception:
+                continue
+
+    def record_error(self, error: BaseException) -> None:
+        for span in self._spans:
+            try:
+                span.record_error(error)
+            except Exception:
+                continue
 
 
 class NoopTelemetry:
