@@ -36,8 +36,11 @@ from collections.abc import AsyncGenerator, Iterable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, Self
 
+from chassis.agents import AgentRegistry, environment_budget
+from chassis.budget.models import BudgetLimits
+from chassis.capabilities.keys import CapabilityKey
 from chassis.capabilities.registry import CapabilityRegistration, CapabilityRegistry
 from chassis.capabilities.snapshot import CapabilitySnapshot
 from chassis.core.errors import (
@@ -50,11 +53,12 @@ from chassis.core.generations import GenerationManager
 from chassis.core.scope import Scope
 from chassis.diagnostics import Diagnostics
 from chassis.hooks.registry import HookRegistry, HookSnapshot
-from chassis.plugins.base import Plugin
+from chassis.plugins.base import Plugin, PluginContext, plugin
 from chassis.plugins.lifecycle import PluginInstance, PluginState
 from chassis.plugins.registry import PluginEntry, PluginRegistry
 from chassis.plugins.resolver import DependencyResolver, ResolutionPlan
 from chassis.policy.engine import AllowAllPolicy, PolicyEngine
+from chassis.runtime import AgentRuntime, RunEnvironment
 from chassis.secrets.base import SecretProvider
 from chassis.secrets.env import EnvSecretProvider
 from chassis.secrets.redaction import SecretRedactor
@@ -63,6 +67,29 @@ from chassis.tools.executor import ApprovalGate, ToolExecutor
 from chassis.tools.registry import ToolRegistry, ToolSnapshot
 
 __all__ = ["Harness", "HarnessState", "ReconcileResult"]
+
+
+def _services_plugin(
+    provisions: tuple[tuple[CapabilityKey, object, str | None], ...],
+) -> type[Plugin]:
+    """Build the plugin that exposes application-provided capabilities.
+
+    Modelling provisions as a plugin keeps one implementation of ownership: they
+    participate in resolution, are ordered before their consumers, and are
+    withdrawn when their scope closes.
+    """
+
+    provides = {
+        key.name: version if version is not None else key.api_version
+        for key, _value, version in provisions
+    }
+
+    @plugin(name="chassis-services", version="1.0.0", provides=provides)
+    async def services(ctx: PluginContext) -> None:
+        for key, value, version in provisions:
+            ctx.capabilities.provide(key, value, version=version)
+
+    return services
 
 
 class HarnessState(StrEnum):
@@ -112,6 +139,7 @@ class Harness:
         telemetry: Telemetry | None = None,
         redactor: SecretRedactor | None = None,
         tool_timeout_seconds: float | None = None,
+        default_budget_limits: BudgetLimits | None = None,
     ) -> None:
         self._name = name
         self._state = HarnessState.CREATED
@@ -121,10 +149,12 @@ class Harness:
         self._capability_registry = CapabilityRegistry()
         self._tool_registry = ToolRegistry()
         self._hook_registry = HookRegistry()
+        self._agents = AgentRegistry(harness=self)
         self._plugin_registry = PluginRegistry(
             capabilities=self._capability_registry,
             tools=self._tool_registry,
             hooks=self._hook_registry,
+            agents=self._agents,
         )
         self._generations = GenerationManager(history_limit=generation_history_limit)
         self._policy: PolicyEngine = policy if policy is not None else AllowAllPolicy()
@@ -139,6 +169,9 @@ class Harness:
             redactor=self._redactor,
             default_timeout_seconds=tool_timeout_seconds,
         )
+        self._provisions: dict[str, tuple[CapabilityKey, object, str | None]] = {}
+        self._dirty = False
+        self._default_budget_limits = default_budget_limits
         self._resolver = DependencyResolver()
         self._provider_preference: dict[str, str] = {}
         self._compose_lock = asyncio.Lock()
@@ -186,6 +219,12 @@ class Harness:
         """Live hook registry; registrations are owned by plugin scopes."""
 
         return self._hook_registry
+
+    @property
+    def agents(self) -> AgentRegistry:
+        """Registered agent runtimes and the app-facing invocation surface."""
+
+        return self._agents
 
     @property
     def tool_executor(self) -> ToolExecutor:
@@ -246,12 +285,57 @@ class Harness:
         entry = self._plugin_registry.install(
             plugin, entry_id=entry_id, config=config, replace=replace
         )
+        self._dirty = True
         return entry.entry_id
+
+    def provide(
+        self,
+        capability: CapabilityKey,
+        value: object,
+        *,
+        version: str | None = None,
+    ) -> None:
+        """Provide a capability the application already holds.
+
+        The value is mounted as a plugin entry owned by the harness, so it takes
+        part in dependency resolution exactly like any other provider and is
+        withdrawn when the harness stops. Desired-state changes take effect on the
+        next :meth:`reconcile`.
+        """
+
+        self._provisions[capability.name] = (capability, value, version)
+        self._sync_services_entry()
+        self._dirty = True
+
+    def withdraw(self, capability: CapabilityKey | str) -> bool:
+        """Undo :meth:`provide` for a capability."""
+
+        name = capability.name if isinstance(capability, CapabilityKey) else capability
+        if self._provisions.pop(name, None) is None:
+            return False
+        self._sync_services_entry()
+        self._dirty = True
+        return True
+
+    def _sync_services_entry(self) -> None:
+        entry_id = "chassis.services"
+        if not self._provisions:
+            self._plugin_registry.uninstall(entry_id)
+            return
+        services = _services_plugin(tuple(self._provisions.values()))
+        self.install(
+            services, entry_id=entry_id, replace=entry_id in self._registrations_snapshot()
+        )
+
+    def _registrations_snapshot(self) -> set[str]:
+        return {entry.entry_id for entry in self._plugin_registry.entries()}
 
     def uninstall(self, entry_id: str) -> bool:
         """Remove a desired plugin entry. Takes effect on the next reconcile."""
 
-        return self._plugin_registry.uninstall(entry_id)
+        removed = self._plugin_registry.uninstall(entry_id)
+        self._dirty = self._dirty or removed
+        return removed
 
     def prefer_provider(self, capability: str, provider_entry_id: str) -> None:
         """Disambiguate a capability that several providers satisfy.
@@ -261,19 +345,24 @@ class Harness:
         """
 
         self._provider_preference[capability] = provider_entry_id
+        self._dirty = True
 
     # --------------------------------------------------------------- lifecycle
 
     async def start(self) -> ReconcileResult:
-        """Reconcile the desired state and begin accepting runs."""
+        """Reconcile the desired state and begin accepting runs.
 
-        if self._state is HarnessState.RUNNING:
-            return ReconcileResult(self.plan(), self._generation_id_or_empty(), (), (), ())
+        Calling ``start`` on a running harness applies any desired-state changes
+        made since the last reconciliation, so the method is safely idempotent.
+        """
+
         if self._state is HarnessState.STOPPED:
             raise HarnessStateError("harness has been stopped", harness=self._name)
-        result = await self.reconcile()
-        self._state = HarnessState.RUNNING
-        return result
+        if self._state is HarnessState.CREATED:
+            self._state = HarnessState.RUNNING
+        if self._dirty or self._plan is None:
+            return await self.reconcile()
+        return ReconcileResult(self.plan(), self._generation_id_or_empty(), (), (), ())
 
     async def stop(self) -> None:
         """Gracefully drain runs, dispose every plugin instance, and close down.
@@ -318,6 +407,25 @@ class Harness:
         if failures:
             raise EffectCleanupError(self._name, tuple(failures))
 
+    @property
+    def has_pending_changes(self) -> bool:
+        """Whether desired state changed since the last successful reconcile."""
+
+        return self._dirty
+
+    async def ensure_ready(self) -> None:
+        """Apply pending desired-state changes before data-plane work begins.
+
+        Programmatic ``install``/``provide``/``uninstall`` are synchronous, so they
+        cannot publish a generation themselves. Any asynchronous entry point that
+        depends on the composition -- an agent invocation or an explicit reconcile
+        -- applies the pending changes first, which keeps the API ergonomic without
+        starting unowned background work.
+        """
+
+        if self._dirty:
+            await self.reconcile()
+
     async def reconcile(self) -> ReconcileResult:
         """Publish a new runtime generation for the desired state."""
 
@@ -357,6 +465,7 @@ class Harness:
             disposed = await self._reclaim(failures)
 
             self._plan = plan
+            self._dirty = False
             self._last_failures = tuple(failures)
             return ReconcileResult(
                 plan=plan,
@@ -374,6 +483,10 @@ class Harness:
         The lease is taken without touching the control-plane lock, so model and
         tool calls never contend with reconfiguration. Releasing the last lease of
         a draining generation is what lets its unreachable plugins be disposed.
+
+        This is the low-level primitive: it leases *whatever is currently
+        published*. Call :meth:`ensure_ready` first (as agent invocation does) when
+        desired-state changes may still be pending.
         """
 
         generation = self._generations.acquire()
@@ -561,6 +674,40 @@ class Harness:
         current = self._generations.current
         return "" if current is None else current.generation_id
 
+    def register_agent(
+        self,
+        runtime: AgentRuntime,
+        *,
+        scope: Scope | None = None,
+        replace: bool = False,
+    ) -> AgentRuntime:
+        """Register an agent runtime, owned by ``scope`` when one is given."""
+
+        return self._agents.register(runtime, scope=scope, replace=replace)
+
+    def run_environment(
+        self, generation: RuntimeGeneration, *, limits: BudgetLimits | None = None
+    ) -> RunEnvironment:
+        """Assemble the generation-scoped services a run executes against.
+
+        Everything is derived from ``generation``, so a run can never observe a
+        service belonging to a different composition than its capabilities.
+        """
+
+        effective_limits = limits if limits is not None else self._default_budget_limits
+        return RunEnvironment(
+            generation=generation,
+            capabilities=generation.snapshot,
+            tools=self.tool_snapshot(generation),
+            hooks=self.hook_snapshot(generation),
+            executor=self._tool_executor,
+            policy=self._policy,
+            secrets=self._secrets,
+            telemetry=self._telemetry,
+            redactor=self._redactor,
+            budget=environment_budget(effective_limits),
+        )
+
     def tool_snapshot(self, generation: RuntimeGeneration) -> ToolSnapshot:
         """Tools reachable from ``generation``, as an immutable view.
 
@@ -601,7 +748,7 @@ class Harness:
 
     # -------------------------------------------------------- context manager
 
-    async def __aenter__(self) -> Harness:
+    async def __aenter__(self) -> Self:
         await self.start()
         return self
 

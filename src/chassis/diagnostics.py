@@ -80,6 +80,21 @@ class Diagnostics:
             "cycles": [list(cycle) for cycle in plan.cycles],
         }
 
+    def agents(self) -> dict[str, Any]:
+        """Registered agent runtimes."""
+
+        return self._harness.agents.to_dict()
+
+    def tools(self) -> dict[str, Any]:
+        """Registered tools with their owner and policy."""
+
+        return self._harness.tools.to_dict()
+
+    def hooks(self) -> dict[str, Any]:
+        """Registered hooks with their owner, mode, and ordering."""
+
+        return self._harness.hooks.to_dict()
+
     def generations(self) -> list[dict[str, Any]]:
         """Published generations, newest first, with lease counts and state."""
 
@@ -110,6 +125,9 @@ class Diagnostics:
                 "by_state": dict(sorted(by_state.items())),
             },
             "capabilities": len(self._harness.capability_registry),
+            "tools": len(self._harness.tools),
+            "hooks": len(self._harness.hooks),
+            "agents": len(self._harness.agents),
             "composition": {
                 "eligible": len(plan.activation_order),
                 "pending": len(plan.pending),

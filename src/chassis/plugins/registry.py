@@ -17,6 +17,7 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from chassis.agents import AgentRegistry
 from chassis.capabilities.registry import CapabilityRegistration, CapabilityRegistry
 from chassis.core.errors import (
     EffectCleanupError,
@@ -59,10 +60,12 @@ class PluginRegistry:
         capabilities: CapabilityRegistry,
         tools: ToolRegistry,
         hooks: HookRegistry,
+        agents: AgentRegistry,
     ) -> None:
         self._capabilities = capabilities
         self._tools = tools
         self._hooks = hooks
+        self._agents = agents
         self._entries: dict[str, PluginEntry] = {}
         self._instances: dict[str, PluginInstance] = {}
         self._by_entry: dict[str, list[str]] = {}
@@ -250,6 +253,7 @@ class PluginRegistry:
             resolved=resolved,
             tools=self._tools,
             hooks=self._hooks,
+            agents=self._agents,
         )
         instance.context = context
 

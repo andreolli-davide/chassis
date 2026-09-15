@@ -15,6 +15,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from typing import Any, ClassVar, TypeVar
 
+from chassis.agents import AgentRegistry, ScopedAgents
 from chassis.capabilities.keys import CapabilityKey
 from chassis.capabilities.registry import (
     CapabilityRegistration,
@@ -45,6 +46,7 @@ class PluginContext:
     """
 
     __slots__ = (
+        "_agents",
         "_capabilities",
         "_config",
         "_entry_id",
@@ -70,6 +72,7 @@ class PluginContext:
         resolved: Mapping[str, CapabilityRegistration],
         tools: ToolRegistry,
         hooks: HookRegistry,
+        agents: AgentRegistry,
     ) -> None:
         self._instance_id = instance_id
         self._entry_id = entry_id
@@ -82,6 +85,7 @@ class PluginContext:
         self._tasks = ScopedTasks(scope)
         self._tools = ScopedTools(tools, scope, instance_id, manifest.name)
         self._hooks = ScopedHooks(hooks, scope, instance_id)
+        self._agents = ScopedAgents(agents, scope)
 
     @property
     def instance_id(self) -> str:
@@ -144,6 +148,16 @@ class PluginContext:
         """Hook registration bound to this plugin's scope."""
 
         return self._hooks
+
+    @property
+    def agents(self) -> ScopedAgents:
+        """Agent registration bound to this plugin's scope.
+
+        A plugin that provides an agent runtime is unregistered exactly when the
+        plugin unloads.
+        """
+
+        return self._agents
 
     def require(self, capability: CapabilityKey | str) -> Any:
         """Return the provider object resolved for a required capability.
