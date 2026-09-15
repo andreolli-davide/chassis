@@ -1,0 +1,91 @@
+[project]
+name = "chassis"
+version = "0.1.0"
+description = "Chassis: a production-grade Python agent harness built on scoped ownership, reactive capabilities, and immutable runtime generations."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Chassis contributors" }]
+keywords = ["agents", "harness", "langgraph", "runtime", "lifecycle"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "packaging>=26.3",
+    "pydantic>=2.13.5",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chassis"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error"]
+addopts = "-ra --strict-markers --strict-config"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "examples"]
+# Documentation embeds illustrative, deliberately elided snippets; they are not
+# part of the build and must not be reformatted by the Markdown formatter.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "C4",  # comprehensions
+    "SIM", # simplify
+    "RUF", # ruff-specific
+    "ASYNC",
+    "TID",
+]
+ignore = [
+    "B008", # function call in default argument (needed for typer-style defaults)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["chassis"]
+
+[tool.ruff.lint.per-file-ignores]
+"examples/**" = ["T201"]
+"tests/**" = ["T201"]
+
+[tool.pyright]
+include = ["src", "tests", "examples"]
+exclude = ["**/node_modules", "**/__pycache__", ".venv"]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+reportMissingTypeStubs = false
+reportUnnecessaryIsInstance = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportUnknownLambdaType = false
+reportMissingParameterType = false
