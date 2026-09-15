@@ -9,6 +9,7 @@ from chassis import MODEL, PluginContext, plugin
 from chassis.capabilities import TOOLS
 from chassis.core.errors import CapabilityNotFound, PolicyDenied
 from chassis.policy import PolicyRequest
+from chassis.secrets import RedactingSecretProvider
 from chassis.testing import (
     FakeChatModel,
     FakePolicy,
@@ -96,8 +97,10 @@ def test_fake_secrets_is_an_in_memory_provider() -> None:
 async def test_test_harness_defaults_are_deterministic() -> None:
     async with TestHarness() as harness:
         assert isinstance(harness.policy, FakePolicy)
-        assert isinstance(harness.secrets, FakeSecrets)
-        assert harness.recorded_spans == []
+        assert isinstance(harness.secrets, RedactingSecretProvider)
+        assert isinstance(harness.secrets.inner, FakeSecrets)
+        # Starting the harness reconciles once, and that is instrumented.
+        assert harness.recorded_spans == ["harness.reconcile"]
 
         harness.provide_secret("openai.api_key", "value-1234")
         secret = await harness.secrets.get("openai.api_key")

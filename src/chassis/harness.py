@@ -60,7 +60,7 @@ from chassis.plugins.resolver import DependencyResolver, ResolutionPlan
 from chassis.policy.engine import AllowAllPolicy, PolicyEngine
 from chassis.runtime import AgentRuntime, RunEnvironment
 from chassis.secrets.base import SecretProvider
-from chassis.secrets.env import EnvSecretProvider
+from chassis.secrets.env import EnvSecretProvider, RedactingSecretProvider
 from chassis.secrets.redaction import SecretRedactor
 from chassis.telemetry.base import NoopTelemetry, Telemetry
 from chassis.tools.executor import ApprovalGate, ToolExecutor
@@ -158,9 +158,13 @@ class Harness:
         )
         self._generations = GenerationManager(history_limit=generation_history_limit)
         self._policy: PolicyEngine = policy if policy is not None else AllowAllPolicy()
-        self._secrets: SecretProvider = secrets if secrets is not None else EnvSecretProvider()
         self._telemetry: Telemetry = telemetry if telemetry is not None else NoopTelemetry()
         self._redactor = redactor if redactor is not None else SecretRedactor()
+        # Secrets resolved through the harness become redactable at the moment
+        # they are read, which is what keeps them out of traces and snapshots.
+        self._secrets: SecretProvider = RedactingSecretProvider(
+            secrets if secrets is not None else EnvSecretProvider(), self._redactor
+        )
         self._tool_executor = ToolExecutor(
             policy=self._policy,
             approvals=approvals,
@@ -375,7 +379,15 @@ class Harness:
             return
         self._state = HarnessState.STOPPING
         failures: list[CleanupFailure] = []
+        async with self._telemetry.span("harness.shutdown", {"harness": self._name}):
+            await self._shutdown(failures)
 
+        self._state = HarnessState.STOPPED
+        self._last_failures = tuple(failures)
+        if failures:
+            raise EffectCleanupError(self._name, tuple(failures))
+
+    async def _shutdown(self, failures: list[CleanupFailure]) -> None:
         idle, busy = await self._generations.drain(
             self._generations.begin_shutdown(), timeout_seconds=self._shutdown_grace_seconds
         )
@@ -402,11 +414,6 @@ class Harness:
         except EffectCleanupError as error:
             failures.extend(error.failures)
 
-        self._state = HarnessState.STOPPED
-        self._last_failures = tuple(failures)
-        if failures:
-            raise EffectCleanupError(self._name, tuple(failures))
-
     @property
     def has_pending_changes(self) -> bool:
         """Whether desired state changed since the last successful reconcile."""
@@ -432,9 +439,23 @@ class Harness:
         if self._state is HarnessState.STOPPED:
             raise HarnessStateError("harness has been stopped", harness=self._name)
 
-        async with self._compose_lock:
+        async with (
+            self._compose_lock,
+            self._telemetry.span(
+                "harness.reconcile", {"harness": self._name, "desired": len(self.plan().plugins)}
+            ) as span,
+        ):
             plan = self._resolver.resolve(
                 self._plugin_registry.candidates(), prefer=self._provider_preference
+            )
+            self._telemetry.event(
+                "dependency.resolve",
+                {
+                    "eligible": len(plan.activation_order),
+                    "pending": len(plan.pending),
+                    "cycles": len(plan.cycles),
+                    "edges": len(plan.edges),
+                },
             )
             plan.raise_for_cycles()
 
@@ -443,7 +464,8 @@ class Harness:
             reused: list[str] = []
             try:
                 instances = await self._materialize(plan, mounted, reused, failures)
-            except BaseException:
+            except BaseException as error:
+                span.record_error(error)
                 for instance in reversed(mounted):
                     await self._dispose_instance(instance, failures)
                 self._last_failures = tuple(failures)
@@ -456,13 +478,34 @@ class Harness:
                 generation = current
                 reused = [instance.entry_id for instance in instances]
             else:
+                self._telemetry.event(
+                    "generation.build", {"plugins": len(instances), "mounted": len(mounted)}
+                )
                 generation = self._generations.build(
                     snapshot_factory=snapshot_factory,
                     instances=instances,
                     metadata={"plugins": len(instances)},
                 )
-                self._generations.publish(generation)
+                previous = self._generations.publish(generation)
+                self._telemetry.event(
+                    "generation.publish",
+                    {
+                        "generation_id": generation.generation_id,
+                        "sequence": generation.sequence,
+                        "previous": None if previous is None else previous.generation_id,
+                        "plugins": len(instances),
+                    },
+                )
             disposed = await self._reclaim(failures)
+            span.set_attributes(
+                {
+                    "generation_id": generation.generation_id,
+                    "mounted": len(mounted),
+                    "reused": len(reused),
+                    "disposed": len(disposed),
+                    "failures": len(failures),
+                }
+            )
 
             self._plan = plan
             self._dirty = False
@@ -524,9 +567,14 @@ class Harness:
             if existing is not None and existing.state is PluginState.FAILED:
                 # Retry: release the failed instance before mounting a new one.
                 await self._dispose_instance(existing, failures)
-            instance = await self._plugin_registry.mount(
-                entry, self._resolutions_for(plan, entry_id)
-            )
+            async with self._telemetry.span(
+                "plugin.mount",
+                {"plugin": entry.manifest.name, "entry_id": entry_id, "revision": entry.revision},
+            ) as span:
+                instance = await self._plugin_registry.mount(
+                    entry, self._resolutions_for(plan, entry_id)
+                )
+                span.set_attribute("instance_id", instance.instance_id)
             ordered.append(instance)
             mounted.append(instance)
         return tuple(ordered)
@@ -596,6 +644,10 @@ class Harness:
         for generation in self._generations.draining():
             if generation.lease_count == 0:
                 self._generations.retire(generation)
+                self._telemetry.event(
+                    "generation.drain",
+                    {"generation_id": generation.generation_id, "leases": 0},
+                )
 
         instances = self._plugin_registry.instances()
         self._generations.refresh_references(instances)
@@ -661,14 +713,27 @@ class Harness:
     async def _dispose_instance(
         self, instance: PluginInstance, failures: list[CleanupFailure]
     ) -> None:
-        try:
-            await self._plugin_registry.dispose(instance)
-        except EffectCleanupError as error:
-            failures.extend(error.failures)
-        except Exception as error:
-            failures.append(
-                CleanupFailure(description=f"dispose of {instance.manifest.name!r}", error=error)
-            )
+        async with self._telemetry.span(
+            "plugin.unmount",
+            {
+                "plugin": instance.manifest.name,
+                "entry_id": instance.entry_id,
+                "instance_id": instance.instance_id,
+                "state": instance.state.value,
+            },
+        ) as span:
+            try:
+                await self._plugin_registry.dispose(instance)
+            except EffectCleanupError as error:
+                failures.extend(error.failures)
+                span.record_error(error)
+            except Exception as error:
+                failures.append(
+                    CleanupFailure(
+                        description=f"dispose of {instance.manifest.name!r}", error=error
+                    )
+                )
+                span.record_error(error)
 
     def _generation_id_or_empty(self) -> str:
         current = self._generations.current

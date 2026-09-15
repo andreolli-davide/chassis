@@ -36,9 +36,7 @@ class Permission:
                 "permission name must not contain an empty segment", permission=self.name
             )
         if self.resource is not None and not self.resource:
-            raise ConfigurationError(
-                "permission resource must not be empty", permission=self.name
-            )
+            raise ConfigurationError("permission resource must not be empty", permission=self.name)
 
     @classmethod
     def parse(cls, text: str) -> Permission:

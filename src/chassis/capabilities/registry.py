@@ -225,7 +225,9 @@ class CapabilityRegistry:
 
         same_name = self.by_name(requirement.name)
         candidates = tuple(
-            registration for registration in same_name if requirement.accepts(registration)
+            registration
+            for registration in same_name
+            if requirement.accepts(registration.key, registration.version)
         )
         if not candidates:
             status: ResolutionStatus = "no_provider" if not same_name else "version_mismatch"

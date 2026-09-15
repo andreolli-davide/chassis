@@ -27,7 +27,7 @@ from langchain_core.tools import BaseTool
 
 from chassis.budget.governor import BudgetGovernor
 from chassis.budget.models import BudgetDimension
-from chassis.core.errors import ChassisError, PolicyDenied, ToolExecutionError
+from chassis.core.errors import BudgetExceeded, ChassisError, PolicyDenied, ToolExecutionError
 from chassis.hooks.registry import HookSnapshot
 from chassis.hooks.types import HookEvent, HookResult
 from chassis.policy.engine import PolicyEngine, PolicyRequest
@@ -244,7 +244,14 @@ class ToolExecutor:
         args = transformed.payload.get("args", request.args)
 
         await self._authorize(entry, request, args)
-        self._charge(budget, entry)
+        try:
+            self._charge(budget, entry)
+        except BudgetExceeded as error:
+            self._telemetry.event(
+                "budget.exhausted",
+                {"tool": entry.name, "dimension": error.context.get("dimension")},
+            )
+            raise
 
         started = time.monotonic()
         async with self._telemetry.span(

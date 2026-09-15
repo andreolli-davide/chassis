@@ -6,9 +6,10 @@ import os
 from collections.abc import Iterable, Mapping
 
 from chassis.core.errors import SecretResolutionError
-from chassis.secrets.base import SecretValue
+from chassis.secrets.base import SecretProvider, SecretValue
+from chassis.secrets.redaction import SecretRedactor
 
-__all__ = ["EnvSecretProvider", "StaticSecretProvider"]
+__all__ = ["EnvSecretProvider", "RedactingSecretProvider", "StaticSecretProvider"]
 
 _NAME_SEPARATORS = str.maketrans({".": "_", "-": "_", "/": "_"})
 
@@ -116,3 +117,35 @@ class StaticSecretProvider:
 
     def to_dict(self) -> dict[str, Iterable[str]]:
         return {"provider": [self._name], "names": self.names()}
+
+
+class RedactingSecretProvider:
+    """Wraps a provider so every value it hands out becomes redactable.
+
+    Redaction can only scrub what it knows about, so the moment a secret is
+    resolved is the moment the harness learns its material. Wrapping the provider
+    keeps that guarantee in one place instead of relying on every call site.
+    """
+
+    def __init__(self, inner: SecretProvider, redactor: SecretRedactor) -> None:
+        self._inner = inner
+        self._redactor = redactor
+
+    @property
+    def source(self) -> str:
+        return f"redacting({getattr(self._inner, 'source', type(self._inner).__name__)})"
+
+    @property
+    def inner(self) -> SecretProvider:
+        return self._inner
+
+    async def get(self, name: str) -> SecretValue:
+        secret = await self._inner.get(name)
+        self._redactor.add_secret(secret)
+        return secret
+
+    async def get_optional(self, name: str) -> SecretValue | None:
+        secret = await self._inner.get_optional(name)
+        if secret is not None:
+            self._redactor.add_secret(secret)
+        return secret

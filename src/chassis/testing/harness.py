@@ -164,10 +164,11 @@ class TestHarness(Harness):
     def provide_secret(self, name: str, value: str) -> None:
         """Add a secret to the in-memory provider."""
 
-        secrets = self.secrets
-        if not isinstance(secrets, FakeSecrets):  # pragma: no cover - custom provider
+        provider = self.secrets
+        inner = getattr(provider, "inner", provider)
+        if not isinstance(inner, FakeSecrets):  # pragma: no cover - custom provider
             raise ChassisError("the configured secret provider is not writable")
-        secrets.add(name, value)
+        inner.add(name, value)
 
     def capability_providers(self, capability: CapabilityKey | str) -> tuple[str, ...]:
         """Names of the plugins currently providing a capability."""

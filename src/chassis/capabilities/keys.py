@@ -25,15 +25,11 @@ any provider advertising a satisfying implementation version.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from chassis.core.errors import ConfigurationError
-
-if TYPE_CHECKING:
-    from chassis.capabilities.registry import CapabilityRegistration
 
 __all__ = [
     "ARTIFACTS",
@@ -130,14 +126,14 @@ class CapabilityRequirement:
     def is_generation_agnostic(self) -> bool:
         return not self.key.api_version
 
-    def accepts(self, registration: CapabilityRegistration) -> bool:
-        """Whether ``registration`` satisfies this requirement."""
+    def accepts(self, key: CapabilityKey, version: Version) -> bool:
+        """Whether a provider offering ``key`` at ``version`` satisfies this requirement."""
 
-        if registration.key.name != self.key.name:
+        if key.name != self.key.name:
             return False
-        if self.key.api_version and registration.key.api_version != self.key.api_version:
+        if self.key.api_version and key.api_version != self.key.api_version:
             return False
-        return registration.version in self.specifier
+        return version in self.specifier
 
     def __str__(self) -> str:
         rendered = str(self.specifier) or "*"
