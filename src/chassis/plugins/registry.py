@@ -34,12 +34,18 @@ __all__ = ["PluginEntry", "PluginRegistry"]
 
 @dataclass(frozen=True, slots=True)
 class PluginEntry:
-    """A desired plugin: stable identity plus the implementation to mount."""
+    """A desired plugin: stable identity plus the implementation to mount.
+
+    ``revision`` increases every time the entry is installed. A mounted instance
+    records the revision it was created for, so a re-installed entry is never
+    mistaken for the instance that is already running.
+    """
 
     entry_id: str
     plugin: Plugin
     manifest: PluginManifest
     config: Mapping[str, object] = field(default_factory=dict)
+    revision: int = 1
 
 
 class PluginRegistry:
@@ -49,7 +55,8 @@ class PluginRegistry:
         self._capabilities = capabilities
         self._entries: dict[str, PluginEntry] = {}
         self._instances: dict[str, PluginInstance] = {}
-        self._by_entry: dict[str, str] = {}
+        self._by_entry: dict[str, list[str]] = {}
+        self._revisions: dict[str, int] = {}
 
     # ------------------------------------------------------------- desired state
 
@@ -59,12 +66,13 @@ class PluginRegistry:
         *,
         entry_id: str | None = None,
         config: Mapping[str, object] | None = None,
+        replace: bool = False,
     ) -> PluginEntry:
         """Register a desired plugin entry.
 
         Accepts either a plugin instance (``MyPlugin(api_key=...)``) or a plugin
-        class (what the :func:`~chassis.plugins.base.plugin` decorator produces).
-        A class is instantiated with the supplied configuration mapping.
+        class (what the :func:`~chassis.plugins.plugin` decorator produces). A class
+        is instantiated with the supplied configuration mapping.
 
         Args:
             plugin: Plugin instance or plugin class.
@@ -72,6 +80,9 @@ class PluginRegistry:
                 name derived from the manifest, so two installs of the same
                 implementation stay distinguishable.
             config: Effective configuration, for diagnostics and snapshots.
+            replace: Replace an existing desired entry and bump its revision. A
+                running instance of the previous revision stays alive until no
+                generation can reach it.
         """
 
         plugin_instance = plugin(config) if isinstance(plugin, type) else plugin
@@ -82,16 +93,19 @@ class PluginRegistry:
                 plugin=type(plugin_instance).__name__,
             )
         resolved_entry_id = entry_id or self._default_entry_id(manifest)
-        if resolved_entry_id in self._entries:
+        if resolved_entry_id in self._entries and not replace:
             raise PluginLoadError(
                 "duplicate plugin entry id", entry_id=resolved_entry_id, plugin=manifest.name
             )
+        revision = self._revisions.get(resolved_entry_id, 0) + 1
+        self._revisions[resolved_entry_id] = revision
         effective_config = dict(config if config is not None else plugin_instance.config)
         entry = PluginEntry(
             entry_id=resolved_entry_id,
             plugin=plugin_instance,
             manifest=manifest,
             config=effective_config,
+            revision=revision,
         )
         self._entries[resolved_entry_id] = entry
         return entry
@@ -114,10 +128,24 @@ class PluginRegistry:
     # ---------------------------------------------------------------- instances
 
     def instance(self, entry_id: str) -> PluginInstance | None:
-        instance_id = self._by_entry.get(entry_id)
-        if instance_id is None:
+        """The newest live instance mounted for this entry, if any."""
+
+        instance_ids = self._by_entry.get(entry_id)
+        if not instance_ids:
             return None
-        return self._instances.get(instance_id)
+        return self._instances.get(instance_ids[-1])
+
+    def instances_for(self, entry_id: str) -> tuple[PluginInstance, ...]:
+        """Every live instance mounted for this entry, oldest first.
+
+        More than one exists while a replacement is draining.
+        """
+
+        return tuple(
+            self._instances[instance_id]
+            for instance_id in self._by_entry.get(entry_id, [])
+            if instance_id in self._instances
+        )
 
     def instance_by_id(self, instance_id: str) -> PluginInstance | None:
         return self._instances.get(instance_id)
@@ -134,12 +162,22 @@ class PluginRegistry:
         )
 
     def candidates(self) -> tuple[PluginCandidate, ...]:
-        """Desired entries plus live registrations, for the dependency resolver."""
+        """Desired entries plus live registrations, for the dependency resolver.
+
+        An instance only counts as *active* when it was mounted for the entry's
+        current revision. An instance left over from a replaced revision is on its
+        way out, so planning uses what the new entry declares instead of what the
+        outgoing instance happens to provide.
+        """
 
         candidates: list[PluginCandidate] = []
         for entry in self.entries():
             instance = self.instance(entry.entry_id)
-            active = instance is not None and instance.state is PluginState.ACTIVE
+            active = (
+                instance is not None
+                and instance.state is PluginState.ACTIVE
+                and instance.entry_revision == entry.revision
+            )
             registrations = (
                 self._registrations_of(instance) if instance is not None and active else ()
             )
@@ -168,8 +206,15 @@ class PluginRegistry:
         failed mount.
         """
 
-        if self.instance(entry.entry_id) is not None:
-            raise PluginLoadError("plugin entry is already mounted", entry_id=entry.entry_id)
+        current = self.instance(entry.entry_id)
+        if (
+            current is not None
+            and current.state is not PluginState.DISPOSED
+            and current.entry_revision == entry.revision
+        ):
+            raise PluginLoadError(
+                "plugin entry is already mounted for this revision", entry_id=entry.entry_id
+            )
         instance_id = f"plugin_{uuid.uuid4().hex[:12]}"
         scope = Scope(f"plugin:{entry.entry_id}", description=entry.manifest.identity)
         instance = PluginInstance(
@@ -180,9 +225,10 @@ class PluginRegistry:
             scope=scope,
             config=entry.config,
             resolved=resolved,
+            entry_revision=entry.revision,
         )
         self._instances[instance_id] = instance
-        self._by_entry[entry.entry_id] = instance_id
+        self._by_entry.setdefault(entry.entry_id, []).append(instance_id)
 
         context = PluginContext(
             instance_id=instance_id,
@@ -286,8 +332,11 @@ class PluginRegistry:
         """
 
         self._instances.pop(instance.instance_id, None)
-        if self._by_entry.get(instance.entry_id) == instance.instance_id:
-            del self._by_entry[instance.entry_id]
+        instance_ids = self._by_entry.get(instance.entry_id)
+        if instance_ids is not None and instance.instance_id in instance_ids:
+            instance_ids.remove(instance.instance_id)
+            if not instance_ids:
+                del self._by_entry[instance.entry_id]
 
     def _registrations_of(self, instance: PluginInstance) -> tuple[CapabilityRegistration, ...]:
         return tuple(

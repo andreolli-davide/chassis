@@ -72,6 +72,7 @@ class PluginInstance:
     config: Mapping[str, Any] = field(default_factory=dict)
     resolved: Mapping[str, CapabilityRegistration] = field(default_factory=dict)
     context: PluginContext | None = None
+    entry_revision: int = 1
     state: PluginState = PluginState.PENDING
     health: PluginHealth = PluginHealth.UNKNOWN
     error: BaseException | None = None
@@ -111,6 +112,7 @@ class PluginInstance:
         return {
             "instance_id": self.instance_id,
             "entry_id": self.entry_id,
+            "entry_revision": self.entry_revision,
             "plugin": self.manifest.name,
             "version": self.manifest.version,
             "state": self.state.value,

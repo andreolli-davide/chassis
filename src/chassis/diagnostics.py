@@ -80,6 +80,14 @@ class Diagnostics:
             "cycles": [list(cycle) for cycle in plan.cycles],
         }
 
+    def generations(self) -> list[dict[str, Any]]:
+        """Published generations, newest first, with lease counts and state."""
+
+        return [
+            generation.to_dict()
+            for generation in self._harness.generation_manager.all_generations()
+        ]
+
     def explain(self, entry_id: str) -> str:
         """Why one plugin is active, pending, or excluded."""
 
@@ -106,6 +114,10 @@ class Diagnostics:
                 "eligible": len(plan.activation_order),
                 "pending": len(plan.pending),
                 "cycles": len(plan.cycles),
+                "generation": self._harness.current_generation.generation_id
+                if self._harness.current_generation is not None
+                else None,
+                "draining": len(self._harness.generation_manager.draining()),
             },
             "failures": [failure.to_dict() for failure in self._harness.last_cleanup_failures],
         }
