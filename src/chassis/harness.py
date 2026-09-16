@@ -217,6 +217,7 @@ class Harness:
             replay=replay,
         )
         self._catalog = PluginCatalog()
+        self._replay = replay
         self._provisions: dict[str, tuple[CapabilityKey, object, str | None]] = {}
         self._config: HarnessConfig | None = None
         self._dirty = False
@@ -358,10 +359,12 @@ class Harness:
         """Record/replay session, when the harness is running in one.
 
         Tool calls made through this harness are recorded or answered from the
-        recording; policy and budgets still apply either way.
+        recording; policy and budgets still apply either way. Lifecycle, snapshot,
+        and interrupt boundaries are recorded as well, so a recording explains its
+        own composition.
         """
 
-        return self._tool_executor.replay
+        return self._replay
 
     @property
     def secrets(self) -> SecretProvider:
@@ -521,6 +524,10 @@ class Harness:
     async def _shutdown(self, failures: list[CleanupFailure]) -> None:
         current = self._generations.current
         if current is not None:
+            self._record_lifecycle(
+                "harness.shutdown",
+                {"generation_id": current.generation_id, "leases": current.lease_count},
+            )
             failures.extend(
                 await self._observe(
                     HookEvent.GENERATION_DRAINING,
@@ -577,6 +584,12 @@ class Harness:
 
         if self._dirty:
             await self.reconcile()
+
+    def _record_lifecycle(self, event: str, payload: Mapping[str, Any] | None = None) -> None:
+        """Append a selected lifecycle event to the recording, when one is attached."""
+
+        if self._replay is not None:
+            self._replay.record_lifecycle(event, payload)
 
     async def _observe(
         self, event: HookEvent, payload: Mapping[str, Any]
@@ -671,6 +684,13 @@ class Harness:
                 )
                 previous = self._generations.publish(generation)
                 if previous is not None:
+                    self._record_lifecycle(
+                        "generation.draining",
+                        {
+                            "generation_id": previous.generation_id,
+                            "successor": generation.generation_id,
+                        },
+                    )
                     failures.extend(
                         await self._observe(
                             HookEvent.GENERATION_DRAINING,
@@ -681,6 +701,19 @@ class Harness:
                                 "leases": previous.lease_count,
                             },
                         )
+                    )
+                self._record_lifecycle(
+                    "generation.publish",
+                    {
+                        "generation_id": generation.generation_id,
+                        "sequence": generation.sequence,
+                        "previous": None if previous is None else previous.generation_id,
+                        "plugins": len(instances),
+                    },
+                )
+                if self._replay is not None:
+                    self._replay.record_snapshot(
+                        self.snapshot_for(generation).to_dict(),
                     )
                 failures.extend(
                     await self._observe(
@@ -792,6 +825,14 @@ class Harness:
                     entry, self._resolutions_for(plan, entry_id)
                 )
                 span.set_attribute("instance_id", instance.instance_id)
+                self._record_lifecycle(
+                    "plugin.mount",
+                    {
+                        "plugin": entry.manifest.name,
+                        "entry_id": entry_id,
+                        "instance_id": instance.instance_id,
+                    },
+                )
                 failures.extend(
                     await self._observe(
                         HookEvent.PLUGIN_MOUNTED,
@@ -872,6 +913,9 @@ class Harness:
         for generation in self._generations.draining():
             if generation.lease_count == 0:
                 self._generations.retire(generation)
+                self._record_lifecycle(
+                    "generation.retired", {"generation_id": generation.generation_id}
+                )
                 self._telemetry.event(
                     "generation.drain",
                     {"generation_id": generation.generation_id, "leases": 0},
@@ -991,6 +1035,14 @@ class Harness:
                         "instance_id": instance.instance_id,
                     },
                 )
+            )
+            self._record_lifecycle(
+                "plugin.unmount",
+                {
+                    "plugin": instance.manifest.name,
+                    "entry_id": instance.entry_id,
+                    "instance_id": instance.instance_id,
+                },
             )
 
     def _generation_id_or_empty(self) -> str:

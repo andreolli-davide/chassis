@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from chassis import MODEL
+from chassis import DATABASE, Harness, PluginContext, plugin
 from chassis.core.errors import ReplayMismatch
 from chassis.replay import (
     BoundaryKind,
@@ -14,6 +15,13 @@ from chassis.replay import (
     ReplayMode,
     ReplaySession,
     boundary_key,
+)
+from chassis.runtime import (
+    AgentEvent,
+    AgentInterrupt,
+    AgentRequest,
+    AgentResult,
+    HarnessRunContext,
 )
 from chassis.testing import FakeChatModel, TestHarness, fake_tool
 from chassis.tools import ToolRequest
@@ -51,7 +59,7 @@ async def test_tool_call_is_recorded_and_replayed_without_executing() -> None:
         )
 
     assert calls == [("echo", {"text": "hi"})]
-    assert recording.counts() == {"tool": 1}
+    assert recording.counts()["tool"] == 1
 
     # Replaying answers from the record, so the tool body never runs again.
     replaying = ReplaySession(mode=ReplayMode.REPLAY, records=list(recording.records))
@@ -274,25 +282,76 @@ def test_sensitive_request_fields_are_redacted_in_recordings() -> None:
     assert SECRET not in str(record.to_dict())
 
 
-async def test_snapshot_and_lifecycle_records_capture_composition() -> None:
+async def test_harness_records_lifecycle_and_snapshot_boundaries() -> None:
     recording = session(ReplayMode.RECORD)
-    generation_id = ""
-    async with TestHarness() as harness:
-        harness.provide(MODEL, "model")
-        await harness.start()
-        generation = harness.current_generation
-        assert generation is not None
-        generation_id = generation.generation_id
 
-        recording.record_snapshot(harness.snapshot_for(generation).to_dict())
-        recording.record_lifecycle(
-            "generation.publish", {"generation_id": generation.generation_id}
-        )
+    @plugin(name="db", version="1.0.0", provides={"database": "1.0.0"})
+    async def db(ctx: PluginContext) -> None:
+        ctx.capabilities.provide(DATABASE, "db")
 
-    payload = recording.records[0].response
-    assert payload["generation_id"] == generation_id
-    assert "plugins" in payload
-    assert recording.records[1].request["event"] == "generation.publish"
+    harness = Harness(replay=recording)
+    harness.install(db, entry_id="db")
+    await harness.start()
+    await harness.stop()
+
+    lifecycle = [
+        record.request["event"]
+        for record in recording.records
+        if record.kind is BoundaryKind.LIFECYCLE
+    ]
+    assert lifecycle == [
+        "plugin.mount",
+        "generation.publish",
+        "harness.shutdown",
+        "plugin.unmount",
+    ]
+
+    snapshots = [record for record in recording.records if record.kind is BoundaryKind.SNAPSHOT]
+    assert snapshots[-1].response["generation_id"] == "gen_0001"
+    assert snapshots[-1].response["plugins"]
+
+
+async def test_interrupt_values_are_recorded_with_the_run_that_paused() -> None:
+    recording = session(ReplayMode.RECORD)
+
+    class PausingRuntime:
+        name = "pausing"
+
+        async def invoke(
+            self, request: AgentRequest, run_context: HarnessRunContext
+        ) -> AgentResult:
+            return AgentResult(
+                agent="pausing",
+                generation_id=run_context.generation_id,
+                run_id=run_context.run_id,
+                output={},
+                thread_id=request.thread_id,
+                interrupts=(AgentInterrupt(value={"question": "approve?"}),),
+            )
+
+        async def stream(
+            self, request: AgentRequest, run_context: HarnessRunContext
+        ) -> AsyncIterator[AgentEvent]:
+            yield AgentEvent(
+                agent=self.name,
+                generation_id=run_context.generation_id,
+                run_id=run_context.run_id,
+                kind="values",
+            )
+
+    harness = Harness(replay=recording)
+    await harness.start()
+    try:
+        harness.register_agent(PausingRuntime())
+        result = await harness.agents.invoke("pausing", {"messages": []}, thread_id="t-1")
+    finally:
+        await harness.stop()
+
+    interrupts = [record for record in recording.records if record.kind is BoundaryKind.INTERRUPT]
+    assert len(interrupts) == 1
+    assert interrupts[0].response == {"question": "approve?"}
+    assert interrupts[0].generation_id == result.generation_id
+    assert interrupts[0].request["thread_id"] == "t-1"
 
 
 def test_session_counts_group_by_boundary_kind() -> None:

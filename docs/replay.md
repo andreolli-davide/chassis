@@ -29,9 +29,18 @@ Recorded:
 
 - **tool requests and results**, at the execution boundary;
 - **model requests and responses**, when the model is wrapped with `ReplayChatModel`;
-- **interrupt values**;
-- **runtime snapshots**, so a recording explains its own composition;
-- **selected lifecycle events** (`record_lifecycle`).
+- **interrupt values**, whenever an agent run pauses on one;
+- **runtime snapshots**, on every generation publication, so a recording explains
+  its own composition;
+- **selected lifecycle events**: `plugin.mount`, `plugin.unmount`,
+  `generation.publish`, `generation.draining`, `generation.retired`, and
+  `harness.shutdown`.
+
+Only the tool and model boundaries are *replayable*: they are the operations a
+replay answers from. Interrupt, snapshot, and lifecycle records are attribution --
+they explain which composition produced the recording and where a run paused --
+and replay never fabricates an answer from them. A replayed run still pauses on its
+own checkpointer.
 
 Not recorded, and not replayable:
 

@@ -207,6 +207,8 @@ class AgentRegistry:
                         hooks,
                     )
                     raise
+                if result.interrupted:
+                    _record_interrupts(harness, agent, agent_request.thread_id, result)
                 await self._dispatch_agent(
                     harness,
                     HookEvent.AFTER_AGENT_RUN,
@@ -366,6 +368,37 @@ class ScopedAgents:
         """Remove an agent early, before the scope closes."""
 
         return self._registry.unregister(name)
+
+
+def _record_interrupts(
+    harness: Harness, agent: str, thread_id: str | None, result: AgentResult
+) -> None:
+    """Append the interrupt values a run paused on to the recording, when attached.
+
+    Recording is inert outside ``record`` mode, and interrupt values are recorded for
+    attribution rather than replayed: a replayed run still pauses against the
+    engine's own checkpointer.
+    """
+
+    from chassis.replay.models import BoundaryKind
+    from chassis.replay.session import boundary_key
+
+    session = harness.replay
+    if session is None:
+        return
+    for index, interrupt in enumerate(result.interrupts):
+        session.record(
+            BoundaryKind.INTERRUPT,
+            key=boundary_key("interrupt", agent, thread_id, index),
+            request={
+                "agent": agent,
+                "thread_id": thread_id,
+                "interrupt_id": interrupt.interrupt_id,
+            },
+            response=interrupt.value,
+            generation_id=result.generation_id,
+            run_id=result.run_id,
+        )
 
 
 def _definition_digest(runtime: AgentRuntime, run_context: HarnessRunContext) -> str | None:
