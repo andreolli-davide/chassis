@@ -1,0 +1,61 @@
+name: Bug report
+description: Something behaves differently from what the documentation claims
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening this: `harness.diagnostics.status()`, `diagnostics.plugins()`, and
+        `diagnostics.explain("entry-id")` answer most "why is this not active" questions,
+        and [troubleshooting](https://github.com/andreolli-davide/chassis/blob/main/docs/troubleshooting.md)
+        lists the errors and their causes.
+
+        Security issue? Report it privately instead:
+        https://github.com/andreolli-davide/chassis/security/advisories/new
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I ran the same code against the latest release (`python -c "import chassis; print(chassis.__version__)"`)
+          required: true
+        - label: I searched the existing issues
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: Chassis version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version and platform
+      placeholder: "3.12.10 on macOS 15.3 (arm64)"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+      description: Include the exact error type and its structured `context` if there was one.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: A runnable script or the smallest test that shows it. `TestHarness` and the fakes in `chassis.testing` usually keep this short.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics output, if relevant
+      description: "`harness.diagnostics.status()`, `diagnostics.explain(...)`, or `diagnostics.generations()`."
+      render: text
+    validations:
+      required: false

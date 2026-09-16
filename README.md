@@ -166,6 +166,15 @@ src/chassis/
   testing/       TestHarness and fakes
 ```
 
+## Contributing
+
+Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md)
+for the gates a change must pass and what a reviewable commit looks like. Questions
+belong in [Discussions](https://github.com/andreolli-davide/chassis/discussions);
+security reports go through
+[private advisories](https://github.com/andreolli-davide/chassis/security/advisories/new)
+instead of a public issue — see [SECURITY.md](SECURITY.md) for what is in scope.
+
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).

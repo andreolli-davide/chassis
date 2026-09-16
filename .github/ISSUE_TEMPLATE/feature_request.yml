@@ -1,0 +1,52 @@
+name: Feature request
+description: Suggest a capability, an integration, or a documentation gap
+title: "[feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Chassis deliberately does *not* do several things — graph execution, LangSmith
+        experiment management, sandboxing in-process plugins, deterministic replay of
+        external systems, Python hot reload. Please check
+        [design.md](https://github.com/andreolli-davide/chassis/blob/main/docs/design.md)
+        first: "deliberate absences" is a decision list, not a backlog.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem you have
+      description: Describe the situation in your application, not the API you want.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you tried, and what you would expect instead
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - lifecycle / scopes / generations
+        - capabilities / plugin authoring
+        - tools / policy / approval
+        - hooks / tasks
+        - budgets
+        - secrets
+        - LangGraph integration
+        - telemetry / observability
+        - configuration / reconciliation
+        - replay / evaluation
+        - documentation / examples
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you are doing today instead
+      description: A workaround tells us how expensive the gap really is.
+    validations:
+      required: false

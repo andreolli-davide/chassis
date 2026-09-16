@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCUMENTS = [
     ROOT / "README.md",
     ROOT / "CHANGELOG.md",
+    ROOT / "CONTRIBUTING.md",
+    ROOT / "SECURITY.md",
     *sorted((ROOT / "docs").glob("*.md")),
 ]
 LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
