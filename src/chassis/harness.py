@@ -178,12 +178,6 @@ class Harness:
         self._tool_registry = ToolRegistry()
         self._hook_registry = HookRegistry()
         self._agents = AgentRegistry(harness=self)
-        self._plugin_registry = PluginRegistry(
-            capabilities=self._capability_registry,
-            tools=self._tool_registry,
-            hooks=self._hook_registry,
-            agents=self._agents,
-        )
         self._generations = GenerationManager(history_limit=generation_history_limit)
         self._policy: PolicyEngine = policy if policy is not None else AllowAllPolicy()
         self._telemetry: Telemetry = telemetry if telemetry is not None else NoopTelemetry()
@@ -192,6 +186,13 @@ class Harness:
         # they are read, which is what keeps them out of traces and snapshots.
         self._secrets: SecretProvider = RedactingSecretProvider(
             secrets if secrets is not None else EnvSecretProvider(), self._redactor
+        )
+        self._plugin_registry = PluginRegistry(
+            capabilities=self._capability_registry,
+            tools=self._tool_registry,
+            hooks=self._hook_registry,
+            agents=self._agents,
+            secrets=self._secrets,
         )
         self._tool_executor = ToolExecutor(
             policy=self._policy,

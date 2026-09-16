@@ -54,6 +54,7 @@ in the scope, which is unwound automatically.
 | `ctx.create_task(coro, name=...)` | background task |
 | `ctx.cleanup(description, func)` | arbitrary reversible effect (use it to record the inverse of an operation that has no registry) |
 | `ctx.require(key)` / `ctx.get(key)` | resolved provider object |
+| `ctx.secrets` | secret provider (composition-resolved, else the harness default) |
 
 Everything is reverted when the plugin unloads. `ctx.require` reads the providers
 resolved for *this* composition, so a plugin never observes "whatever is current".

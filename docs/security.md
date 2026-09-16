@@ -72,6 +72,11 @@ future Vault/AWS/1Password provider does not change plugin code:
 value = (await ctx.secrets.get("openai.api_key")).reveal()
 ```
 
+`ctx.secrets` returns the provider resolved for the plugin's own composition when
+the plugin declares the `secrets` capability, and the harness's configured provider
+otherwise. Either way plugin code never reaches into the process environment
+directly.
+
 Secret values must never appear in logs, traces, snapshots, diagnostics, replay
 records, or exception strings. That is enforced by construction, not by convention:
 

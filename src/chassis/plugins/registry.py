@@ -30,6 +30,7 @@ from chassis.plugins.base import Plugin, PluginContext
 from chassis.plugins.lifecycle import PluginHealth, PluginInstance, PluginState
 from chassis.plugins.manifest import PluginManifest
 from chassis.plugins.resolver import PluginCandidate
+from chassis.secrets.base import SecretProvider
 from chassis.tools.registry import ToolRegistry
 
 __all__ = ["PluginEntry", "PluginRegistry"]
@@ -61,11 +62,13 @@ class PluginRegistry:
         tools: ToolRegistry,
         hooks: HookRegistry,
         agents: AgentRegistry,
+        secrets: SecretProvider,
     ) -> None:
         self._capabilities = capabilities
         self._tools = tools
         self._hooks = hooks
         self._agents = agents
+        self._secrets = secrets
         self._entries: dict[str, PluginEntry] = {}
         self._instances: dict[str, PluginInstance] = {}
         self._by_entry: dict[str, list[str]] = {}
@@ -231,6 +234,7 @@ class PluginRegistry:
             tools=self._tools,
             hooks=self._hooks,
             agents=self._agents,
+            secrets=self._secrets,
         )
         instance.context = context
 

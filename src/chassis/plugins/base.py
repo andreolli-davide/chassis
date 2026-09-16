@@ -16,7 +16,7 @@ from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from typing import Any, ClassVar, TypeVar
 
 from chassis.agents import AgentRegistry, ScopedAgents
-from chassis.capabilities.keys import CapabilityKey
+from chassis.capabilities.keys import SECRETS, CapabilityKey
 from chassis.capabilities.registry import (
     CapabilityRegistration,
     CapabilityRegistry,
@@ -26,6 +26,7 @@ from chassis.core.errors import CapabilityNotFound, CapabilityVersionMismatch
 from chassis.core.scope import EffectRecord, Scope
 from chassis.hooks.registry import HookRegistry, ScopedHooks
 from chassis.plugins.manifest import PluginManifest
+from chassis.secrets.base import SecretProvider
 from chassis.tasks.manager import ScopedTasks
 from chassis.tools.registry import ScopedTools, ToolRegistry
 
@@ -56,6 +57,7 @@ class PluginContext:
         "_registry",
         "_resolved",
         "_scope",
+        "_secrets",
         "_tasks",
         "_tools",
     )
@@ -73,6 +75,7 @@ class PluginContext:
         tools: ToolRegistry,
         hooks: HookRegistry,
         agents: AgentRegistry,
+        secrets: SecretProvider,
     ) -> None:
         self._instance_id = instance_id
         self._entry_id = entry_id
@@ -86,6 +89,7 @@ class PluginContext:
         self._tools = ScopedTools(tools, scope, instance_id, manifest.name)
         self._hooks = ScopedHooks(hooks, scope, instance_id)
         self._agents = ScopedAgents(agents, scope)
+        self._secrets = secrets
 
     @property
     def instance_id(self) -> str:
@@ -148,6 +152,22 @@ class PluginContext:
         """Hook registration bound to this plugin's scope."""
 
         return self._hooks
+
+    @property
+    def secrets(self) -> SecretProvider:
+        """The secret provider for this plugin.
+
+        If the plugin declared the ``secrets`` capability, the provider resolved
+        for *this* composition is returned; otherwise the harness's configured
+        provider is. Either way a plugin reads secrets through this property rather
+        than the process environment, so a future provider does not change plugin
+        code.
+        """
+
+        registration = self._resolved.get(SECRETS.name)
+        if registration is not None and isinstance(registration.value, SecretProvider):
+            return registration.value
+        return self._secrets
 
     @property
     def agents(self) -> ScopedAgents:

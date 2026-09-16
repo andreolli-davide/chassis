@@ -4,10 +4,11 @@ import pytest
 from langchain_core.tools import BaseTool, tool
 
 from chassis import Harness, PluginContext, plugin
-from chassis.capabilities import CapabilityKey
+from chassis.capabilities import SECRETS, CapabilityKey
 from chassis.core.errors import ConfigurationError, ScopeClosedError
 from chassis.core.scope import Scope
 from chassis.hooks import HookEvent
+from chassis.secrets import StaticSecretProvider
 from chassis.tools import RegisteredTool, ToolNotFound, ToolPolicy, ToolRegistry
 
 TOOLS = CapabilityKey("tools", "1")
@@ -186,3 +187,42 @@ async def test_plugin_hooks_are_scope_owned() -> None:
         await harness.stop()
 
     assert len(harness.hooks) == 0
+
+
+async def test_plugin_reads_secrets_through_its_context() -> None:
+    """Secrets are read through the provider abstraction, never the environment."""
+
+    seen: list[str] = []
+
+    @plugin(name="reader", version="1.0.0", requires={"secrets": ">=1,<2"})
+    async def reader(ctx: PluginContext) -> None:
+        seen.append((await ctx.secrets.get("openai.api_key")).reveal())
+
+    @plugin(name="vault", version="1.0.0", provides={"secrets": "1.0.0"})
+    async def vault(ctx: PluginContext) -> None:
+        ctx.capabilities.provide(SECRETS, StaticSecretProvider({"openai.api_key": "value-1234"}))
+
+    harness = Harness()
+    harness.install(vault, entry_id="vault")
+    harness.install(reader, entry_id="reader")
+    await harness.start()
+    try:
+        assert seen == ["value-1234"]
+    finally:
+        await harness.stop()
+
+
+async def test_plugin_without_a_secrets_capability_uses_the_harness_provider() -> None:
+    seen: list[str] = []
+
+    @plugin(name="reader", version="1.0.0")
+    async def reader(ctx: PluginContext) -> None:
+        seen.append((await ctx.secrets.get("api.token")).reveal())
+
+    harness = Harness(secrets=StaticSecretProvider({"api.token": "harness-value"}))
+    harness.install(reader, entry_id="reader")
+    await harness.start()
+    try:
+        assert seen == ["harness-value"]
+    finally:
+        await harness.stop()
