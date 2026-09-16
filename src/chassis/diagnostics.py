@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from chassis.harness import Harness
+    from chassis.plugins.lifecycle import PluginInstance
 
 __all__ = ["Diagnostics"]
 
@@ -49,6 +50,7 @@ class Diagnostics:
                     "instance_id": None if instance is None else instance.instance_id,
                     "scope_id": None if instance is None else instance.scope.id,
                     "generation_refs": 0 if instance is None else instance.generation_refs,
+                    "effects": [] if instance is None else self._effects(instance),
                     "eligible": None if planned is None else planned.eligible,
                     "order": None if planned is None else planned.order,
                     "requirements": (
@@ -58,6 +60,25 @@ class Diagnostics:
                 }
             )
         return payload
+
+    def _effects(self, instance: PluginInstance) -> list[dict[str, Any]]:
+        """Owned effects of one instance, with descriptions redacted.
+
+        Effect descriptions are written by plugin authors, so they are redacted
+        before they leave the harness: diagnostics never become a place where a
+        secret accumulates.
+        """
+
+        redactor = self._harness.redactor
+        return [
+            {
+                "effect_id": effect.effect_id,
+                "kind": effect.kind,
+                "description": redactor.redact(effect.description),
+                "scope_id": effect.scope_id,
+            }
+            for effect in instance.scope.effects
+        ]
 
     def capabilities(self) -> list[dict[str, Any]]:
         """Registered providers of capability contracts."""

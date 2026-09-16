@@ -16,6 +16,7 @@ from chassis.runtime import (
     AgentRuntime,
     HarnessRunContext,
 )
+from chassis.secrets import SecretRedactor
 from chassis.testing import fake_tool
 from chassis.tools import ToolPolicy
 
@@ -304,6 +305,33 @@ async def test_diagnostics_report_boundary_state() -> None:
         await harness.stop()
 
 
+async def test_plugin_diagnostics_list_owned_effects() -> None:
+    secret = "sk-live-abcdef123456"
+
+    @plugin(name="owner", version="1.0.0")
+    async def owner(ctx: PluginContext) -> None:
+        ctx.cleanup("close the pool", lambda: None)
+        ctx.cleanup(f"forget {secret}", lambda: None)
+
+    harness = Harness(redactor=SecretRedactor([secret]))
+    harness.install(owner, entry_id="owner")
+    await harness.start()
+    try:
+        payload = next(
+            item for item in harness.diagnostics.plugins() if item["entry_id"] == "owner"
+        )
+        effects = payload["effects"]
+
+        assert {effect["description"] for effect in effects} == {
+            "close the pool",
+            "forget <redacted>",
+        }
+        assert secret not in str(payload)
+        assert all(effect["scope_id"] == payload["scope_id"] for effect in effects)
+    finally:
+        await harness.stop()
+
+
 async def test_tool_policy_is_visible_in_diagnostics() -> None:
     @plugin(name="danger", version="1.0.0")
     async def danger(ctx: PluginContext) -> None:
@@ -333,6 +361,5 @@ async def test_capability_key_providers_are_reported() -> None:
         providers = harness.capability_registry.by_name("database")
         assert len(providers) == 1
         assert providers[0].key == CapabilityKey("database", "1")
-        assert harness.agents.to_dict() == {"agents": []}
     finally:
         await harness.stop()

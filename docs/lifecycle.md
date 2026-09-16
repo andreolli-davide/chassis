@@ -169,7 +169,7 @@ Programmatic `install`/`provide`/`uninstall` are synchronous desired-state chang
 ## Diagnostics
 
 ```python
-harness.diagnostics.plugins()       # state, health, eligibility, per-requirement resolution
+harness.diagnostics.plugins()       # state, health, eligibility, per-requirement resolution, owned effects
 harness.diagnostics.capabilities()  # registered providers
 harness.diagnostics.dependencies()  # edges, activation order, pending, cycles
 harness.diagnostics.generations()   # state, leases, instances, plugins
@@ -182,4 +182,6 @@ harness.diagnostics.explain("memory")  # why one plugin is active, pending, or e
 ```
 
 Diagnostics are generated from authoritative state, never scraped from logs, and
-they describe configuration by key rather than by value.
+they describe configuration by key rather than by value. Effect descriptions are
+redacted before they are reported, so diagnostics never become somewhere a secret
+accumulates.
