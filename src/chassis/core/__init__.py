@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from chassis.core.collections import FrozenDict
 from chassis.core.errors import (
     ChassisError,
     CleanupFailure,
@@ -15,6 +16,7 @@ __all__ = [
     "CleanupFailure",
     "EffectCleanupError",
     "EffectRecord",
+    "FrozenDict",
     "Scope",
     "ScopeClosedError",
     "ScopeState",

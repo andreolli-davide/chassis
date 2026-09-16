@@ -43,6 +43,15 @@ from chassis.budget.models import BudgetLimits
 from chassis.capabilities.keys import CapabilityKey
 from chassis.capabilities.registry import CapabilityRegistration, CapabilityRegistry
 from chassis.capabilities.snapshot import CapabilitySnapshot
+from chassis.config.loader import PluginCatalog, parse_config
+from chassis.config.models import HarnessConfig
+from chassis.config.reconcile import (
+    DesiredStateAction,
+    DesiredStateChange,
+    InstalledEntry,
+    config_fingerprint,
+    diff_desired_state,
+)
 from chassis.core.errors import (
     CleanupFailure,
     EffectCleanupError,
@@ -67,7 +76,23 @@ from chassis.telemetry.base import NoopTelemetry, Telemetry
 from chassis.tools.executor import ApprovalGate, ToolExecutor
 from chassis.tools.registry import ToolRegistry, ToolSnapshot
 
-__all__ = ["Harness", "HarnessState", "ReconcileResult"]
+__all__ = ["ConfigApplyResult", "Harness", "HarnessState", "ReconcileResult"]
+
+
+@dataclass(frozen=True, slots=True)
+class ConfigApplyResult:
+    """What applying a declarative configuration decided and did."""
+
+    config: HarnessConfig
+    changes: tuple[DesiredStateChange, ...]
+    applied: tuple[DesiredStateChange, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "version": self.config.version,
+            "changes": [change.to_dict() for change in self.changes],
+            "applied": [change.to_dict() for change in self.applied],
+        }
 
 
 def _services_plugin(
@@ -174,7 +199,9 @@ class Harness:
             redactor=self._redactor,
             default_timeout_seconds=tool_timeout_seconds,
         )
+        self._catalog = PluginCatalog()
         self._provisions: dict[str, tuple[CapabilityKey, object, str | None]] = {}
+        self._config: HarnessConfig | None = None
         self._dirty = False
         self._default_budget_limits = default_budget_limits
         self._resolver = DependencyResolver()
@@ -224,6 +251,74 @@ class Harness:
         """Live hook registry; registrations are owned by plugin scopes."""
 
         return self._hook_registry
+
+    @property
+    def catalog(self) -> PluginCatalog:
+        """Implementation names used by declarative configuration."""
+
+        return self._catalog
+
+    @property
+    def config(self) -> HarnessConfig | None:
+        """Configuration applied most recently, if any."""
+
+        return self._config
+
+    def register_plugin_type(
+        self, name: str, plugin_type: type[Plugin], *, replace: bool = False
+    ) -> None:
+        """Register a plugin implementation for declarative installation."""
+
+        self._catalog.register(name, plugin_type, replace=replace)
+
+    def apply_config(self, source: Any) -> ConfigApplyResult:
+        """Reconcile the harness towards a declarative configuration.
+
+        Desired entries are created, replaced, or removed through the same install
+        path used programmatically, and provider preferences are applied before the
+        next reconcile so the composition is resolved exactly once.
+        """
+
+        config = parse_config(source)
+        changes = diff_desired_state(config, self._installed_state())
+        applied: list[DesiredStateChange] = []
+
+        for change in changes:
+            if not change.is_mutation:
+                continue
+            entry = config.entry(change.entry_id)
+            if change.action is DesiredStateAction.REMOVE:
+                self.uninstall(change.entry_id)
+            elif entry is not None:
+                self.install(
+                    self._catalog.get(entry.plugin),
+                    entry_id=entry.id,
+                    config=entry.config,
+                    replace=change.action is DesiredStateAction.REPLACE,
+                )
+            applied.append(change)
+
+        for capability, provider in config.provider_preferences.items():
+            self.prefer_provider(capability, provider)
+        for entry in config.enabled_entries:
+            for capability, provider in entry.provider_preference.items():
+                self.prefer_provider(f"{entry.id}:{capability}", provider)
+
+        self._config = config
+        return ConfigApplyResult(config=config, changes=changes, applied=tuple(applied))
+
+    def _installed_state(self) -> dict[str, InstalledEntry]:
+        return {
+            entry.entry_id: InstalledEntry(
+                entry_id=entry.entry_id,
+                plugin=entry.manifest.name,
+                revision=entry.revision,
+                config_fingerprint=config_fingerprint(
+                    plugin=entry.manifest.name, config=entry.config
+                ),
+            )
+            for entry in self._plugin_registry.entries()
+        }
 
     @property
     def agents(self) -> AgentRegistry:
