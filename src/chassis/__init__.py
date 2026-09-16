@@ -64,6 +64,14 @@ from chassis.plugins import (
     ResolutionPlan,
     plugin,
 )
+from chassis.runtime import (
+    AgentEvent,
+    AgentRequest,
+    AgentResult,
+    AgentRuntime,
+    HarnessRunContext,
+    RunEnvironment,
+)
 
 try:
     __version__ = version("chassis")
@@ -80,6 +88,10 @@ __all__ = [
     "SCHEDULER",
     "SECRETS",
     "TOOLS",
+    "AgentEvent",
+    "AgentRequest",
+    "AgentResult",
+    "AgentRuntime",
     "BudgetExceeded",
     "CapabilityAmbiguous",
     "CapabilityKey",
@@ -101,6 +113,7 @@ __all__ = [
     "GenerationState",
     "GraphBuildError",
     "Harness",
+    "HarnessRunContext",
     "HarnessState",
     "HookExecutionError",
     "Plugin",
@@ -117,6 +130,7 @@ __all__ = [
     "ReconcileResult",
     "ReplayMismatch",
     "ResolutionPlan",
+    "RunEnvironment",
     "RuntimeGeneration",
     "Scope",
     "ScopeClosedError",
