@@ -26,11 +26,15 @@ from chassis.core.errors import (
 
 __all__ = ["CapabilitySnapshot"]
 
-_ORDER = lambda registration: (  # noqa: E731 - a local ordering key, not a public helper
-    registration.provider_name,
-    registration.provider_id,
-    registration.registration_id,
-)
+
+def _registration_order(registration: CapabilityRegistration) -> tuple[str, str, str]:
+    """Deterministic ordering for snapshot entries."""
+
+    return (
+        registration.provider_name,
+        registration.provider_id,
+        registration.registration_id,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +52,7 @@ class CapabilitySnapshot:
     ) -> CapabilitySnapshot:
         """Build a snapshot with entries in deterministic order."""
 
-        ordered = tuple(sorted(registrations, key=_ORDER))
+        ordered = tuple(sorted(registrations, key=_registration_order))
         return cls(generation_id=generation_id, registrations=ordered)
 
     def providers(self, capability: CapabilityKey | str) -> tuple[CapabilityRegistration, ...]:

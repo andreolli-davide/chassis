@@ -469,8 +469,12 @@ class Harness:
         made since the last reconciliation, so the method is safely idempotent.
         """
 
-        if self._state is HarnessState.STOPPED:
-            raise HarnessStateError("harness has been stopped", harness=self._name)
+        if self._state in (HarnessState.STOPPING, HarnessState.STOPPED):
+            raise HarnessStateError(
+                f"cannot start a harness that is {self._state.value}",
+                harness=self._name,
+                state=self._state.value,
+            )
         if self._state is HarnessState.CREATED:
             self._state = HarnessState.RUNNING
         if self._dirty or self._plan is None:
@@ -486,13 +490,17 @@ class Harness:
 
         if self._state in (HarnessState.STOPPED, HarnessState.STOPPING):
             return
-        self._state = HarnessState.STOPPING
-        failures: list[CleanupFailure] = []
-        async with self._telemetry.span("harness.shutdown", {"harness": self._name}):
-            await self._shutdown(failures)
+        # Holding the composition lock means a reconciliation already in flight
+        # finishes before shutdown starts, and a later one cannot publish a
+        # generation into a harness that is going away.
+        async with self._compose_lock:
+            self._state = HarnessState.STOPPING
+            failures: list[CleanupFailure] = []
+            async with self._telemetry.span("harness.shutdown", {"harness": self._name}):
+                await self._shutdown(failures)
 
-        self._state = HarnessState.STOPPED
-        self._last_failures = tuple(failures)
+            self._state = HarnessState.STOPPED
+            self._last_failures = tuple(failures)
         if failures:
             raise EffectCleanupError(self._name, tuple(failures))
 
@@ -545,13 +553,21 @@ class Harness:
     async def reconcile(self) -> ReconcileResult:
         """Publish a new runtime generation for the desired state."""
 
-        if self._state is HarnessState.STOPPED:
-            raise HarnessStateError("harness has been stopped", harness=self._name)
+        # Refuse before touching the lock: a reconciliation that waited for a
+        # shutdown to finish would otherwise publish a generation into a harness
+        # that is going away.
+        if self._state not in (HarnessState.CREATED, HarnessState.RUNNING):
+            raise HarnessStateError(
+                f"cannot reconcile a harness that is {self._state.value}",
+                harness=self._name,
+                state=self._state.value,
+            )
 
         async with (
             self._compose_lock,
             self._telemetry.span(
-                "harness.reconcile", {"harness": self._name, "desired": len(self.plan().plugins)}
+                "harness.reconcile",
+                {"harness": self._name, "desired": len(self._plugin_registry.entries())},
             ) as span,
         ):
             plan = self._resolver.resolve(
@@ -776,6 +792,15 @@ class Harness:
         return disposed
 
     async def _reclaim_after_drain(self) -> None:
+        """Reclaim after the last lease of a draining generation was released.
+
+        Shutdown owns reclamation while it runs: it holds the composition lock and
+        is itself waiting for exactly this release, so taking the lock here would
+        deadlock. Shutdown retires and disposes everything anyway.
+        """
+
+        if self._state in (HarnessState.STOPPING, HarnessState.STOPPED):
+            return
         async with self._compose_lock:
             failures: list[CleanupFailure] = []
             await self._reclaim(failures)
