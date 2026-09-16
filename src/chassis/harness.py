@@ -164,10 +164,18 @@ class ReconcileResult:
 
 
 class Harness:
-    """Composition and lifecycle runtime for Chassis plugins."""
+    """Composition and lifecycle runtime for Chassis plugins.
+
+    Args:
+        config: Declarative desired state (a mapping, a YAML/JSON string, a path, or
+            a :class:`~chassis.config.HarnessConfig`), applied once when the harness
+            starts. Implementations it names resolve through the catalog, so
+            register them with :meth:`register_plugin_type` before starting.
+    """
 
     def __init__(
         self,
+        config: Any = None,
         *,
         name: str = "harness",
         task_shutdown_timeout: float | None = 5.0,
@@ -222,6 +230,7 @@ class Harness:
         self._config: HarnessConfig | None = None
         self._dirty = False
         self._default_budget_limits = default_budget_limits
+        self._pending_config = config
         self._resolver = DependencyResolver()
         self._provider_preference: dict[str, str] = {}
         self._compose_lock = asyncio.Lock()
@@ -483,7 +492,9 @@ class Harness:
         """Reconcile the desired state and begin accepting runs.
 
         Calling ``start`` on a running harness applies any desired-state changes
-        made since the last reconciliation, so the method is safely idempotent.
+        made since the last reconciliation, so the method is safely idempotent. A
+        declarative configuration handed to the constructor is applied here, once,
+        before the first reconciliation.
         """
 
         if self._state in (HarnessState.STOPPING, HarnessState.STOPPED):
@@ -492,6 +503,9 @@ class Harness:
                 harness=self._name,
                 state=self._state.value,
             )
+        if self._pending_config is not None:
+            pending, self._pending_config = self._pending_config, None
+            self.apply_config(pending)
         if self._state is HarnessState.CREATED:
             self._state = HarnessState.RUNNING
         if self._dirty or self._plan is None:

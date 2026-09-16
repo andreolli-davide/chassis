@@ -36,6 +36,13 @@ harness.apply_config("harness.yaml")
 harness.apply_config({"plugins": [{"id": "model", "plugin": "openai-model"}]})
 ```
 
+It can also be handed to the constructor, applied once when the harness starts:
+
+```python
+async with Harness("harness.yaml") as harness:
+    result = await harness.agents.invoke("research-agent", {"messages": [...]})
+```
+
 ## The catalog
 
 ```python

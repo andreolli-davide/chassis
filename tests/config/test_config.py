@@ -5,7 +5,7 @@ from typing import cast
 
 import pytest
 
-from chassis import MODEL, PluginContext, plugin
+from chassis import MODEL, Harness, PluginContext, plugin
 from chassis.config import (
     DesiredStateAction,
     HarnessConfig,
@@ -364,3 +364,31 @@ async def test_diagnostics_report_no_desired_state_without_configuration() -> No
     async with TestHarness() as harness:
         assert harness.diagnostics.config() is None
         assert harness.diagnostics.desired_state() == []
+
+
+async def test_constructor_configuration_is_applied_on_start() -> None:
+    harness = Harness(
+        {"plugins": [{"id": "model", "plugin": "fake-model", "config": {"model": "from-config"}}]}
+    )
+    harness.register_plugin_type("fake-model", fake_model)
+
+    async with harness:
+        generation = harness.current_generation
+        assert generation is not None
+        assert generation.snapshot.require(MODEL) == "from-config"
+        assert harness.config is not None
+        assert harness.diagnostics.config() == harness.config.to_dict()
+
+
+async def test_constructor_configuration_is_applied_once() -> None:
+    harness = Harness({"plugins": [{"id": "model", "plugin": "fake-model"}]})
+    harness.register_plugin_type("fake-model", fake_model)
+
+    await harness.start()
+    try:
+        first = harness.current_generation
+        await harness.start()
+
+        assert harness.current_generation is first
+    finally:
+        await harness.stop()
