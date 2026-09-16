@@ -1,0 +1,64 @@
+site_name: Chassis
+site_description: A production-grade Python agent harness built on scoped ownership, reactive capabilities, and immutable runtime generations.
+site_url: https://andreolli-davide.github.io/chassis/
+repo_url: https://github.com/andreolli-davide/chassis
+repo_name: andreolli-davide/chassis
+edit_uri: edit/main/docs/
+docs_dir: docs
+strict: true
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Overview: README.md
+  - Getting started: getting-started.md
+  - Why generations: why-generations.md
+  - Guides:
+      - Lifecycle and ownership: lifecycle.md
+      - Writing a plugin: plugin-author-guide.md
+      - LangGraph integration: langgraph.md
+      - Configuration and reconciliation: configuration.md
+      - Observability and tracing: observability.md
+      - Replay and evaluation: replay.md
+  - Recipes: recipes.md
+  - Troubleshooting: troubleshooting.md
+  - Design guarantees: design.md
+  - Security: security.md
+
+validation:
+  links:
+    # Documentation is checked by tests/test_docs_links.py against the source tree,
+    # where links out of docs/ (examples, changelog) are real files. The site only
+    # serves docs/, so those targets are absolute GitHub URLs on purpose.
+    absolute_links: ignore
+    unrecognized_links: warn

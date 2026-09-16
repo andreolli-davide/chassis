@@ -69,5 +69,5 @@ The documented surface — everything in `chassis.__all__` and the module entry 
 listed in [docs/README.md](README.md) — is covered by `tests/test_public_api.py`,
 which fails if documentation references an API that no longer exists. Pre-1.0, the
 minor version may break that surface; every break is recorded in
-[CHANGELOG.md](../CHANGELOG.md). `chassis_version` and the runtime snapshot digest
+[CHANGELOG.md](https://github.com/andreolli-davide/chassis/blob/main/CHANGELOG.md). `chassis_version` and the runtime snapshot digest
 identify exactly which version produced a run.

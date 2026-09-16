@@ -15,7 +15,7 @@ follow this page, because the quickstart uses a scripted model.
 
 ## The smallest useful application
 
-The complete file is [`examples/quickstart.py`](../examples/quickstart.py); it
+The complete file is [`examples/quickstart.py`](https://github.com/andreolli-davide/chassis/blob/main/examples/quickstart.py); it
 asserts everything it prints.
 
 ```python

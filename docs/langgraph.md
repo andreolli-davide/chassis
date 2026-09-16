@@ -169,7 +169,7 @@ async with TestHarness() as harness:
     result = await harness.agents.invoke("research", {"messages": [HumanMessage("hi")]})
 ```
 
-[examples/basic_agent.py](../examples/basic_agent.py) runs this end to end,
+[examples/basic_agent.py](https://github.com/andreolli-davide/chassis/blob/main/examples/basic_agent.py) runs this end to end,
 including streaming, interrupt/resume, and snapshot attribution.
 
 ## What Chassis deliberately does not do

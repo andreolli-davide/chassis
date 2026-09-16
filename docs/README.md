@@ -6,6 +6,7 @@ below for task-oriented detail.
 | Document | Read it for |
 | --- | --- |
 | [getting-started.md](getting-started.md) | install, the smallest useful app, where to go next |
+| [why-generations.md](why-generations.md) | the problem immutable generations solve, and what it costs |
 | [lifecycle.md](lifecycle.md) | ownership, scopes, plugin lifecycle, generations, safe unload, shutdown |
 | [plugin-author-guide.md](plugin-author-guide.md) | writing, testing, and shipping a plugin |
 | [langgraph.md](langgraph.md) | agent definitions, the run context, graph caching, tools, streaming, interrupts |
@@ -21,10 +22,10 @@ below for task-oriented detail.
 
 | Example | Shows |
 | --- | --- |
-| [../examples/quickstart.py](../examples/quickstart.py) | the smallest useful app: a model capability, one LangGraph agent, generation attribution |
-| [../examples/basic_agent.py](../examples/basic_agent.py) | a LangGraph agent: model capability, tools, checkpointer, streaming, tracing, interrupt/resume, snapshot |
-| [../examples/reactive_cascade.py](../examples/reactive_cascade.py) | `database → memory → agent extension`, removed and restored |
-| [../examples/safe_provider_replacement.py](../examples/safe_provider_replacement.py) | an active run keeping its generation across a provider swap |
+| [examples/quickstart.py](https://github.com/andreolli-davide/chassis/blob/main/examples/quickstart.py) | the smallest useful app: a model capability, one LangGraph agent, generation attribution |
+| [examples/basic_agent.py](https://github.com/andreolli-davide/chassis/blob/main/examples/basic_agent.py) | a LangGraph agent: model capability, tools, checkpointer, streaming, tracing, interrupt/resume, snapshot |
+| [examples/reactive_cascade.py](https://github.com/andreolli-davide/chassis/blob/main/examples/reactive_cascade.py) | `database → memory → agent extension`, removed and restored |
+| [examples/safe_provider_replacement.py](https://github.com/andreolli-davide/chassis/blob/main/examples/safe_provider_replacement.py) | an active run keeping its generation across a provider swap |
 
 All four execute their own assertions, so running them is the verification:
 
