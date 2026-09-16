@@ -80,6 +80,37 @@ class Diagnostics:
             "cycles": [list(cycle) for cycle in plan.cycles],
         }
 
+    def config(self) -> dict[str, Any] | None:
+        """The declarative configuration applied most recently, if any."""
+
+        config = self._harness.config
+        return None if config is None else config.to_dict()
+
+    def desired_state(self) -> list[dict[str, Any]]:
+        """What reconciliation would change, relative to the applied configuration.
+
+        Empty when no declarative configuration has been applied, because there is
+        nothing to compare programmatic installs against.
+        """
+
+        from chassis.config.reconcile import InstalledEntry, config_fingerprint, diff_desired_state
+
+        config = self._harness.config
+        if config is None:
+            return []
+        installed = {
+            entry.entry_id: InstalledEntry(
+                entry_id=entry.entry_id,
+                plugin=entry.manifest.name,
+                revision=entry.revision,
+                config_fingerprint=config_fingerprint(
+                    plugin=entry.manifest.name, config=entry.config
+                ),
+            )
+            for entry in self._harness.plugin_registry.entries()
+        }
+        return [change.to_dict() for change in diff_desired_state(config, installed)]
+
     def agents(self) -> dict[str, Any]:
         """Registered agent runtimes."""
 

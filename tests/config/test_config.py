@@ -168,8 +168,11 @@ def test_diff_never_emits_reconfigure() -> None:
 def test_entry_configuration_is_immutable() -> None:
     entry = PluginEntryConfig(id="a", plugin="x", config={"k": 1})
 
-    with pytest.raises(Exception):
-        entry.config["k"] = 2  # type: ignore[index]
+    with pytest.raises(TypeError):
+        entry.config["k"] = 2  # type: ignore[index]  # type: ignore[index]
+    with pytest.raises(TypeError):
+        entry.config.update({"k": 2})
+    assert entry.config.copy() == {"k": 1}
 
 
 async def test_applying_configuration_mounts_plugins_from_the_catalog() -> None:
@@ -314,3 +317,36 @@ async def test_configuration_diagnostics_are_available() -> None:
         payload = result.to_dict()
         assert payload["changes"][0]["action"] == "add"
         assert HarnessConfig.model_validate(result.config.model_dump()) == result.config
+
+
+async def test_configuration_diagnostics_explain_pending_changes() -> None:
+    async with TestHarness() as harness:
+        harness.register_plugin_type("fake-model", fake_model)
+        harness.apply_config({"plugins": [{"id": "model", "plugin": "fake-model"}]})
+        await harness.reconcile()
+
+        assert harness.diagnostics.config() is not None
+        assert harness.diagnostics.desired_state() == [
+            {
+                "action": "unchanged",
+                "entry_id": "model",
+                "plugin": "fake-model",
+                "reason": "",
+            }
+        ]
+
+        # An entry installed outside the configuration shows up as a divergence.
+        harness.install(fake_model, entry_id="extra")
+        assert [item["action"] for item in harness.diagnostics.desired_state()] == ["remove"]
+
+        # Applying the configuration converges, so drift disappears.
+        harness.apply_config({"plugins": [{"id": "model", "plugin": "fake-model"}]})
+        assert [item["action"] for item in harness.diagnostics.desired_state()] == [
+            "unchanged"
+        ]
+
+
+async def test_diagnostics_report_no_desired_state_without_configuration() -> None:
+    async with TestHarness() as harness:
+        assert harness.diagnostics.config() is None
+        assert harness.diagnostics.desired_state() == []
