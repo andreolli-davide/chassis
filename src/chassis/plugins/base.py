@@ -199,14 +199,6 @@ class PluginContext:
         registration = self._resolved.get(name)
         return None if registration is None else registration.value
 
-    def resolved_registration(
-        self, capability: CapabilityKey | str
-    ) -> CapabilityRegistration | None:
-        """Registration metadata for a resolved capability, if any."""
-
-        name = capability.name if isinstance(capability, CapabilityKey) else capability
-        return self._resolved.get(name)
-
     def cleanup(
         self,
         description: str,
@@ -218,11 +210,6 @@ class PluginContext:
         """Register the inverse of an operation performed during setup."""
 
         return self._scope.cleanup(description, func, *args, kind=kind, **kwargs)
-
-    def child_scope(self, name: str) -> Scope:
-        """Create a child scope closed before this plugin's earlier effects."""
-
-        return self._scope.child(name)
 
     def create_task(
         self, coro: Coroutine[Any, Any, T], *, name: str | None = None

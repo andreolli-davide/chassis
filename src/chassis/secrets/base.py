@@ -73,13 +73,3 @@ class SecretProvider(Protocol):
         """Resolve ``name``, returning ``None`` when it is unavailable."""
 
         ...
-
-
-class SecretNotFoundMixin:
-    """Shared resolution failure construction that cannot leak a value."""
-
-    @staticmethod
-    def _missing(name: str, provider: str) -> SecretResolutionError:
-        return SecretResolutionError(
-            f"secret {name!r} is not available from {provider}", secret=name, provider=provider
-        )

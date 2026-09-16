@@ -274,24 +274,6 @@ def test_sensitive_request_fields_are_redacted_in_recordings() -> None:
     assert SECRET not in str(record.to_dict())
 
 
-async def test_through_replays_recorded_operations_and_records_new_ones() -> None:
-    recording = session(ReplayMode.RECORD)
-    calls: list[int] = []
-
-    async def operation() -> dict[str, int]:
-        calls.append(1)
-        return {"value": 42}
-
-    first = await recording.through(BoundaryKind.MODEL, key="k", operation=operation)
-    assert first == {"value": 42}
-    assert calls == [1]
-
-    replaying = ReplaySession(mode=ReplayMode.REPLAY, records=list(recording.records))
-    second = await replaying.through(BoundaryKind.MODEL, key="k", operation=operation)
-    assert second == {"value": 42}
-    assert calls == [1]
-
-
 async def test_snapshot_and_lifecycle_records_capture_composition() -> None:
     recording = session(ReplayMode.RECORD)
     generation_id = ""

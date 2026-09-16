@@ -82,14 +82,6 @@ class PluginInstance:
     def identity(self) -> str:
         return f"{self.manifest.identity}#{self.instance_id}"
 
-    @property
-    def is_active(self) -> bool:
-        return self.state is PluginState.ACTIVE
-
-    @property
-    def is_disposed(self) -> bool:
-        return self.state is PluginState.DISPOSED
-
     def transition(self, new_state: PluginState) -> None:
         """Move to ``new_state``, rejecting illegal lifecycle transitions."""
 

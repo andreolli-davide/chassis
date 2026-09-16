@@ -14,7 +14,6 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from chassis.core.collections import FrozenDict
-from chassis.core.errors import ConfigurationError
 
 __all__ = ["HarnessConfig", "PluginEntryConfig"]
 
@@ -114,11 +113,3 @@ class HarnessConfig(BaseModel):
             "plugins": [entry.to_dict() for entry in self.plugins],
             "provider_preferences": dict(sorted(self.provider_preferences.items())),
         }
-
-
-def require_mapping(value: Any, *, what: str) -> Mapping[str, Any]:
-    """Fail loudly when configuration is not shaped as expected."""
-
-    if not isinstance(value, Mapping):
-        raise ConfigurationError(f"{what} must be a mapping", value_type=type(value).__name__)
-    return value

@@ -13,13 +13,13 @@ explicitly.
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TypeVar
 
 from chassis.core.errors import ReplayMismatch
-from chassis.persistence.hashing import canonical_json, stable_hash
+from chassis.persistence.hashing import stable_hash
 from chassis.replay.models import (
     BoundaryKind,
     ReplayFallback,
@@ -151,44 +151,6 @@ class ReplaySession:
 
     # --------------------------------------------------------------- execution
 
-    async def through(
-        self,
-        kind: BoundaryKind,
-        *,
-        key: str,
-        operation: Callable[[], Awaitable[T]],
-        request: Mapping[str, Any] | None = None,
-        generation_id: str | None = None,
-        run_id: str | None = None,
-    ) -> T:
-        """Run ``operation``, recording it, replaying it, or passing it through.
-
-        In ``replay`` mode a recorded response answers the call. When nothing was
-        recorded, ``fallback`` decides between failing loudly and running live.
-        """
-
-        if self.is_replaying and self.has(kind, key=key):
-            return self.replay(kind, key=key).response  # type: ignore[no-any-return]
-
-        if self.is_replaying and self.fallback is ReplayFallback.ERROR:
-            raise ReplayMismatch(
-                "operation was not recorded and replay does not fall back to live execution",
-                kind=kind.value,
-                key=key,
-                recorded=len([record for record in self.records if record.kind is kind]),
-            )
-
-        result = await operation()
-        self.record(
-            kind,
-            key=key,
-            request=request,
-            response=_to_payload(result),
-            generation_id=generation_id,
-            run_id=run_id,
-        )
-        return result
-
     # ------------------------------------------------------------------ storage
 
     def to_dict(self) -> dict[str, Any]:
@@ -238,17 +200,3 @@ def _redact_sensitive(payload: Mapping[str, Any]) -> dict[str, Any]:
         else:
             redacted[str(key)] = value
     return redacted
-
-
-def _to_payload(value: Any) -> Any:
-    """Convert a boundary result into something JSON-serializable."""
-
-    if value is None or isinstance(value, (bool, int, float, str, list, dict)):
-        return value
-    to_dict = getattr(value, "to_dict", None)
-    if callable(to_dict):
-        return to_dict()
-    model_dump = getattr(value, "model_dump", None)
-    if callable(model_dump):
-        return model_dump(mode="json")
-    return {"repr": canonical_json(str(value))}

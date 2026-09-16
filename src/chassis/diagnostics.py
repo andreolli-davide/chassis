@@ -11,8 +11,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from chassis.plugins.lifecycle import PluginState
-
 if TYPE_CHECKING:
     from chassis.harness import Harness
 
@@ -178,12 +176,3 @@ class Diagnostics:
             if payload["entry_id"] == entry_id:
                 return payload
         return None
-
-    def failed_plugins(self) -> list[dict[str, Any]]:
-        """Mounted instances whose lifecycle state is ``FAILED``."""
-
-        return [
-            instance.to_dict()
-            for instance in self._harness.plugin_registry.instances()
-            if instance.state is PluginState.FAILED
-        ]

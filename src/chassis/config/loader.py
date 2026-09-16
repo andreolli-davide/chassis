@@ -16,7 +16,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from chassis.config.models import HarnessConfig, PluginEntryConfig
+from chassis.config.models import HarnessConfig
 from chassis.core.errors import ConfigurationError
 from chassis.plugins.base import Plugin
 
@@ -148,9 +148,3 @@ def _validate(payload: Any, *, origin: str) -> HarnessConfig:
         raise ConfigurationError(
             "configuration is invalid", path=origin, errors=error.error_count()
         ) from error
-
-
-def entry_plugin_name(entry: PluginEntryConfig) -> str:
-    """Implementation name a desired entry refers to."""
-
-    return entry.plugin

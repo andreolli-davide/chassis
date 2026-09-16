@@ -197,11 +197,6 @@ class CapabilityRegistry:
             registration for registration in self.registrations() if registration.key.name == name
         )
 
-    def by_key(self, key: CapabilityKey) -> tuple[CapabilityRegistration, ...]:
-        return tuple(
-            registration for registration in self.registrations() if registration.key == key
-        )
-
     def __len__(self) -> int:
         return len(self._registrations)
 

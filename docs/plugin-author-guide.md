@@ -52,8 +52,7 @@ in the scope, which is unwound automatically.
 | `ctx.hooks.register(event, handler, mode=..., priority=...)` | hook registration |
 | `ctx.agents.register(runtime)` | agent runtime registration |
 | `ctx.create_task(coro, name=...)` | background task |
-| `ctx.cleanup(description, func)` | arbitrary reversible effect |
-| `ctx.child_scope(name)` | child scope |
+| `ctx.cleanup(description, func)` | arbitrary reversible effect (use it to record the inverse of an operation that has no registry) |
 | `ctx.require(key)` / `ctx.get(key)` | resolved provider object |
 
 Everything is reverted when the plugin unloads. `ctx.require` reads the providers

@@ -21,7 +21,6 @@ __all__ = [
     "AllowAllPolicy",
     "DenyAllPolicy",
     "GrantPolicy",
-    "PolicyDecision",
     "PolicyEngine",
     "PolicyRequest",
     "PolicyResult",
@@ -61,17 +60,6 @@ class PolicyResult:
             "approval_required": self.approval_required,
             "matched_grant": None if self.matched_grant is None else str(self.matched_grant),
         }
-
-
-@dataclass(frozen=True, slots=True)
-class PolicyDecision:
-    """Alias-free record of a decision, used for diagnostics and tracing."""
-
-    request: PolicyRequest
-    result: PolicyResult
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"request": self.request.to_dict(), "result": self.result.to_dict()}
 
 
 @runtime_checkable

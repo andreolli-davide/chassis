@@ -148,31 +148,8 @@ class PluginRegistry:
             return None
         return self._instances.get(instance_ids[-1])
 
-    def instances_for(self, entry_id: str) -> tuple[PluginInstance, ...]:
-        """Every live instance mounted for this entry, oldest first.
-
-        More than one exists while a replacement is draining.
-        """
-
-        return tuple(
-            self._instances[instance_id]
-            for instance_id in self._by_entry.get(entry_id, [])
-            if instance_id in self._instances
-        )
-
-    def instance_by_id(self, instance_id: str) -> PluginInstance | None:
-        return self._instances.get(instance_id)
-
     def instances(self) -> tuple[PluginInstance, ...]:
         return tuple(self._instances[instance_id] for instance_id in sorted(self._instances))
-
-    @property
-    def active_instance_ids(self) -> tuple[str, ...]:
-        return tuple(
-            instance.instance_id
-            for instance in self.instances()
-            if instance.state is PluginState.ACTIVE
-        )
 
     def candidates(self) -> tuple[PluginCandidate, ...]:
         """Desired entries plus live registrations, for the dependency resolver.

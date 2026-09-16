@@ -85,17 +85,3 @@ async def test_policy_engines_satisfy_the_protocol() -> None:
     assert isinstance(GrantPolicy(), PolicyEngine)
     assert isinstance(AllowAllPolicy(), PolicyEngine)
     assert isinstance(DenyAllPolicy(), PolicyEngine)
-
-
-async def test_policy_decision_is_serializable_without_secrets() -> None:
-    from chassis.policy import PolicyDecision
-
-    policy = GrantPolicy(["secrets.read"])
-    request = PolicyRequest(permission=Permission("secrets.read"), subject="tool:read_secret")
-    decision = PolicyDecision(request=request, result=await policy.evaluate(request))
-
-    payload = decision.to_dict()
-
-    assert payload["request"]["permission"] == "secrets.read"
-    assert payload["result"]["allowed"] is True
-    assert "sk-" not in str(payload)

@@ -156,9 +156,6 @@ class ResolutionPlan:
                 return plan
         return None
 
-    def eligible_entry_ids(self) -> tuple[str, ...]:
-        return self.activation_order
-
     def raise_for_cycles(self) -> None:
         """Raise :class:`PluginCycleError` if the declared graph has cycles."""
 

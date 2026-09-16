@@ -23,7 +23,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import BaseTool
 
 from chassis.budget.governor import BudgetGovernor
 from chassis.budget.models import BudgetDimension
@@ -561,11 +560,6 @@ class ToolExecutor:
         if self._hooks is None:
             return HookResult(event=event, payload=payload)
         return await self._hooks.dispatch(event, payload, hooks=hooks)
-
-    def langchain_tools(self, snapshot: ToolSnapshot) -> list[BaseTool]:
-        """Tools of a generation, for graph/ToolNode composition."""
-
-        return snapshot.to_langchain_tools()
 
 
 def _split_output(output: Any) -> tuple[Any, Any]:

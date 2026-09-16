@@ -978,12 +978,6 @@ class Harness:
             prefer=dict(self._provider_preference) if prefer is None else prefer,
         )
 
-    @property
-    def applied_plan(self) -> ResolutionPlan | None:
-        """Plan produced by the most recent successful reconciliation."""
-
-        return self._plan
-
     def entry(self, entry_id: str) -> PluginEntry | None:
         return self._plugin_registry.entry(entry_id)
 

@@ -50,10 +50,6 @@ class Permission:
             raise ConfigurationError("permission name must not be empty", permission=text)
         return permission
 
-    @property
-    def is_scoped(self) -> bool:
-        return self.resource is not None
-
     def __str__(self) -> str:
         return self.name if self.resource is None else f"{self.name}:{self.resource}"
 
