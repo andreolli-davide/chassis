@@ -200,21 +200,49 @@ def test_history_is_bounded_and_newest_first(manager: GenerationManager) -> None
         small.publish(generation)
         generations.append(generation)
 
-    # Only the most recent generations are retained for diagnostics.
+    for generation in small.draining():
+        small.retire(generation)
+
+    # Only the most recent *retired* generations are retained for diagnostics.
+    assert [item.generation_id for item in small.history] == [
+        generations[2].generation_id,
+        generations[1].generation_id,
+    ]
     assert [item.generation_id for item in small.all_generations()] == [
         generations[3].generation_id,
         generations[2].generation_id,
         generations[1].generation_id,
     ]
-    assert small.current is generations[3]
 
-    for generation in small.draining():
-        small.retire(generation)
 
-    assert [item.generation_id for item in small.history] == [
-        generations[2].generation_id,
-        generations[1].generation_id,
-    ]
+def test_history_limit_never_evicts_a_live_generation(manager: GenerationManager) -> None:
+    """A leased generation outlives any number of newer publications.
+
+    Deriving liveness from the bounded diagnostics buffer would drop it, zero the
+    reference counts of the plugins only it reaches, and let them be disposed while
+    the run still holds them.
+    """
+
+    small = GenerationManager(history_limit=1)
+    first = small.build(snapshot_factory=empty_snapshot, instances=[instance("a")])
+    small.publish(first)
+    assert small.acquire() is first
+
+    for index in range(3):
+        small.publish(
+            small.build(snapshot_factory=empty_snapshot, instances=[instance(f"b{index}")])
+        )
+
+    assert first in small.live()
+    assert first in small.draining()
+    assert "plugin_a" in small.reachable_instance_ids()
+
+    assert small.release(first) is True
+    small.retire(first)
+
+    assert first not in small.live()
+    assert first not in small.reachable_instance_ids()
+    assert [item.generation_id for item in small.history] == [first.generation_id]
 
 
 def test_generation_and_snapshot_are_immutable() -> None:

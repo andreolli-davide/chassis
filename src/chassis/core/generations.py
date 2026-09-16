@@ -17,6 +17,12 @@ disposal -- through the harness lock. Nothing here serializes model or tool call
 Retirement is lease-driven: a generation that is no longer current becomes
 DRAINING, and only once its last lease is released may it retire and let plugins
 that no live generation can reach be disposed (invariant I6).
+
+Liveness and diagnostics are tracked separately. A draining generation stays live
+until it is retired, no matter how many newer generations are published, because
+the bounded history buffer only ever evicts *retired* generations. Deriving
+liveness from that buffer would let a long-running lease lose its generation and
+have its resources disposed underneath it.
 """
 
 from __future__ import annotations
@@ -44,12 +50,14 @@ class GenerationManager:
     """Owns the sequence of runtime generations and their lease accounting.
 
     Args:
-        history_limit: How many past generations to retain for diagnostics.
+        history_limit: How many *retired* generations to retain for diagnostics.
+            Live generations (current and draining) are never evicted by it.
     """
 
     def __init__(self, *, history_limit: int = _HISTORY_LIMIT) -> None:
         self._current: RuntimeGeneration | None = None
-        self._published: list[RuntimeGeneration] = []
+        self._draining: dict[str, RuntimeGeneration] = {}
+        self._retired: list[RuntimeGeneration] = []
         self._history_limit = history_limit
         self._counter = itertools.count(1)
 
@@ -67,36 +75,33 @@ class GenerationManager:
         generations: list[RuntimeGeneration] = []
         if self._current is not None:
             generations.append(self._current)
-        generations.extend(
-            generation
-            for generation in self._published
-            if generation.state is GenerationState.DRAINING
-        )
+        generations.extend(self._draining.values())
         return tuple(generations)
 
     def draining(self) -> tuple[RuntimeGeneration, ...]:
         """Generations waiting for their last run to finish."""
 
-        return tuple(
-            generation for generation in self.live() if generation.state is GenerationState.DRAINING
-        )
+        return tuple(self._draining.values())
 
     @property
     def history(self) -> tuple[RuntimeGeneration, ...]:
         """Retired generations retained for diagnostics, newest first."""
 
-        return tuple(
-            generation
-            for generation in reversed(self._published)
-            if generation.state is GenerationState.RETIRED
-        )
+        return tuple(reversed(self._retired))
 
     def all_generations(self) -> tuple[RuntimeGeneration, ...]:
-        generations: list[RuntimeGeneration] = []
-        if self._current is not None:
-            generations.append(self._current)
-        generations.extend(reversed(self._published))
-        return tuple(generations)
+        """Every generation still known, newest first.
+
+        Live generations are always included; only retired diagnostics are bounded.
+        """
+
+        return tuple(
+            sorted(
+                self.live() + tuple(self._retired),
+                key=lambda generation: generation.sequence,
+                reverse=True,
+            )
+        )
 
     def reachable_instance_ids(self) -> frozenset[str]:
         """Instance ids reachable from a live generation.
@@ -156,8 +161,7 @@ class GenerationManager:
         previous = self._current
         if previous is not None and previous is not generation:
             previous.accounting.state = GenerationState.DRAINING
-            self._published.append(previous)
-            del self._published[: max(0, len(self._published) - self._history_limit)]
+            self._draining[previous.generation_id] = previous
         generation.accounting.state = GenerationState.ACTIVE
         self._current = generation
         return previous
@@ -174,6 +178,9 @@ class GenerationManager:
                 generation_id=generation.generation_id,
             )
         generation.accounting.state = GenerationState.RETIRED
+        self._draining.pop(generation.generation_id, None)
+        self._retired.append(generation)
+        del self._retired[: max(0, len(self._retired) - self._history_limit)]
         if self._current is generation:  # pragma: no cover - guarded above
             self._current = None
         return True
@@ -198,8 +205,7 @@ class GenerationManager:
         current = self._current
         if current is not None:
             current.accounting.state = GenerationState.DRAINING
-            self._published.append(current)
-            del self._published[: max(0, len(self._published) - self._history_limit)]
+            self._draining[current.generation_id] = current
             self._current = None
         return self.draining()
 

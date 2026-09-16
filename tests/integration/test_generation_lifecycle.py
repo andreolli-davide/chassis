@@ -238,6 +238,58 @@ async def test_disposal_waits_for_the_last_lease_of_a_removed_plugin() -> None:
         await harness.stop()
 
 
+async def test_a_leased_generation_survives_history_pruning() -> None:
+    """Reachability, not the diagnostics buffer, decides when a plugin is disposed."""
+
+    def extra_plugin(index: int):  # type: ignore[no-untyped-def]
+        capability = CapabilityKey(f"extra-{index}", "1")
+
+        @plugin(name=f"extra-{index}", version="1.0.0", provides={capability.name: "1.0.0"})
+        async def extra(ctx: PluginContext) -> None:
+            ctx.capabilities.provide(capability, Guard(f"extra-{index}"))
+
+        return extra
+
+    harness = Harness(generation_history_limit=1)
+    harness.install(guard_plugin("provider-a"), entry_id="db")
+    await harness.start()
+    try:
+        instance = mounted(harness, "db")
+        generation_one = harness.current_generation
+        assert generation_one is not None
+        provider = generation_one.snapshot.require(DATABASE)
+
+        release = asyncio.Event()
+        entered = asyncio.Event()
+
+        async def run() -> None:
+            async with harness.acquire():
+                entered.set()
+                await release.wait()
+
+        task = asyncio.create_task(run())
+        await entered.wait()
+
+        # Publish far more generations than the history buffer retains, with the
+        # leased generation no longer part of the desired state.
+        harness.uninstall("db")
+        for index in range(4):
+            harness.install(extra_plugin(index), entry_id=f"extra-{index}")
+            await harness.reconcile()
+
+        assert provider.disposed is False
+        assert instance.state is PluginState.ACTIVE
+        assert generation_one in harness.generation_manager.live()
+
+        release.set()
+        await task
+
+        assert provider.disposed is True
+        assert instance.state is PluginState.DISPOSED
+    finally:
+        await harness.stop()
+
+
 async def test_acquire_requires_a_running_harness() -> None:
     harness = Harness()
 

@@ -135,7 +135,11 @@ The invariant is:
 > A plugin scope may be physically disposed only when no live runtime generation can reach it.
 
 Shared instances are covered by the same rule: a plugin referenced by several live
-generations survives until all of them retire.
+generations survives until all of them retire. Liveness is tracked independently of
+the bounded generation history kept for diagnostics
+(`Harness(generation_history_limit=...)`): that buffer only evicts *retired*
+generations, so a run holding an old generation keeps its resources alive however
+many newer generations are published.
 
 Disposal order is derived from the providers each instance actually resolved, so
 consumers are disposed before the providers they still reach.
