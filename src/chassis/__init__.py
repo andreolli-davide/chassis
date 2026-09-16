@@ -74,7 +74,8 @@ from chassis.runtime import (
 )
 
 try:
-    __version__ = version("chassis")
+    # The distribution is ``chassis-harness``; the import package stays ``chassis``.
+    __version__ = version("chassis-harness")
 except PackageNotFoundError:  # pragma: no cover - only when running from a source tree
     __version__ = "0.0.0"
 

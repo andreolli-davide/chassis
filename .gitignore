@@ -5,6 +5,7 @@ __pycache__/
 .eggs/
 build/
 dist/
+.smoke/
 
 # Environment
 .venv/
@@ -29,5 +30,3 @@ htmlcov/
 
 # Local scratch
 .local/
-# Goal-mode task description (not part of the repository)
-GOAL.md

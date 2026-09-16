@@ -34,7 +34,8 @@ def chassis_version() -> str:
     """Installed Chassis version, or ``"0.0.0"`` when running from a source tree."""
 
     try:
-        return version("chassis")
+        # The distribution is ``chassis-harness``; the import package stays ``chassis``.
+        return version("chassis-harness")
     except PackageNotFoundError:  # pragma: no cover - only outside an install
         return "0.0.0"
 

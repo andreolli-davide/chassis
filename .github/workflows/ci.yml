@@ -11,8 +11,12 @@ concurrency:
 
 jobs:
   checks:
-    name: lint, type-check, test
+    name: lint, type-check, test (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
@@ -21,8 +25,9 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
+          python-version: ${{ matrix.python-version }}
 
-      - name: Sync environment from lockfile
+      - name: Sync environment from the lockfile
         run: uv sync --locked --all-extras --dev
 
       - name: Ruff lint
@@ -36,3 +41,40 @@ jobs:
 
       - name: Pytest
         run: uv run pytest
+
+  package:
+    name: build and install the wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Build
+        run: uv build
+
+      # The wheel must work on its own, in an environment that has never seen the
+      # source tree: `import chassis`, the version resolving from the distribution
+      # name, and a real LangGraph run.
+      - name: Install the wheel into a clean environment
+        run: |
+          uv venv .smoke
+          uv pip install --python .smoke/bin/python dist/*.whl
+
+      - name: Import the installed package
+        run: |
+          .smoke/bin/python - <<'PY'
+          import chassis
+          import chassis.langgraph
+          import chassis.testing
+
+          assert chassis.__version__ != "0.0.0", "version did not resolve from the distribution"
+          print("chassis", chassis.__version__)
+          PY
+
+      - name: Run the quickstart against the installed package
+        run: .smoke/bin/python examples/quickstart.py
