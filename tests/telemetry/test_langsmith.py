@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from chassis import Harness
 from chassis.secrets import SecretRedactor
 from chassis.telemetry import LangSmithSpan, LangSmithTelemetry
 from chassis.testing import TestHarness
@@ -164,3 +165,26 @@ async def test_harness_lifecycle_reaches_langsmith_when_enabled() -> None:
     names = [run.name for run in tracer.runs]
     assert "harness.reconcile" in names
     assert "harness.shutdown" in names
+
+
+async def test_agent_run_span_carries_generation_and_snapshot_attribution() -> None:
+    from tests.test_runtime import StubRuntime
+
+    telemetry, tracer = wired()
+    harness = Harness(telemetry=telemetry)
+    await harness.start()
+    try:
+        harness.register_agent(StubRuntime())
+        result = await harness.agents.invoke("stub", {"messages": []})
+    finally:
+        await harness.stop()
+
+    run = next((item for item in tracer.runs if item.name == "agent.run"), None)
+    assert run is not None, [item.name for item in tracer.runs]
+
+    assert run.metadata["agent"] == "stub"
+    assert run.metadata["generation_id"] == result.generation_id
+    assert run.metadata["snapshot_digest"] == result.metadata["snapshot_digest"]
+    assert run.metadata["chassis_version"]
+    assert run.metadata["plugin_graph_hash"]
+    assert run.metadata["tool_schema_hash"]

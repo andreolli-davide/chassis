@@ -158,25 +158,12 @@ def test_diff_derives_replace_for_implementation_or_config_change() -> None:
     assert "reconfigure is not supported" in changes["tuned"].reason
 
 
-def test_diff_never_emits_reconfigure() -> None:
-    desired = parse_config({"plugins": [{"id": "a", "plugin": "x", "config": {"v": 2}}]})
-    current = {"a": installed("a", "x", {"v": 1})}
-
-    changes = diff_desired_state(desired, current)
-
-    assert changes[0].action is not DesiredStateAction.RECONFIGURE
-
-
 def test_entry_configuration_is_immutable() -> None:
     entry = PluginEntryConfig(id="a", plugin="x", config={"k": 1})
 
     with pytest.raises(TypeError):
         entry.config["k"] = 2  # type: ignore[index]
     assert dict(entry.config) == {"k": 1}
-
-    mutable = PluginEntryConfig(id="b", plugin="x", config={"k": 1}).config
-    with pytest.raises(TypeError):
-        cast("FrozenDict", mutable).update({"k": 2})
 
     mutable = PluginEntryConfig(id="b", plugin="x", config={"k": 1}).config
     with pytest.raises(TypeError):

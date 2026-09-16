@@ -321,6 +321,10 @@ async def test_token_streaming_emits_message_chunks() -> None:
         assert chunks
         assert all(event.kind == "messages" for event in chunks)
 
+        # The chunks must reassemble into exactly what the model produced.
+        text = "".join(str(event.data[0].content) for event in chunks)
+        assert text == "abcdefghijkl"
+
 
 async def test_harness_mediated_tool_execution_succeeds_through_tool_node() -> None:
 

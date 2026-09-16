@@ -120,11 +120,15 @@ async def test_acquisition_never_returns_a_retiring_generation() -> None:
         try:
             for _ in range(ITERATIONS):
                 async with harness.acquire() as generation:
-                    # The generation is coherent for the whole run.
+                    # The generation is coherent for the whole run: its provider is
+                    # alive before and after yielding to the replacement loop.
                     assert generation.state.value == "active"
-                    assert generation.snapshot.require(DATABASE) is not None
+                    provider = generation.snapshot.require(DATABASE)
+                    assert isinstance(provider, TrackedProvider)
+                    provider.use()
                     observed.append(generation.generation_id)
                     await asyncio.sleep(0)
+                    provider.use()
         except BaseException as error:
             failures.append(error)
 
