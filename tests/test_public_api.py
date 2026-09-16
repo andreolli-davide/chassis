@@ -40,6 +40,7 @@ DOCUMENTED = {
         "Harness",
         "HarnessRunContext",
         "HarnessState",
+        "HarnessStateError",
         "HookExecutionError",
         "Plugin",
         "PluginContext",
