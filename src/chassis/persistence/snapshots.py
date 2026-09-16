@@ -16,12 +16,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from importlib.metadata import PackageNotFoundError, version
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from chassis.core.generation import RuntimeGeneration
 from chassis.persistence.hashing import stable_hash, tool_schema_hash
 from chassis.secrets.redaction import SecretRedactor, redact_config
 from chassis.tools.registry import ToolSnapshot
+
+if TYPE_CHECKING:
+    # Typing only: the generation type lives above the plugin layer, and importing
+    # it here would make this module part of that layer's import cycle.
+    from chassis.core.generation import RuntimeGeneration
 
 __all__ = ["RuntimeSnapshot", "chassis_version"]
 

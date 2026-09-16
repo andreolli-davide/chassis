@@ -15,8 +15,12 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "langchain-core>=1.6.3",
+    "langgraph>=1.2.11",
+    "langsmith>=0.12.5",
     "packaging>=26.3",
     "pydantic>=2.13.5",
+    "pyyaml>=6.0.3",
 ]
 
 [dependency-groups]
@@ -39,7 +43,13 @@ minversion = "8.0"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # langsmith's evaluation module reads the deprecated `ast.Str` alias at import
+    # time. That is upstream code executed by the interpreter, not behaviour under
+    # test, and ignoring it narrowly keeps every other warning fatal.
+    "ignore:ast.Str is deprecated:DeprecationWarning",
+]
 addopts = "-ra --strict-markers --strict-config"
 # Allow tests to share helpers through `tests.*` modules.
 pythonpath = ["."]

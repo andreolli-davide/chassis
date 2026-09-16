@@ -68,6 +68,7 @@ from chassis.plugins.lifecycle import PluginInstance, PluginState
 from chassis.plugins.registry import PluginEntry, PluginRegistry
 from chassis.plugins.resolver import DependencyResolver, ResolutionPlan
 from chassis.policy.engine import AllowAllPolicy, PolicyEngine
+from chassis.replay.session import ReplaySession
 from chassis.runtime import AgentRuntime, RunEnvironment
 from chassis.secrets.base import SecretProvider
 from chassis.secrets.env import EnvSecretProvider, RedactingSecretProvider
@@ -166,6 +167,7 @@ class Harness:
         redactor: SecretRedactor | None = None,
         tool_timeout_seconds: float | None = None,
         default_budget_limits: BudgetLimits | None = None,
+        replay: ReplaySession | None = None,
     ) -> None:
         self._name = name
         self._state = HarnessState.CREATED
@@ -198,6 +200,7 @@ class Harness:
             telemetry=self._telemetry,
             redactor=self._redactor,
             default_timeout_seconds=tool_timeout_seconds,
+            replay=replay,
         )
         self._catalog = PluginCatalog()
         self._provisions: dict[str, tuple[CapabilityKey, object, str | None]] = {}
@@ -335,6 +338,16 @@ class Harness:
     @property
     def policy(self) -> PolicyEngine:
         return self._policy
+
+    @property
+    def replay(self) -> ReplaySession | None:
+        """Record/replay session, when the harness is running in one.
+
+        Tool calls made through this harness are recorded or answered from the
+        recording; policy and budgets still apply either way.
+        """
+
+        return self._tool_executor.replay
 
     @property
     def secrets(self) -> SecretProvider:

@@ -27,10 +27,18 @@ from langchain_core.tools import BaseTool
 
 from chassis.budget.governor import BudgetGovernor
 from chassis.budget.models import BudgetDimension
-from chassis.core.errors import BudgetExceeded, ChassisError, PolicyDenied, ToolExecutionError
+from chassis.core.errors import (
+    BudgetExceeded,
+    ChassisError,
+    PolicyDenied,
+    ReplayMismatch,
+    ToolExecutionError,
+)
 from chassis.hooks.registry import HookSnapshot
 from chassis.hooks.types import HookEvent, HookResult
 from chassis.policy.engine import PolicyEngine, PolicyRequest
+from chassis.replay.models import BoundaryKind, ReplayFallback
+from chassis.replay.session import ReplaySession, boundary_key
 from chassis.secrets.redaction import SecretRedactor
 from chassis.telemetry.base import NoopTelemetry, Telemetry
 from chassis.tools.registry import RegisteredTool, ToolSnapshot
@@ -91,6 +99,41 @@ class ToolExecutionResult:
     @property
     def ok(self) -> bool:
         return self.status == "ok"
+
+    def to_payload(self) -> dict[str, Any]:
+        """Complete, round-trippable representation used by record/replay.
+
+        Distinct from :meth:`to_dict`, which is a diagnostic view that deliberately
+        omits content and artifacts.
+        """
+
+        return {
+            "name": self.name,
+            "status": self.status,
+            "content": self.content,
+            "artifact": self.artifact,
+            "error": self.error,
+            "duration_seconds": self.duration_seconds,
+            "tool_call_id": self.tool_call_id,
+            "generation_id": self.generation_id,
+            "redacted": self.redacted,
+        }
+
+    @classmethod
+    def from_payload(cls, payload: Mapping[str, Any]) -> ToolExecutionResult:
+        """Rebuild a result recorded by :meth:`to_payload`."""
+
+        return cls(
+            name=str(payload.get("name", "")),
+            status=payload.get("status", "ok"),  # type: ignore[arg-type]
+            content=payload.get("content"),
+            artifact=payload.get("artifact"),
+            error=payload.get("error"),
+            duration_seconds=float(payload.get("duration_seconds") or 0.0),
+            tool_call_id=payload.get("tool_call_id"),
+            generation_id=payload.get("generation_id"),
+            redacted=bool(payload.get("redacted", False)),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -177,6 +220,7 @@ class ToolExecutor:
         telemetry: Telemetry | None = None,
         redactor: SecretRedactor | None = None,
         default_timeout_seconds: float | None = None,
+        replay: ReplaySession | None = None,
     ) -> None:
         self._policy = policy
         self._approvals = approvals if approvals is not None else DenyApprovals()
@@ -184,6 +228,7 @@ class ToolExecutor:
         self._telemetry = telemetry if telemetry is not None else NoopTelemetry()
         self._redactor = redactor if redactor is not None else SecretRedactor()
         self._default_timeout_seconds = default_timeout_seconds
+        self._replay = replay
 
     # ------------------------------------------------------------------ config
 
@@ -194,6 +239,10 @@ class ToolExecutor:
     @property
     def redactor(self) -> SecretRedactor:
         return self._redactor
+
+    @property
+    def replay(self) -> ReplaySession | None:
+        return self._replay
 
     # --------------------------------------------------------------- execution
 
@@ -253,6 +302,22 @@ class ToolExecutor:
             )
             raise
 
+        # Authorization and budgeting run even when the call is replayed: a
+        # recording answers *what the tool returned*, never whether the harness
+        # was allowed to ask.
+        replay_key = boundary_key(BoundaryKind.TOOL.value, entry.name, args)
+        if self._replay is not None and self._replay.is_replaying:
+            if self._replay.has(BoundaryKind.TOOL, key=replay_key):
+                return ToolExecutionResult.from_payload(
+                    self._replay.replay(BoundaryKind.TOOL, key=replay_key).response
+                )
+            if self._replay.fallback is ReplayFallback.ERROR:
+                raise ReplayMismatch(
+                    "tool call was not recorded and replay does not fall back to live execution",
+                    tool=entry.name,
+                    recorded=self._replay.counts().get(BoundaryKind.TOOL.value, 0),
+                )
+
         started = time.monotonic()
         async with self._telemetry.span(
             "tool.execute",
@@ -290,7 +355,7 @@ class ToolExecutor:
                 )
                 if raise_on_error:
                     raise ToolExecutionError(message, tool=entry.name, status="timeout") from error
-                return result
+                return self._recorded(result, replay_key, entry, args, request)
             except Exception as error:
                 duration = time.monotonic() - started
                 message, was_redacted = self._normalize_error(entry, error)
@@ -304,25 +369,37 @@ class ToolExecutor:
                 )
                 if raise_on_error:
                     raise ToolExecutionError(message, tool=entry.name) from error
-                return ToolExecutionResult(
-                    name=entry.name,
-                    status="error",
-                    error=message,
-                    duration_seconds=duration,
-                    tool_call_id=request.tool_call_id,
-                    generation_id=request.generation_id or snapshot.generation_id,
-                    redacted=was_redacted,
+                return self._recorded(
+                    ToolExecutionResult(
+                        name=entry.name,
+                        status="error",
+                        error=message,
+                        duration_seconds=duration,
+                        tool_call_id=request.tool_call_id,
+                        generation_id=request.generation_id or snapshot.generation_id,
+                        redacted=was_redacted,
+                    ),
+                    replay_key,
+                    entry,
+                    args,
+                    request,
                 )
 
             duration = time.monotonic() - started
-            result = ToolExecutionResult(
-                name=entry.name,
-                status="ok",
-                content=content,
-                artifact=artifact,
-                duration_seconds=duration,
-                tool_call_id=request.tool_call_id,
-                generation_id=request.generation_id or snapshot.generation_id,
+            result = self._recorded(
+                ToolExecutionResult(
+                    name=entry.name,
+                    status="ok",
+                    content=content,
+                    artifact=artifact,
+                    duration_seconds=duration,
+                    tool_call_id=request.tool_call_id,
+                    generation_id=request.generation_id or snapshot.generation_id,
+                ),
+                replay_key,
+                entry,
+                args,
+                request,
             )
 
         await self._dispatch(
@@ -338,6 +415,27 @@ class ToolExecutor:
         return result
 
     # -------------------------------------------------------------- internals
+
+    def _recorded(
+        self,
+        result: ToolExecutionResult,
+        replay_key: str,
+        entry: RegisteredTool,
+        args: Mapping[str, Any] | str,
+        request: ToolRequest,
+    ) -> ToolExecutionResult:
+        """Record a completed call when the session is recording."""
+
+        if self._replay is not None:
+            self._replay.record(
+                BoundaryKind.TOOL,
+                key=replay_key,
+                request={"tool": entry.name, "args": args},
+                response=result.to_payload(),
+                generation_id=request.generation_id,
+                run_id=request.run_id,
+            )
+        return result
 
     def _timeout_for(self, entry: RegisteredTool) -> float | None:
         return (
