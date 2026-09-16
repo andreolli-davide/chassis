@@ -10,12 +10,47 @@ hands an immutable view of that environment to an execution engine.
 LangGraph is the first-class execution engine *mounted within* Chassis.
 Chassis is not a graph framework.
 
-## The core proposition
+## Install
 
-> Chassis allows agent runtime composition to change over time while active runs
-> retain a coherent environment, dependencies react correctly, resources have
-> explicit ownership, and obsolete components are disposed only when they are no
-> longer reachable.
+```bash
+pip install chassis-harness
+```
+
+Python 3.12+. The import package is `chassis`.
+
+## Quickstart
+
+```python
+from chassis import MODEL, Harness
+from chassis.langgraph import AgentDefinition, GraphBuildInputs, LangGraphAgent
+from chassis.runtime import HarnessRunContext
+
+harness = Harness(name="quickstart")
+harness.provide(MODEL, my_chat_model)                      # a langchain-core chat model
+harness.register_agent(
+    LangGraphAgent(
+        AgentDefinition(name="research-agent", version="1", state_schema=ChatState, build=build_agent),
+        checkpointer=InMemorySaver(),
+    )
+)
+
+async with harness:
+    result = await harness.agents.invoke(
+        "research-agent", {"messages": [HumanMessage("hi")]}, thread_id="thread-1"
+    )
+    print(result.text, result.generation_id)        # hello … gen_0001
+```
+
+A run acquires one immutable generation and keeps it: swapping a provider publishes
+a new generation without mutating the environment underneath an in-flight run.
+
+Runnable end to end — no credentials, scripted model, asserts its own output:
+
+```bash
+uv run python examples/quickstart.py
+```
+
+Full walkthrough: [docs/getting-started.md](docs/getting-started.md).
 
 ## A plugin in ten lines
 
@@ -34,24 +69,15 @@ No activation logic, no deregistration calls, no task bookkeeping: the harness
 orders plugins by declared capabilities, owns every effect through the plugin's
 scope, and cancels its tasks on unload.
 
-## Running an agent
+## The core proposition
 
-```python
-from chassis import MODEL, Harness
-from chassis.langgraph import AgentDefinition, LangGraphAgent
-from chassis.testing import FakeChatModel
+> Chassis allows agent runtime composition to change over time while active runs
+> retain a coherent environment, dependencies react correctly, resources have
+> explicit ownership, and obsolete components are disposed only when they are no
+> longer reachable.
 
-harness = Harness()
-harness.provide(MODEL, FakeChatModel(responses=["hello"]))
-harness.register_agent(LangGraphAgent(definition, checkpointer=InMemorySaver()))
-
-async with harness:
-    result = await harness.agents.invoke("research-agent", {"messages": [...]}, thread_id="t-1")
-    print(result.text, result.generation_id)
-```
-
-A run acquires one immutable generation and keeps it: swapping a provider publishes
-a new generation without mutating the environment underneath an in-flight run.
+[Guarantees and deliberate absences](docs/design.md) states what that buys you, and
+what Chassis refuses to promise.
 
 ## What Chassis is *not*
 
@@ -65,10 +91,8 @@ a new generation without mutating the environment underneath an in-flight run.
 
 ## Status
 
-Pre-1.0. The architecture is implemented bottom-up in the order the specification
-requires: scope and effects, capabilities, plugin lifecycle, dependency resolution,
-runtime generations, boundaries (tools, hooks, policy, secrets, budgets), LangGraph,
-observability, configuration, and bounded replay.
+Pre-1.0 (`0.1.0`). The surface covered by `tests/test_public_api.py` may break in a
+minor release; every break is recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## Development
 
@@ -81,6 +105,7 @@ uv run pytest
 uv run ruff check .
 uv run ruff format --check .
 uv run pyright
+uv build
 ```
 
 `pyproject.toml` and `uv.lock` are the canonical dependency state. Do not introduce
@@ -89,19 +114,20 @@ alternative project managers or parallel `requirements.txt` files.
 ### Examples
 
 ```bash
+uv run python examples/quickstart.py                  # smallest useful app
 uv run python examples/basic_agent.py                 # LangGraph agent end to end
 uv run python examples/reactive_cascade.py            # database → memory → extension
 uv run python examples/safe_provider_replacement.py   # generations across a provider swap
 ```
 
-Each example asserts what it prints, so running it verifies the behaviour.
+Each example asserts what it prints, so running it verifies the behaviour. The test
+suite runs all of them.
 
 ## Documentation
 
-- [`SPEC.md`](SPEC.md) — product and engineering specification.
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — architecture baseline and design rationale.
+- [`docs/getting-started.md`](docs/getting-started.md) — install and first run.
 - [`docs/`](docs/README.md) — lifecycle, plugin authoring, LangGraph, observability,
-  security assumptions, replay limitations, and configuration.
+  security assumptions, replay limitations, configuration, and design guarantees.
 
 ## Layout
 
@@ -126,4 +152,4 @@ src/chassis/
 
 ## License
 
-Apache-2.0.
+Apache-2.0 — see [LICENSE](LICENSE).
