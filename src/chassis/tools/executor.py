@@ -295,7 +295,13 @@ class ToolExecutor:
             )
         args = transformed.payload.get("args", request.args)
 
-        await self._authorize(entry, request, args, policy if policy is not None else self._policy)
+        await self._authorize(
+            entry,
+            request,
+            args,
+            policy if policy is not None else self._policy,
+            hook_snapshot,
+        )
         try:
             self._charge(budget, entry)
         except BudgetExceeded as error:
@@ -453,6 +459,7 @@ class ToolExecutor:
         request: ToolRequest,
         args: Mapping[str, Any] | str,
         engine: PolicyEngine | None,
+        hooks: HookSnapshot | None,
     ) -> None:
         policy = entry.policy
         approval_required = policy.approval_required
@@ -469,6 +476,19 @@ class ToolExecutor:
                             "generation_id": request.generation_id,
                         },
                     )
+                )
+                await self._dispatch(
+                    HookEvent.POLICY_DECISION,
+                    {
+                        "tool": entry.name,
+                        "owner": entry.owner_name,
+                        "permission": str(permission),
+                        "allowed": result.allowed,
+                        "reason": self._redactor.redact(result.reason),
+                        "generation_id": request.generation_id,
+                        "run_id": request.run_id,
+                    },
+                    hooks,
                 )
                 self._telemetry.event(
                     "policy.decision",
@@ -487,6 +507,18 @@ class ToolExecutor:
                         reason=result.reason,
                     )
                 approval_required = approval_required or result.approval_required
+            await self._dispatch(
+                HookEvent.POLICY_DECISION,
+                {
+                    "tool": entry.name,
+                    "owner": entry.owner_name,
+                    "allowed": True,
+                    "permissions": list(policy.permissions),
+                    "generation_id": request.generation_id,
+                    "run_id": request.run_id,
+                },
+                hooks,
+            )
             self._telemetry.event(
                 "policy.decision",
                 {"tool": entry.name, "allowed": True, "permissions": list(policy.permissions)},
@@ -505,6 +537,18 @@ class ToolExecutor:
                 )
             )
             if not approved:
+                await self._dispatch(
+                    HookEvent.POLICY_DECISION,
+                    {
+                        "tool": entry.name,
+                        "owner": entry.owner_name,
+                        "allowed": False,
+                        "reason": "approval",
+                        "generation_id": request.generation_id,
+                        "run_id": request.run_id,
+                    },
+                    hooks,
+                )
                 raise PolicyDenied(
                     f"tool {entry.name!r} requires approval that was not granted",
                     tool=entry.name,

@@ -37,7 +37,19 @@ HookHandler = Callable[[HookPayload], Awaitable["Mapping[str, Any] | bool | None
 
 
 class HookEvent(StrEnum):
-    """Boundaries at which Chassis dispatches hooks."""
+    """Boundaries at which Chassis dispatches hooks.
+
+    Control-plane events (``PLUGIN_*``, ``GENERATION_*``) are dispatched against the
+    live registry while a composition is being built or taken apart; their handler
+    failures are aggregated like cleanup failures rather than aborting the
+    transition. Data-plane events (``*_TOOL_EXECUTE``, ``TOOL_ERROR``,
+    ``BEFORE_AGENT_RUN``, ``AFTER_AGENT_RUN``, ``AGENT_ERROR``,
+    ``POLICY_DECISION``) are dispatched against the run's generation snapshot.
+
+    Only the entry boundaries can refuse: a bail at ``BEFORE_TOOL_EXECUTE`` or
+    ``BEFORE_AGENT_RUN`` stops the operation and is reported as ``PolicyDenied``.
+    Everywhere else a bail simply ends the handler chain.
+    """
 
     PLUGIN_MOUNTING = "plugin_mounting"
     PLUGIN_MOUNTED = "plugin_mounted"

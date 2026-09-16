@@ -111,10 +111,32 @@ ctx.hooks.register(HookEvent.BEFORE_TOOL_EXECUTE, refuse_dangerous, mode=HookMod
 
 - `OBSERVE`: return value ignored; use for logging, metrics, audit.
 - `TRANSFORM`: a returned mapping replaces the payload for the rest of the chain.
-- `BAIL`: a truthy return stops the chain; at the tool boundary that refuses the call.
+- `BAIL`: a truthy return stops the chain; at the tool and before-agent boundaries
+  that refuses the operation.
 
 Ordering is priority first, then registration order. Error semantics are per
 registration: record and continue, or fail loudly with `HookExecutionError`.
+
+Every declared event is dispatched at a real boundary:
+
+| Boundary | Events | Refusable |
+| --- | --- | --- |
+| tool execution | `before_tool_execute`, `after_tool_execute`, `tool_error` | `before_tool_execute` |
+| agent run | `before_agent_run`, `after_agent_run`, `agent_error` | `before_agent_run` |
+| plugin lifecycle | `plugin_mounting`, `plugin_mounted`, `plugin_unmounting`, `plugin_unmounted` | no |
+| runtime generations | `generation_published`, `generation_draining` | no |
+| policy | `policy_decision` | no |
+
+A refusal is reported as `PolicyDenied` with `reason="hook"`. Data-plane hooks
+(tool and agent events, policy decisions) are dispatched against the run's
+generation snapshot, so a run is observed by exactly the hooks that belong to the
+composition it acquired. Control-plane hooks (lifecycle and generation events) are
+dispatched against the live registry, because they describe the composition being
+built rather than a running composition.
+
+Control-plane hook failures are aggregated like cleanup failures and never abort a
+lifecycle transition -- a failing observer must not leak the resource the transition
+was about to release, so the `raise` error policy degrades to `record` there.
 
 Hooks cover boundaries Chassis owns. Anything inside a graph belongs to LangGraph's
 callbacks, and Chassis does not duplicate them.

@@ -18,8 +18,15 @@ from typing import TYPE_CHECKING, Any
 
 from chassis.budget.governor import BudgetGovernor
 from chassis.budget.models import BudgetLimits
-from chassis.core.errors import ChassisError, ConfigurationError, HarnessStateError
+from chassis.core.errors import (
+    ChassisError,
+    ConfigurationError,
+    HarnessStateError,
+    PolicyDenied,
+)
 from chassis.core.scope import Scope
+from chassis.hooks.registry import HookSnapshot
+from chassis.hooks.types import HookEvent
 from chassis.runtime import (
     AgentEvent,
     AgentRequest,
@@ -161,6 +168,14 @@ class AgentRegistry:
             snapshot = harness.snapshot_for(
                 generation, agent=agent, graph_definition_hash=graph_digest
             )
+            hooks = harness.hook_snapshot(generation)
+            run_payload: dict[str, Any] = {
+                "agent": agent,
+                "generation_id": generation.generation_id,
+                "thread_id": agent_request.thread_id,
+                "user_id": user_id,
+                "tenant_id": tenant_id,
+            }
             started = time.monotonic()
             async with harness.telemetry.span(
                 "agent.run",
@@ -175,7 +190,33 @@ class AgentRegistry:
                     "tool_schema_hash": snapshot.tool_schema_hash,
                 },
             ):
-                result = await runtime.invoke(agent_request, run_context)
+                await self._dispatch_agent(
+                    harness, HookEvent.BEFORE_AGENT_RUN, run_payload, hooks, refusable=True
+                )
+                try:
+                    result = await runtime.invoke(agent_request, run_context)
+                except Exception as error:
+                    await self._dispatch_agent(
+                        harness,
+                        HookEvent.AGENT_ERROR,
+                        {
+                            **run_payload,
+                            "error": harness.redactor.redact_and_report(str(error))[0],
+                            "error_type": type(error).__name__,
+                        },
+                        hooks,
+                    )
+                    raise
+                await self._dispatch_agent(
+                    harness,
+                    HookEvent.AFTER_AGENT_RUN,
+                    {
+                        **run_payload,
+                        "status": "interrupted" if result.interrupted else "ok",
+                        "duration_seconds": result.duration_seconds,
+                    },
+                    hooks,
+                )
             return _with_duration(
                 _with_snapshot(result, snapshot.digest()), time.monotonic() - started
             )
@@ -222,10 +263,62 @@ class AgentRegistry:
                 thread_id=agent_request.thread_id,
                 metadata=agent_request.metadata,
             )
-            async for event in runtime.stream(agent_request, run_context):
-                yield event
+            hooks = harness.hook_snapshot(generation)
+            run_payload: dict[str, Any] = {
+                "agent": agent,
+                "generation_id": generation.generation_id,
+                "thread_id": agent_request.thread_id,
+                "user_id": user_id,
+                "tenant_id": tenant_id,
+            }
+            await self._dispatch_agent(
+                harness, HookEvent.BEFORE_AGENT_RUN, run_payload, hooks, refusable=True
+            )
+            try:
+                async for event in runtime.stream(agent_request, run_context):
+                    yield event
+            except Exception as error:
+                await self._dispatch_agent(
+                    harness,
+                    HookEvent.AGENT_ERROR,
+                    {
+                        **run_payload,
+                        "error": harness.redactor.redact_and_report(str(error))[0],
+                        "error_type": type(error).__name__,
+                    },
+                    hooks,
+                )
+                raise
+            await self._dispatch_agent(
+                harness, HookEvent.AFTER_AGENT_RUN, {**run_payload, "status": "ok"}, hooks
+            )
 
     # -------------------------------------------------------------- internals
+
+    async def _dispatch_agent(
+        self,
+        harness: Harness,
+        event: HookEvent,
+        payload: Mapping[str, Any],
+        hooks: HookSnapshot,
+        *,
+        refusable: bool = False,
+    ) -> None:
+        """Dispatch a hook at the agent-run boundary.
+
+        Only ``before_agent_run`` is refusable: a handler that bails there stops the
+        run before the engine is invoked, reported as ``PolicyDenied`` exactly as a
+        tool refusal by a hook is. Later boundaries are notifications, so a bail is
+        reported to the remaining handlers but not acted on.
+        """
+
+        result = await harness.hooks.dispatch(event, payload, hooks=hooks)
+        if refusable and result.stopped:
+            raise PolicyDenied(
+                f"agent {payload['agent']!r} was refused by a hook",
+                agent=payload["agent"],
+                reason="hook",
+            )
 
     def _require_harness(self) -> Harness:
         if self._harness is None:

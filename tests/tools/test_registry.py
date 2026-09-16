@@ -176,8 +176,9 @@ async def test_plugin_hooks_are_scope_owned() -> None:
     harness.install(audit, entry_id="audit")
     await harness.start()
     try:
+        # The mount boundary reaches the handler the plugin registered during its
+        # own setup: registrations are live as soon as the owning scope exists.
         assert len(harness.hooks) == 1
-        await harness.hooks.dispatch(HookEvent.PLUGIN_MOUNTED)
         assert seen == ["observed"]
 
         generation = harness.current_generation

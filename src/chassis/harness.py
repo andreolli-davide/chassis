@@ -56,12 +56,14 @@ from chassis.core.errors import (
     CleanupFailure,
     EffectCleanupError,
     HarnessStateError,
+    HookExecutionError,
 )
 from chassis.core.generation import RuntimeGeneration
 from chassis.core.generations import GenerationManager
 from chassis.core.scope import Scope
 from chassis.diagnostics import Diagnostics
 from chassis.hooks.registry import HookRegistry, HookSnapshot
+from chassis.hooks.types import HookEvent
 from chassis.persistence.snapshots import RuntimeSnapshot
 from chassis.plugins.base import Plugin, PluginContext, plugin
 from chassis.plugins.lifecycle import PluginInstance, PluginState
@@ -517,6 +519,20 @@ class Harness:
             raise EffectCleanupError(self._name, tuple(failures))
 
     async def _shutdown(self, failures: list[CleanupFailure]) -> None:
+        current = self._generations.current
+        if current is not None:
+            failures.extend(
+                await self._observe(
+                    HookEvent.GENERATION_DRAINING,
+                    {
+                        "generation_id": current.generation_id,
+                        "sequence": current.sequence,
+                        "successor": None,
+                        "leases": current.lease_count,
+                        "shutdown": True,
+                    },
+                )
+            )
         idle, busy = await self._generations.drain(
             self._generations.begin_shutdown(), timeout_seconds=self._shutdown_grace_seconds
         )
@@ -561,6 +577,24 @@ class Harness:
 
         if self._dirty:
             await self.reconcile()
+
+    async def _observe(
+        self, event: HookEvent, payload: Mapping[str, Any]
+    ) -> tuple[CleanupFailure, ...]:
+        """Dispatch a control-plane hook event and return any handler failures.
+
+        Control-plane hooks are observation points: their failures are recorded and
+        aggregated, never allowed to abort a lifecycle transition, because aborting
+        one would leak the resource the transition was about to release. The
+        ``raise`` error policy therefore downgrades to ``record`` on these
+        boundaries.
+        """
+
+        try:
+            result = await self._hook_registry.dispatch(event, payload)
+        except HookExecutionError as error:
+            return (CleanupFailure(description=f"hook {event.value}", error=error),)
+        return result.failures
 
     def _require_composable(self) -> None:
         """Refuse a control-plane mutation unless the harness can still compose.
@@ -636,6 +670,29 @@ class Harness:
                     metadata={"plugins": len(instances)},
                 )
                 previous = self._generations.publish(generation)
+                if previous is not None:
+                    failures.extend(
+                        await self._observe(
+                            HookEvent.GENERATION_DRAINING,
+                            {
+                                "generation_id": previous.generation_id,
+                                "sequence": previous.sequence,
+                                "successor": generation.generation_id,
+                                "leases": previous.lease_count,
+                            },
+                        )
+                    )
+                failures.extend(
+                    await self._observe(
+                        HookEvent.GENERATION_PUBLISHED,
+                        {
+                            "generation_id": generation.generation_id,
+                            "sequence": generation.sequence,
+                            "previous": None if previous is None else previous.generation_id,
+                            "plugins": len(instances),
+                        },
+                    )
+                )
                 self._telemetry.event(
                     "generation.publish",
                     {
@@ -720,10 +777,32 @@ class Harness:
                 "plugin.mount",
                 {"plugin": entry.manifest.name, "entry_id": entry_id, "revision": entry.revision},
             ) as span:
+                failures.extend(
+                    await self._observe(
+                        HookEvent.PLUGIN_MOUNTING,
+                        {
+                            "plugin": entry.manifest.name,
+                            "entry_id": entry_id,
+                            "revision": entry.revision,
+                            "requirements": sorted(entry.manifest.requires),
+                        },
+                    )
+                )
                 instance = await self._plugin_registry.mount(
                     entry, self._resolutions_for(plan, entry_id)
                 )
                 span.set_attribute("instance_id", instance.instance_id)
+                failures.extend(
+                    await self._observe(
+                        HookEvent.PLUGIN_MOUNTED,
+                        {
+                            "plugin": entry.manifest.name,
+                            "entry_id": entry_id,
+                            "instance_id": instance.instance_id,
+                            "scope_id": instance.scope.id,
+                        },
+                    )
+                )
             ordered.append(instance)
             mounted.append(instance)
         return tuple(ordered)
@@ -880,6 +959,17 @@ class Harness:
                 "state": instance.state.value,
             },
         ) as span:
+            failures.extend(
+                await self._observe(
+                    HookEvent.PLUGIN_UNMOUNTING,
+                    {
+                        "plugin": instance.manifest.name,
+                        "entry_id": instance.entry_id,
+                        "instance_id": instance.instance_id,
+                        "scope_id": instance.scope.id,
+                    },
+                )
+            )
             try:
                 await self._plugin_registry.dispose(instance)
             except EffectCleanupError as error:
@@ -892,6 +982,16 @@ class Harness:
                     )
                 )
                 span.record_error(error)
+            failures.extend(
+                await self._observe(
+                    HookEvent.PLUGIN_UNMOUNTED,
+                    {
+                        "plugin": instance.manifest.name,
+                        "entry_id": instance.entry_id,
+                        "instance_id": instance.instance_id,
+                    },
+                )
+            )
 
     def _generation_id_or_empty(self) -> str:
         current = self._generations.current
