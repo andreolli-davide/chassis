@@ -92,8 +92,10 @@ its old objects — nothing is mutated underneath it.
 
 | You want to | Read |
 | --- | --- |
+| build your first plugin | [plugin-author-guide.md](plugin-author-guide.md) |
+| wire this into a service, swap providers, set budgets | [recipes.md](recipes.md) |
+| fix something that is not working | [troubleshooting.md](troubleshooting.md) |
 | understand ownership, generations, unload, shutdown | [lifecycle.md](lifecycle.md) |
-| write your first plugin | [plugin-author-guide.md](plugin-author-guide.md) |
 | use LangGraph properly (tools, interrupts, streaming, caching) | [langgraph.md](langgraph.md) |
 | trace runs, hash snapshots, evaluate experiments | [observability.md](observability.md) |
 | know exactly what the security model does and does not promise | [security.md](security.md) |

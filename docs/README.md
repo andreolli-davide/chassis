@@ -9,6 +9,8 @@ below for task-oriented detail.
 | [lifecycle.md](lifecycle.md) | ownership, scopes, plugin lifecycle, generations, safe unload, shutdown |
 | [plugin-author-guide.md](plugin-author-guide.md) | writing, testing, and shipping a plugin |
 | [langgraph.md](langgraph.md) | agent definitions, the run context, graph caching, tools, streaming, interrupts |
+| [recipes.md](recipes.md) | behind a web service, per-tenant composition, hot provider swap, budgets, durability |
+| [troubleshooting.md](troubleshooting.md) | symptom → cause → fix, with the exact diagnostics output |
 | [observability.md](observability.md) | tracing, snapshots, canonical hashing, redaction, evaluation |
 | [security.md](security.md) | trust model, policy, secrets, and what Chassis is *not* |
 | [replay.md](replay.md) | record/replay boundaries and their explicit limitations |

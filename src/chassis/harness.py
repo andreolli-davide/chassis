@@ -594,6 +594,10 @@ class Harness:
         depends on the composition -- an agent invocation or an explicit reconcile
         -- applies the pending changes first, which keeps the API ergonomic without
         starting unowned background work.
+
+        This does not start the harness: invoking before ``start()`` is refused,
+        because a harness that was never started has published no generation and
+        owns nothing.
         """
 
         if self._dirty:
