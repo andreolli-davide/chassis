@@ -12,13 +12,36 @@ that run, which is the only writer.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 from chassis.budget.models import BudgetDimension, BudgetLimits, BudgetUsage
 from chassis.core.errors import BudgetExceeded
 
-__all__ = ["BudgetGovernor"]
+__all__ = ["BudgetGovernor", "budget_scope", "current_budget"]
+
+#: Governor of the run executing in this task, if any. A nested agent run reads it
+#: to inherit the allocation of the run that started it.
+_current: ContextVar[BudgetGovernor | None] = ContextVar("chassis_current_budget", default=None)
+
+
+def current_budget() -> BudgetGovernor | None:
+    """Governor of the run in progress in this task, if there is one."""
+
+    return _current.get()
+
+
+@contextmanager
+def budget_scope(governor: BudgetGovernor) -> Generator[None]:
+    """Bind ``governor`` as the budget of the current task for the duration."""
+
+    token = _current.set(governor)
+    try:
+        yield
+    finally:
+        _current.reset(token)
 
 
 class BudgetGovernor:

@@ -141,6 +141,32 @@ was about to release, so the `raise` error policy degrades to `record` there.
 Hooks cover boundaries Chassis owns. Anything inside a graph belongs to LangGraph's
 callbacks, and Chassis does not duplicate them.
 
+## Budgets
+
+`BudgetLimits` declares six dimensions; the harness enforces the ones it actually
+mediates, and never claims to stop work it does not control:
+
+| Dimension | Enforced at |
+| --- | --- |
+| `wall_clock_seconds` | tool execution (deadline) |
+| `tool_calls` | tool execution |
+| `child_runs` | a nested agent run started through `harness.agents` |
+| `model_calls`, `tokens`, `estimated_cost` | not enforced — declarative |
+
+Model calls happen inside graphs, not through the harness, so `model_calls`,
+`tokens`, and `estimated_cost` carry intent and are reported in usage but raise
+nothing. A graph node that wants them enforced records them itself:
+
+```python
+run_context.budget.consume(BudgetDimension.TOKENS, amount=usage.total_tokens)
+```
+
+Budgets are hierarchical. A run started from inside another run — a graph node
+calling `harness.agents.invoke(...)` — takes a child allocation of the parent's
+budget: the nested run counts against `child_runs`, and its consumption propagates
+upward, so a parent can never be overdrawn by its children and a child never
+exceeds what the parent has left.
+
 ## Tasks
 
 ```python

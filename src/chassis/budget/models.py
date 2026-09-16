@@ -1,10 +1,15 @@
 """Budget dimensions, limits, and usage.
 
 Budgets are enforced only at boundaries Chassis actually controls: a tool call it
-mediates, a model call it invokes, a child run it starts. Nothing here promises to
-stop work happening outside those boundaries.
+mediates, and a nested agent run it starts. Nothing here promises to stop work
+happening outside those boundaries.
 
-The initial model covers the dimensions a harness can genuinely account for.
+Model calls happen inside graphs rather than through the harness, so ``model_calls``,
+``tokens``, and ``estimated_cost`` are declarative: they carry intent, are reported
+in usage, and are only charged when the code that owns the model call records them
+(``run_context.budget.consume(...)``). Wall clock, tool calls, and child runs are
+enforced at the harness boundary.
+
 Every dimension is optional; ``None`` means unlimited.
 """
 
@@ -30,7 +35,13 @@ class BudgetDimension(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class BudgetLimits:
-    """Per-run limits. ``None`` disables a dimension."""
+    """Per-run limits. ``None`` disables a dimension.
+
+    Enforced at a harness boundary: ``wall_clock_seconds`` and ``tool_calls`` at
+    tool execution, ``child_runs`` when a nested agent run starts. Declarative only,
+    because the harness does not mediate the calls that would consume them:
+    ``model_calls``, ``tokens``, ``estimated_cost``.
+    """
 
     wall_clock_seconds: float | None = None
     model_calls: int | None = None

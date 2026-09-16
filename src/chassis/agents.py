@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import time
 from collections.abc import AsyncIterator, Mapping
+from contextlib import AbstractContextManager, nullcontext
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from chassis.budget.governor import BudgetGovernor
+from chassis.budget.governor import BudgetGovernor, budget_scope, current_budget
 from chassis.budget.models import BudgetLimits
 from chassis.core.errors import (
     ChassisError,
@@ -33,9 +35,11 @@ from chassis.runtime import (
     AgentResult,
     AgentRuntime,
     HarnessRunContext,
+    RunEnvironment,
 )
 
 if TYPE_CHECKING:
+    from chassis.core.generation import RuntimeGeneration
     from chassis.harness import Harness
 
 __all__ = ["AgentNotFound", "AgentRegistry", "ScopedAgents"]
@@ -154,7 +158,7 @@ class AgentRegistry:
 
         await harness.ensure_ready()
         async with harness.acquire() as generation:
-            environment = harness.run_environment(generation, limits=limits)
+            environment = self._budgeted_environment(harness, generation, limits)
             run_context = HarnessRunContext.new(
                 generation=generation,
                 environment=environment,
@@ -177,48 +181,49 @@ class AgentRegistry:
                 "tenant_id": tenant_id,
             }
             started = time.monotonic()
-            async with harness.telemetry.span(
-                "agent.run",
-                {
-                    "agent": agent,
-                    "generation_id": generation.generation_id,
-                    "thread_id": agent_request.thread_id,
-                    "chassis_version": snapshot.chassis_version,
-                    "snapshot_digest": snapshot.digest(),
-                    "plugin_graph_hash": snapshot.plugin_graph_hash,
-                    "graph_definition_hash": graph_digest,
-                    "tool_schema_hash": snapshot.tool_schema_hash,
-                },
-            ):
-                await self._dispatch_agent(
-                    harness, HookEvent.BEFORE_AGENT_RUN, run_payload, hooks, refusable=True
-                )
-                try:
-                    result = await runtime.invoke(agent_request, run_context)
-                except Exception as error:
+            with _budget_scope(environment):
+                async with harness.telemetry.span(
+                    "agent.run",
+                    {
+                        "agent": agent,
+                        "generation_id": generation.generation_id,
+                        "thread_id": agent_request.thread_id,
+                        "chassis_version": snapshot.chassis_version,
+                        "snapshot_digest": snapshot.digest(),
+                        "plugin_graph_hash": snapshot.plugin_graph_hash,
+                        "graph_definition_hash": graph_digest,
+                        "tool_schema_hash": snapshot.tool_schema_hash,
+                    },
+                ):
+                    await self._dispatch_agent(
+                        harness, HookEvent.BEFORE_AGENT_RUN, run_payload, hooks, refusable=True
+                    )
+                    try:
+                        result = await runtime.invoke(agent_request, run_context)
+                    except Exception as error:
+                        await self._dispatch_agent(
+                            harness,
+                            HookEvent.AGENT_ERROR,
+                            {
+                                **run_payload,
+                                "error": harness.redactor.redact_and_report(str(error))[0],
+                                "error_type": type(error).__name__,
+                            },
+                            hooks,
+                        )
+                        raise
+                    if result.interrupted:
+                        _record_interrupts(harness, agent, agent_request.thread_id, result)
                     await self._dispatch_agent(
                         harness,
-                        HookEvent.AGENT_ERROR,
+                        HookEvent.AFTER_AGENT_RUN,
                         {
                             **run_payload,
-                            "error": harness.redactor.redact_and_report(str(error))[0],
-                            "error_type": type(error).__name__,
+                            "status": "interrupted" if result.interrupted else "ok",
+                            "duration_seconds": result.duration_seconds,
                         },
                         hooks,
                     )
-                    raise
-                if result.interrupted:
-                    _record_interrupts(harness, agent, agent_request.thread_id, result)
-                await self._dispatch_agent(
-                    harness,
-                    HookEvent.AFTER_AGENT_RUN,
-                    {
-                        **run_payload,
-                        "status": "interrupted" if result.interrupted else "ok",
-                        "duration_seconds": result.duration_seconds,
-                    },
-                    hooks,
-                )
             return _with_duration(
                 _with_snapshot(result, snapshot.digest()), time.monotonic() - started
             )
@@ -255,7 +260,7 @@ class AgentRegistry:
 
         await harness.ensure_ready()
         async with harness.acquire() as generation:
-            environment = harness.run_environment(generation, limits=limits)
+            environment = self._budgeted_environment(harness, generation, limits)
             run_context = HarnessRunContext.new(
                 generation=generation,
                 environment=environment,
@@ -277,8 +282,9 @@ class AgentRegistry:
                 harness, HookEvent.BEFORE_AGENT_RUN, run_payload, hooks, refusable=True
             )
             try:
-                async for event in runtime.stream(agent_request, run_context):
-                    yield event
+                with _budget_scope(environment):
+                    async for event in runtime.stream(agent_request, run_context):
+                        yield event
             except Exception as error:
                 await self._dispatch_agent(
                     harness,
@@ -296,6 +302,24 @@ class AgentRegistry:
             )
 
     # -------------------------------------------------------------- internals
+
+    def _budgeted_environment(
+        self, harness: Harness, generation: RuntimeGeneration, limits: BudgetLimits | None
+    ) -> RunEnvironment:
+        """Assemble the run environment, inheriting a parent run's budget when nested.
+
+        A run started from inside another run takes a child allocation of the parent's
+        budget: the child's consumption propagates upward, so a parent can never be
+        overdrawn by its children, and the nested run counts against
+        :attr:`~chassis.budget.BudgetDimension.CHILD_RUNS`, which is enforced here --
+        a boundary the harness mediates.
+        """
+
+        environment = harness.run_environment(generation, limits=limits)
+        parent = current_budget()
+        if parent is None:
+            return environment
+        return replace(environment, budget=parent.child(limits))
 
     async def _dispatch_agent(
         self,
@@ -368,6 +392,14 @@ class ScopedAgents:
         """Remove an agent early, before the scope closes."""
 
         return self._registry.unregister(name)
+
+
+def _budget_scope(environment: RunEnvironment) -> AbstractContextManager[None]:
+    """Bind this run's budget as the active allocation for the duration of the run."""
+
+    if environment.budget is None:
+        return nullcontext()
+    return budget_scope(environment.budget)
 
 
 def _record_interrupts(
