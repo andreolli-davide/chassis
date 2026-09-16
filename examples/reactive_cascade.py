@@ -45,7 +45,12 @@ def memory_plugin():  # type: ignore[no-untyped-def]
 
 
 def extension_plugin():  # type: ignore[no-untyped-def]
-    @plugin(name="agent-extension", version="1.0.0", provides={"tools": "1.0.0"}, requires={"memory": ">=1,<2"})
+    @plugin(
+        name="agent-extension",
+        version="1.0.0",
+        provides={"tools": "1.0.0"},
+        requires={"memory": ">=1,<2"},
+    )
     async def extension(ctx: PluginContext) -> None:
         ctx.require(MEMORY)
         ctx.capabilities.provide(TOOLS, ("recall",))

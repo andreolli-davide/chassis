@@ -1,0 +1,152 @@
+# Observability
+
+Chassis instruments the operations it owns and leaves model, tool, and graph
+internals to LangGraph, LangChain, and LangSmith. It does not create a competing
+telemetry universe.
+
+## What is traced where
+
+| Operation | Instrumented by | Signal |
+| --- | --- | --- |
+| model call | LangChain/LangGraph | native LangSmith run |
+| tool execution | LangChain/LangGraph | native run, plus `chassis_tool*` metadata |
+| graph execution | LangGraph | native run |
+| reconcile | Chassis | span `harness.reconcile` |
+| plugin mount / unmount | Chassis | spans `plugin.mount`, `plugin.unmount` |
+| shutdown | Chassis | span `harness.shutdown` |
+| agent invocation | Chassis | span `agent.run` |
+| dependency resolution | Chassis | event `dependency.resolve` |
+| generation build / publish / drain | Chassis | events |
+| graph compile / cache | Chassis | events `graph.compile`, `graph.cache` |
+| policy decision | Chassis | event `policy.decision` |
+| budget exhaustion | Chassis | event `budget.exhausted` |
+
+## Enabling LangSmith
+
+```python
+from chassis import Harness
+from chassis.telemetry import LangSmithTelemetry
+
+harness = Harness(telemetry=LangSmithTelemetry())   # enabled by LANGSMITH_TRACING
+```
+
+`LangSmithTelemetry` is enabled automatically when `LANGSMITH_TRACING` or
+`LANGCHAIN_TRACING_V2` is set, so an application that already configured tracing
+gets Chassis spans for free.
+
+- Spans nest under the ambient run, so a plugin mount appears inside the trace of
+  the run that caused it.
+- Events attach to the ambient run; without one they are dropped rather than
+  inventing a parentless trace.
+- Tracing failures are logged and the traced operation continues. Observability is
+  not a single point of failure unless you set `raise_on_error=True`.
+
+## Fan-out
+
+`TeeTelemetry` sends one signal to several backends, which is how an OpenTelemetry
+exporter, a recording sink, and LangSmith can coexist:
+
+```python
+harness = Harness(telemetry=TeeTelemetry(LangSmithTelemetry(), my_otel_backend))
+```
+
+Any object implementing the two-method `Telemetry` protocol works; Chassis does not
+require a specific vendor SDK.
+
+## Redaction
+
+Secret values must not reach traces, snapshots, diagnostics, replay records, or
+exception strings.
+
+```python
+harness.redactor          # SecretRedactor shared by telemetry, snapshots, tools
+```
+
+Three mechanisms cooperate:
+
+1. `RedactingSecretProvider` wraps the configured provider, so every value it hands
+   out is registered with the redactor the moment it is resolved.
+2. Tool-boundary errors, traces, and trace metadata are redacted before they leave.
+3. Configuration is redacted by key name as well as by value, so an API key sitting
+   in a plugin config is redacted even if nothing ever resolved it.
+
+`SecretValue` refuses to render itself: `repr`, `str`, and diagnostics show
+`<redacted>`, and material leaves only through an explicit `reveal()` at the point
+of use.
+
+## Runtime snapshots
+
+Every run is attributable to an immutable snapshot:
+
+```python
+snapshot = harness.snapshot_for(harness.current_generation, agent="research")
+snapshot.to_dict()
+snapshot.digest()
+```
+
+```json
+{
+  "chassis_version": "0.1.0",
+  "generation_id": "gen_0004",
+  "sequence": 4,
+  "agent_runtime": "langgraph",
+  "plugins": {"chassis-services": "1.0.0", "research-tools": "1.0.0"},
+  "capabilities": {"model": ["1"], "tools": ["1"]},
+  "config_hash": "...",
+  "plugin_graph_hash": "...",
+  "tool_schema_hash": "...",
+  "graph_definition_hash": "...",
+  "prompt_hash": null
+}
+```
+
+Snapshots contain **no configuration values**. Configuration is represented by a
+hash computed over the redacted payload, so a snapshot explains composition
+without being a place secrets could leak from -- and the test suite asserts exactly
+that.
+
+`agent.run` spans and `AgentResult.metadata["snapshot_digest"]` carry the digest,
+which is what ties a trace to an exact generation.
+
+## Hashing rules
+
+Canonical serialization is documented so a digest means the same thing everywhere:
+
+1. reduce the payload to JSON-compatible data;
+2. sort mapping keys;
+3. keep sequence order, sort sets;
+4. serialize as UTF-8 with compact separators;
+5. digest with SHA-256.
+
+Values whose representation is not stable are **rejected** rather than stringified:
+a hash built from `repr` or object identity would silently differ for identical
+logical state. Integral floats normalize to integers so `1.0` and `1` cannot
+produce different digests.
+
+Separate hashes exist per concern, because one giant digest whose invalidation
+semantics cannot be explained is useless for debugging:
+
+| Hash | Covers |
+| --- | --- |
+| `config_hash` | redacted plugin configuration, by entry |
+| `plugin_graph_hash` | plugin dependency graph nodes and edges |
+| `graph_definition_hash` | compiled-graph cache key for the run's agent |
+| `tool_schema_hash` | tool names, descriptions, argument schemas |
+| `prompt_hash` | a prompt body, when supplied |
+
+## Evaluation
+
+LangSmith remains the experiment platform; Chassis supplies attribution.
+
+```python
+from chassis.evaluation import agent_target, composition_metadata, evaluate_agent
+
+target = agent_target(harness, "research")            # example -> output
+metadata = composition_metadata(harness, agent="research")
+await evaluate_agent(harness, "research", data=dataset, evaluators=[correctness])
+```
+
+`composition_metadata` reports the generation, chassis version, plugins,
+capabilities, and hashes, so two experiments can be compared knowing exactly which
+composition each ran against. The target also returns the generation it ran on, so
+results stay attributable even when composition changed mid-experiment.

@@ -62,9 +62,7 @@ def route_after_assistant(state: ChatState) -> str:
 def build_agent(inputs: GraphBuildInputs) -> StateGraph[Any, Any, Any, Any]:
     """Graph topology: assistant -> tools -> assistant -> ... -> END."""
 
-    graph: StateGraph[Any, Any, Any, Any] = StateGraph(
-        ChatState, context_schema=HarnessRunContext
-    )
+    graph: StateGraph[Any, Any, Any, Any] = StateGraph(ChatState, context_schema=HarnessRunContext)
     graph.add_node("assistant", assistant)
     graph.add_node("tools", harness_tool_node(list(inputs.tools)))
     graph.add_edge(START, "assistant")
@@ -81,9 +79,7 @@ async def approval(state: ChatState, runtime: Runtime[HarnessRunContext]) -> dic
 
 
 def build_approval(inputs: GraphBuildInputs) -> StateGraph[Any, Any, Any, Any]:
-    graph: StateGraph[Any, Any, Any, Any] = StateGraph(
-        ChatState, context_schema=HarnessRunContext
-    )
+    graph: StateGraph[Any, Any, Any, Any] = StateGraph(ChatState, context_schema=HarnessRunContext)
     graph.add_node("approval", approval)
     graph.add_edge(START, "approval")
     graph.add_edge("approval", END)
@@ -117,13 +113,18 @@ async def main() -> None:
         telemetry=tracing,
         plugins=[tool_plugin()],
     )
-    harness.provide(MODEL, FakeChatModel(responses=[
-        AIMessage(
-            content="",
-            tool_calls=[{"name": "search", "args": {"query": "chassis"}, "id": "call_1"}],
+    harness.provide(
+        MODEL,
+        FakeChatModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "search", "args": {"query": "chassis"}, "id": "call_1"}],
+                ),
+                "Chassis keeps composition and execution separate.",
+            ]
         ),
-        "Chassis keeps composition and execution separate.",
-    ]))
+    )
 
     checkpointer = InMemorySaver()
     harness.register_agent(
@@ -184,9 +185,7 @@ async def main() -> None:
         assert events
         generation_of_stream = harness.current_generation
         assert generation_of_stream is not None
-        assert all(
-            event.generation_id == generation_of_stream.generation_id for event in events
-        )
+        assert all(event.generation_id == generation_of_stream.generation_id for event in events)
 
         # 4. Interrupt/resume drives a human-in-the-loop decision.
         paused = await harness.agents.invoke(
