@@ -1,5 +1,11 @@
 # Chassis
 
+[![CI](https://github.com/andreolli-davide/chassis/actions/workflows/ci.yml/badge.svg)](https://github.com/andreolli-davide/chassis/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/chassis-harness)](https://pypi.org/project/chassis-harness/)
+[![Python](https://img.shields.io/pypi/pyversions/chassis-harness)](https://pypi.org/project/chassis-harness/)
+[![License](https://img.shields.io/pypi/l/chassis-harness)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-mkdocs--material-blue)](https://andreolli-davide.github.io/chassis/)
+
 **Chassis** is a production-grade Python agent harness.
 
 It owns the runtime environment in which agents execute — plugins, capabilities,
@@ -137,6 +143,7 @@ suite runs all of them.
 
 ## Documentation
 
+- Rendered docs: **https://andreolli-davide.github.io/chassis/**
 - [`docs/getting-started.md`](docs/getting-started.md) — install and first run.
 - [`docs/recipes.md`](docs/recipes.md) — behind a web service, per-tenant composition,
   hot provider swaps, budgets, durable runs.

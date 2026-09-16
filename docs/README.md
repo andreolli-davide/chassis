@@ -1,5 +1,7 @@
 # Chassis documentation
 
+Rendered at **https://andreolli-davide.github.io/chassis/**.
+
 New here? Start with [getting-started.md](getting-started.md), then use the guides
 below for task-oriented detail.
 
