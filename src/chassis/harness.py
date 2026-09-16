@@ -40,7 +40,7 @@ from typing import Any, Self
 
 from chassis.agents import AgentRegistry, environment_budget
 from chassis.budget.models import BudgetLimits
-from chassis.capabilities.keys import CapabilityKey
+from chassis.capabilities.keys import POLICY, SECRETS, CapabilityKey
 from chassis.capabilities.registry import CapabilityRegistration, CapabilityRegistry
 from chassis.capabilities.snapshot import CapabilitySnapshot
 from chassis.config.loader import PluginCatalog, parse_config
@@ -94,6 +94,17 @@ class ConfigApplyResult:
             "changes": [change.to_dict() for change in self.changes],
             "applied": [change.to_dict() for change in self.applied],
         }
+
+
+def _provided(
+    generation: RuntimeGeneration, key: CapabilityKey, expected: Any, fallback: Any
+) -> Any:
+    """A generation's provider for ``key`` when exactly one matches its protocol."""
+
+    providers = generation.snapshot.providers(key)
+    if len(providers) == 1 and isinstance(providers[0].value, expected):
+        return providers[0].value
+    return fallback
 
 
 def _services_plugin(
@@ -901,8 +912,11 @@ class Harness:
             tools=self.tool_snapshot(generation),
             hooks=self.hook_snapshot(generation),
             executor=self._tool_executor,
-            policy=self._policy,
-            secrets=self._secrets,
+            # A provider registered for these capabilities belongs to the
+            # generation, so a run observes the policy and secret provider of the
+            # composition it acquired rather than the harness default.
+            policy=_provided(generation, POLICY, PolicyEngine, self._policy),
+            secrets=_provided(generation, SECRETS, SecretProvider, self._secrets),
             telemetry=self._telemetry,
             redactor=self._redactor,
             budget=environment_budget(effective_limits),

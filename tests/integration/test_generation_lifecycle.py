@@ -318,3 +318,60 @@ async def test_shutdown_drains_active_runs_before_disposing() -> None:
     assert provider.disposed is True
     assert instance.state is PluginState.DISPOSED
     assert harness.state.value == "stopped"
+
+
+async def test_generation_provided_policy_governs_its_own_runs() -> None:
+    """A runtime-bound policy is resolved from the generation, not the harness default."""
+
+    from langchain_core.tools import StructuredTool
+    from pydantic import create_model
+
+    from chassis.capabilities import POLICY
+    from chassis.policy import GrantPolicy
+    from chassis.tools import ToolPolicy, ToolRequest
+
+    decisions: list[str] = []
+
+    class RecordingPolicy(GrantPolicy):
+        async def evaluate(self, request):  # type: ignore[no-untyped-def]
+            decisions.append(str(request.permission))
+            return await super().evaluate(request)
+
+    @plugin(name="policy-provider", version="1.0.0", provides={"policy": "1.0.0"})
+    async def policy_provider(ctx: PluginContext) -> None:
+        ctx.capabilities.provide(POLICY, RecordingPolicy(["network.fetch"]))
+
+    @plugin(name="fetcher", version="1.0.0")
+    async def fetcher(ctx: PluginContext) -> None:
+        schema = create_model("FetchArgs", url=(str, ...))
+
+        async def run(**kwargs: object) -> str:
+            return "fetched"
+
+        ctx.tools.register(
+            StructuredTool(
+                name="fetch", description="Fetch a URL", args_schema=schema, coroutine=run
+            ),
+            policy=ToolPolicy(permissions=("network.fetch",)),
+        )
+
+    harness = Harness()
+    harness.install(policy_provider, entry_id="policy")
+    harness.install(fetcher, entry_id="fetcher")
+    await harness.start()
+    try:
+        generation = harness.current_generation
+        assert generation is not None
+        environment = harness.run_environment(generation)
+        assert isinstance(environment.policy, RecordingPolicy)
+
+        result = await environment.executor.execute(
+            ToolRequest(name="fetch", args={"url": "https://example.test"}),
+            snapshot=harness.tool_snapshot(generation),
+            policy=environment.policy,
+        )
+
+        assert result.content == "fetched"
+        assert decisions == ["network.fetch"]
+    finally:
+        await harness.stop()

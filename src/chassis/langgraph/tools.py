@@ -100,6 +100,7 @@ async def _boundary_wrapper(
             snapshot=snapshot,
             budget=run_context.budget,
             hook_snapshot=run_context.hooks,
+            policy=None if run_context.environment is None else run_context.environment.policy,
         )
     except BudgetExceeded:
         raise

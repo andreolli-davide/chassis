@@ -252,6 +252,7 @@ class ToolExecutor:
         snapshot: ToolSnapshot,
         budget: BudgetGovernor | None = None,
         hook_snapshot: HookSnapshot | None = None,
+        policy: PolicyEngine | None = None,
         raise_on_error: bool = False,
     ) -> ToolExecutionResult:
         """Execute one tool call.
@@ -261,6 +262,9 @@ class ToolExecutor:
             snapshot: Tools reachable from the run's generation.
             budget: Governor for the run, if the run is budgeted.
             hook_snapshot: Hooks reachable from the run's generation.
+            policy: Policy engine of the run's generation, overriding the
+                executor default. A generation-provided policy is what makes a
+                runtime-bound policy change take effect without rebuilding graphs.
             raise_on_error: Raise instead of returning a normalized failure.
 
         Raises:
@@ -291,7 +295,7 @@ class ToolExecutor:
             )
         args = transformed.payload.get("args", request.args)
 
-        await self._authorize(entry, request, args)
+        await self._authorize(entry, request, args, policy if policy is not None else self._policy)
         try:
             self._charge(budget, entry)
         except BudgetExceeded as error:
@@ -444,14 +448,18 @@ class ToolExecutor:
         )
 
     async def _authorize(
-        self, entry: RegisteredTool, request: ToolRequest, args: Mapping[str, Any] | str
+        self,
+        entry: RegisteredTool,
+        request: ToolRequest,
+        args: Mapping[str, Any] | str,
+        engine: PolicyEngine | None,
     ) -> None:
         policy = entry.policy
         approval_required = policy.approval_required
 
-        if self._policy is not None:
+        if engine is not None:
             for permission in policy.permission_objects:
-                result = await self._policy.evaluate(
+                result = await engine.evaluate(
                     PolicyRequest(
                         permission=permission,
                         subject=f"tool:{entry.name}",

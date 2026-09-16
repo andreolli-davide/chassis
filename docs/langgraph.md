@@ -73,6 +73,10 @@ Changing a runtime-bound provider -- model, database, policy, secrets, tenant --
 publishes a new generation with a new capability snapshot and reuses the compiled
 graph.
 
+A policy or secret provider registered by a plugin is likewise runtime-bound: the
+run environment resolves it from the generation, so a swap publishes a new
+generation and the compiled graph is reused.
+
 The cache key is composed exclusively of declared build-time inputs:
 
 ```text
