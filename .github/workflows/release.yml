@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and verify only, do not publish"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build and verify the distribution
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Sync environment from the lockfile
+        run: uv sync --locked --all-extras --dev
+
+      - name: Lint, type-check, and test
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pyright
+          uv run pytest
+
+      - name: Read the project version
+        id: version
+        run: |
+          version=$(uv run python -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "project version: $version"
+
+      # Publishing is irreversible, so the tag, the project version, and the
+      # changelog must agree before anything is built.
+      - name: The tag must match the project version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$tag" != "${{ steps.version.outputs.version }}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match pyproject version ${{ steps.version.outputs.version }}" >&2
+            exit 1
+          fi
+          echo "tag and project version agree: $tag"
+
+      - name: The changelog must document this version
+        run: |
+          key="## [${{ steps.version.outputs.version }}]"
+          if ! grep -qF "$key" CHANGELOG.md; then
+            echo "CHANGELOG.md has no '$key' section" >&2
+            exit 1
+          fi
+          echo "changelog documents ${{ steps.version.outputs.version }}"
+
+      - name: Build
+        run: uv build
+
+      # The artifact, not the source tree: install the wheel into an environment
+      # that has never seen this checkout and run a real agent with it.
+      - name: Verify the built wheel
+        run: |
+          uv venv .smoke
+          uv pip install --python .smoke/bin/python dist/*.whl
+          .smoke/bin/python - <<'PY'
+          import chassis
+
+          expected = "${{ steps.version.outputs.version }}"
+          assert chassis.__version__ == expected, f"{chassis.__version__} != {expected}"
+          print("installed chassis-harness", chassis.__version__)
+          PY
+          .smoke/bin/python examples/quickstart.py
+
+      - name: Upload the distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: publish to PyPI
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != true
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/chassis-harness
+    permissions:
+      contents: read
+      # Trusted publishing: PyPI verifies this workflow's identity, so no API
+      # token is stored anywhere.
+      id-token: write
+    steps:
+      - name: Download the distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1

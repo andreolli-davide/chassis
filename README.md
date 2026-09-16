@@ -111,6 +111,18 @@ uv build
 `pyproject.toml` and `uv.lock` are the canonical dependency state. Do not introduce
 alternative project managers or parallel `requirements.txt` files.
 
+### Releasing
+
+1. record the change in `CHANGELOG.md` under a `## [x.y.z]` heading;
+2. bump `version` in `pyproject.toml` to the same number;
+3. tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+`.github/workflows/release.yml` runs the full check suite, then refuses to build
+unless the tag, the project version, and the changelog agree; it builds the
+distribution, installs the wheel into a clean environment, runs the quickstart
+against it, and publishes through PyPI trusted publishing (no token is stored).
+`workflow_dispatch` verifies all of that without publishing.
+
 ### Examples
 
 ```bash
@@ -126,6 +138,10 @@ suite runs all of them.
 ## Documentation
 
 - [`docs/getting-started.md`](docs/getting-started.md) — install and first run.
+- [`docs/recipes.md`](docs/recipes.md) — behind a web service, per-tenant composition,
+  hot provider swaps, budgets, durable runs.
+- [`docs/troubleshooting.md`](docs/troubleshooting.md) — symptom, cause, and the exact
+  diagnostics output for each.
 - [`docs/`](docs/README.md) — lifecycle, plugin authoring, LangGraph, observability,
   security assumptions, replay limitations, configuration, and design guarantees.
 
