@@ -89,6 +89,7 @@ def composition_metadata(
         "plugin_graph_hash": snapshot.plugin_graph_hash,
         "tool_schema_hash": snapshot.tool_schema_hash,
         "graph_definition_hash": snapshot.graph_definition_hash,
+        "prompt_hash": snapshot.prompt_hash,
         "snapshot_digest": snapshot.digest(),
     }
 

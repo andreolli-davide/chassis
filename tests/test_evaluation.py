@@ -91,6 +91,18 @@ async def test_composition_metadata_attributes_an_experiment(harness_with_agent:
         await harness.stop()
 
 
+async def test_composition_metadata_identifies_the_prompt_version(
+    harness_with_agent: Any,
+) -> None:
+    harness = await harness_with_agent()
+    try:
+        metadata = composition_metadata(harness, agent="stub", prompt_hash="prompt-v7")
+
+        assert metadata["prompt_hash"] == "prompt-v7"
+    finally:
+        await harness.stop()
+
+
 async def test_composition_metadata_never_carries_secrets() -> None:
     async with TestHarness() as harness:
         harness.redactor.add(SECRET)
