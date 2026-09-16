@@ -562,18 +562,28 @@ class Harness:
         if self._dirty:
             await self.reconcile()
 
-    async def reconcile(self) -> ReconcileResult:
-        """Publish a new runtime generation for the desired state."""
+    def _require_composable(self) -> None:
+        """Refuse a control-plane mutation unless the harness can still compose.
 
-        # Refuse before touching the lock: a reconciliation that waited for a
-        # shutdown to finish would otherwise publish a generation into a harness
-        # that is going away.
+        Checked both before the composition lock (fast refusal) and after acquiring
+        it, because a shutdown may have queued ahead of the caller and completed
+        meanwhile.
+        """
+
         if self._state not in (HarnessState.CREATED, HarnessState.RUNNING):
             raise HarnessStateError(
                 f"cannot reconcile a harness that is {self._state.value}",
                 harness=self._name,
                 state=self._state.value,
             )
+
+    async def reconcile(self) -> ReconcileResult:
+        """Publish a new runtime generation for the desired state."""
+
+        # Refuse before touching the lock, then again once it is held: a
+        # reconciliation queued behind a shutdown would otherwise publish a
+        # generation into a harness that is going away.
+        self._require_composable()
 
         async with (
             self._compose_lock,
@@ -582,6 +592,8 @@ class Harness:
                 {"harness": self._name, "desired": len(self._plugin_registry.entries())},
             ) as span,
         ):
+            self._require_composable()
+
             plan = self._resolver.resolve(
                 self._plugin_registry.candidates(), prefer=self._provider_preference
             )

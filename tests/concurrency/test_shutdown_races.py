@@ -157,3 +157,38 @@ async def test_run_released_while_stopping_does_not_resurrect_anything() -> None
     assert harness.plugin_registry.instances() == ()
     assert harness.capability_registry.registrations() == ()
     assert harness.state.value == "stopped"
+
+
+async def test_reconcile_queued_behind_shutdown_cannot_publish() -> None:
+    release = asyncio.Event()
+    mount_started = asyncio.Event()
+
+    harness = Harness(shutdown_grace_seconds=5.0)
+    await harness.start()
+
+    # Hold the composition lock with an in-flight reconciliation.
+    harness.install(slow_mount(release, mount_started), entry_id="slow")
+    composing = asyncio.ensure_future(harness.reconcile())
+    await mount_started.wait()
+
+    # Queue a shutdown, then a reconciliation behind it. The lock is FIFO, so the
+    # shutdown runs first and the reconciliation wakes up in a stopped harness.
+    unloading = asyncio.ensure_future(harness.stop())
+    await asyncio.sleep(0)
+
+    harness.install(slow_mount(release, mount_started), entry_id="late")
+    late = asyncio.ensure_future(harness.reconcile())
+    await asyncio.sleep(0)
+    assert not late.done()
+
+    release.set()
+    await composing
+    await unloading
+
+    with pytest.raises(HarnessStateError):
+        await late
+
+    # Nothing was mounted into, or published to, the stopped harness.
+    assert harness.state.value == "stopped"
+    assert harness.current_generation is None
+    assert harness.plugin_registry.instances() == ()
