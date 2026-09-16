@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -16,6 +17,7 @@ from chassis.config import (
     load_config,
     parse_config,
 )
+from chassis.core.collections import FrozenDict
 from chassis.core.errors import ConfigurationError
 from chassis.testing import TestHarness
 
@@ -169,10 +171,16 @@ def test_entry_configuration_is_immutable() -> None:
     entry = PluginEntryConfig(id="a", plugin="x", config={"k": 1})
 
     with pytest.raises(TypeError):
-        entry.config["k"] = 2  # type: ignore[index]  # type: ignore[index]
+        entry.config["k"] = 2  # type: ignore[index]
+    assert dict(entry.config) == {"k": 1}
+
+    mutable = PluginEntryConfig(id="b", plugin="x", config={"k": 1}).config
     with pytest.raises(TypeError):
-        entry.config.update({"k": 2})
-    assert entry.config.copy() == {"k": 1}
+        cast("FrozenDict", mutable).update({"k": 2})
+
+    mutable = PluginEntryConfig(id="b", plugin="x", config={"k": 1}).config
+    with pytest.raises(TypeError):
+        cast("FrozenDict", mutable).update({"k": 2})
 
 
 async def test_applying_configuration_mounts_plugins_from_the_catalog() -> None:
@@ -337,13 +345,19 @@ async def test_configuration_diagnostics_explain_pending_changes() -> None:
 
         # An entry installed outside the configuration shows up as a divergence.
         harness.install(fake_model, entry_id="extra")
-        assert [item["action"] for item in harness.diagnostics.desired_state()] == ["remove"]
+        assert harness.diagnostics.desired_state() == [
+            {
+                "action": "remove",
+                "entry_id": "extra",
+                "plugin": "fake-model",
+                "reason": "entry is installed but no longer desired",
+            },
+            {"action": "unchanged", "entry_id": "model", "plugin": "fake-model", "reason": ""},
+        ]
 
         # Applying the configuration converges, so drift disappears.
         harness.apply_config({"plugins": [{"id": "model", "plugin": "fake-model"}]})
-        assert [item["action"] for item in harness.diagnostics.desired_state()] == [
-            "unchanged"
-        ]
+        assert [item["action"] for item in harness.diagnostics.desired_state()] == ["unchanged"]
 
 
 async def test_diagnostics_report_no_desired_state_without_configuration() -> None:
