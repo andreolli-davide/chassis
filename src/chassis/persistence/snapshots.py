@@ -59,10 +59,17 @@ class RuntimeSnapshot:
     created_at: float = field(default_factory=time.time)
     metadata: Mapping[str, Any] = field(default_factory=dict)
     scopes: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
+    runtime_instance_ids: tuple[str, ...] = ()
+    semantic_scopes: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "plugins", MappingProxyType(dict(self.plugins)))
         object.__setattr__(self, "capabilities", MappingProxyType(dict(self.capabilities)))
+        object.__setattr__(self, "runtime_instance_ids", tuple(self.runtime_instance_ids))
+        if not isinstance(self.semantic_scopes, MappingProxyType):
+            object.__setattr__(
+                self, "semantic_scopes", MappingProxyType(dict(self.semantic_scopes))
+            )
         if not isinstance(self.metadata, MappingProxyType):
             object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
         if not isinstance(self.scopes, MappingProxyType):
@@ -88,10 +95,48 @@ class RuntimeSnapshot:
             "prompt_hash": self.prompt_hash,
             "metadata": dict(sorted(self.metadata.items(), key=lambda item: str(item[0]))),
             "scopes": self.scopes,
+            "runtime_instance_ids": list(self.runtime_instance_ids),
         }
 
+    def semantic_composition(self) -> dict[str, Any]:
+        """The generation's semantic composition, independent of how it was built.
+
+        Includes what a consumer can observe about composition: plugins,
+        capabilities, dependency edges, tool contracts, redacted configuration
+        hash, and the resolved scope tree. It deliberately excludes the generation
+        id, sequence, creation time, metadata, and runtime instance ids, so two
+        semantically equivalent generations that were materialised separately
+        share a semantic digest.
+        """
+
+        return {
+            "plugins": dict(sorted(self.plugins.items())),
+            "capabilities": {
+                name: list(versions) for name, versions in sorted(self.capabilities.items())
+            },
+            "config_hash": self.config_hash,
+            "plugin_graph_hash": self.plugin_graph_hash,
+            "tool_schema_hash": self.tool_schema_hash,
+            "scopes": self.semantic_scopes,
+        }
+
+    def semantic_digest(self) -> str:
+        """Stable hash of the semantic composition only (see :meth:`semantic_composition`)."""
+
+        return stable_hash(self.semantic_composition())
+
+    def physical_digest(self) -> str:
+        """Stable hash of the runtime instances this snapshot was published with.
+
+        Separate from :meth:`semantic_digest` on purpose: it changes when a
+        composition is rebuilt even if it is semantically identical, which is the
+        distinction between "semantically unchanged" and "physically reused".
+        """
+
+        return stable_hash(list(self.runtime_instance_ids))
+
     def digest(self) -> str:
-        """Stable hash of the whole snapshot."""
+        """Stable hash of the whole snapshot record."""
 
         return stable_hash(self.to_dict())
 
@@ -130,7 +175,54 @@ class RuntimeSnapshot:
             created_at=generation.created_at,
             metadata=effective_redactor.redact_value(dict(metadata or {})),
             scopes=generation.scopes.fingerprint(),
+            runtime_instance_ids=generation.instance_ids,
+            semantic_scopes=_semantic_scopes(generation),
         )
+
+
+def _semantic_scopes(generation: RuntimeGeneration) -> dict[str, Any]:
+    """Scope topology with instance ids replaced by semantic entry ids.
+
+    The published :meth:`ScopeTree.fingerprint` names the runtime instances that
+    provide a capability, which is exactly right for explaining *this* generation
+    but wrong for comparing two semantically equivalent ones. This view keeps the
+    semantic structure -- paths, capability views, entries, requirement selections
+    by provider entry -- and drops physical identity.
+    """
+
+    entry_by_instance = {
+        instance.instance_id: instance.entry_id for instance in generation.instances
+    }
+
+    def entry_ids(ids: tuple[str, ...]) -> list[str]:
+        return sorted(entry_by_instance.get(instance_id, instance_id) for instance_id in ids)
+
+    return {
+        "root": generation.scopes.root,
+        "scopes": [
+            {
+                "path": scope.path,
+                "parent": scope.parent,
+                "children": list(scope.children),
+                "capabilities": (None if scope.capabilities is None else list(scope.capabilities)),
+                "entries": list(scope.entries),
+                "providers": {
+                    name: entry_ids(ids) for name, ids in sorted(scope.providers.items())
+                },
+                "selections": [
+                    {
+                        "consumer": item.consumer,
+                        "requirement": str(item.requirement),
+                        "status": item.status,
+                        "provider": item.provider_entry_id,
+                        "provider_scope": item.provider_scope,
+                    }
+                    for item in scope.provenance
+                ],
+            }
+            for scope in generation.scopes
+        ],
+    }
 
 
 def _capability_versions(generation: RuntimeGeneration) -> dict[str, tuple[str, ...]]:
