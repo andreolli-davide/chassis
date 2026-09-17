@@ -30,8 +30,60 @@ __all__ = [
     "GenerationPressureEntry",
     "GenerationPressureReport",
     "RequirementExplanation",
+    "ResourceReachability",
     "ScopeExplanation",
 ]
+
+
+#: Why a reachable resource is still alive. ``lease`` means a run still holds the
+#: generation that reaches it; ``sharing`` means more than one live generation
+#: reaches it, so no single generation's retirement would release it.
+RETAINED_BY_LEASE = "lease"
+RETAINED_BY_SHARING = "sharing"
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceReachability:
+    """One live resource and the generations that can still reach it.
+
+    Every value is read from authoritative runtime state -- the generation
+    manager's live set and each instance's reachability -- never inferred from
+    logs. A resource with no reachable generation is absent because it is about to
+    be disposed, not because its reachability is unknown.
+    """
+
+    instance_id: str
+    entry_id: str
+    plugin: str
+    state: str
+    generation_refs: int
+    generations: tuple[str, ...]
+    retained_by: tuple[str, ...]
+
+    @property
+    def shared(self) -> bool:
+        """Whether more than one live generation reaches this resource."""
+
+        return len(self.generations) > 1
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "instance_id": self.instance_id,
+            "entry_id": self.entry_id,
+            "plugin": self.plugin,
+            "state": self.state,
+            "generation_refs": self.generation_refs,
+            "generations": list(self.generations),
+            "retained_by": list(self.retained_by),
+            "shared": self.shared,
+        }
+
+    def to_text(self) -> str:
+        lines = [f"resource {self.entry_id} ({self.plugin}) [{self.instance_id}]"]
+        lines.append(f"  state: {self.state}")
+        lines.append(f"  reachable from: {', '.join(self.generations) or '(none)'}")
+        lines.append(f"  retained by: {', '.join(self.retained_by) or '(none)'}")
+        return "\n".join(lines)
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +138,7 @@ class GenerationPressureReport:
     history_retained: int
     history_evicted: int
     generated_at: float
+    resources: tuple[ResourceReachability, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.instance_generations, MappingProxyType):
@@ -112,6 +165,7 @@ class GenerationPressureReport:
                 "retained": self.history_retained,
                 "evicted": self.history_evicted,
             },
+            "resources": [resource.to_dict() for resource in self.resources],
             "generated_at": self.generated_at,
         }
 
@@ -128,6 +182,9 @@ class GenerationPressureReport:
             "chassis.generations.leases": float(self.total_leases),
             "chassis.generations.oldest_lease_age_seconds": float(
                 self.oldest_lease_age_seconds or 0.0
+            ),
+            "chassis.resources.shared": float(
+                sum(1 for resource in self.resources if resource.shared)
             ),
         }
 
@@ -157,6 +214,16 @@ class GenerationPressureReport:
                 lines.append("    (none)")
             for plugin in generation.retained_plugins:
                 lines.append(f"    - {plugin['entry_id']} ({plugin['plugin']})")
+        if self.resources:
+            lines.append("")
+            lines.append("resources:")
+            for resource in self.resources:
+                retained = ", ".join(resource.retained_by) or "none"
+                lines.append(
+                    f"  {resource.entry_id} [{resource.instance_id}] "
+                    f"reachable from {', '.join(resource.generations)} "
+                    f"(retained by: {retained})"
+                )
         if self.history_evicted:
             lines.append("")
             lines.append(
@@ -608,6 +675,8 @@ class Diagnostics:
         current = manager.current
         entries: list[GenerationPressureEntry] = []
         instance_generations: dict[str, list[tuple[int, str]]] = {}
+        resource_facts: dict[str, tuple[str, str, str, int]] = {}
+        leased_instances: set[str] = set()
         oldest: float | None = None
         total = 0
         for generation in live:
@@ -626,6 +695,14 @@ class Diagnostics:
                 instance_generations.setdefault(instance.instance_id, []).append(
                     (generation.sequence, generation.generation_id)
                 )
+                resource_facts[instance.instance_id] = (
+                    instance.entry_id,
+                    instance.manifest.name,
+                    instance.state.value,
+                    instance.generation_refs,
+                )
+                if generation.lease_count > 0:
+                    leased_instances.add(instance.instance_id)
             lease_age = generation.oldest_lease_age_seconds
             if lease_age is not None:
                 oldest = lease_age if oldest is None else max(oldest, lease_age)
@@ -643,6 +720,32 @@ class Diagnostics:
                 )
             )
         entries.sort(key=lambda entry: entry.sequence, reverse=True)
+        generations_by_instance = {
+            key: tuple(generation_id for _sequence, generation_id in sorted(value, reverse=True))
+            for key, value in instance_generations.items()
+        }
+        resources: list[ResourceReachability] = []
+        for instance_id, facts in sorted(resource_facts.items()):
+            reaching = generations_by_instance.get(instance_id, ())
+            if not reaching:
+                continue
+            entry_id, plugin, state, generation_refs = facts
+            retained_by: list[str] = []
+            if len(reaching) > 1:
+                retained_by.append(RETAINED_BY_SHARING)
+            if instance_id in leased_instances:
+                retained_by.append(RETAINED_BY_LEASE)
+            resources.append(
+                ResourceReachability(
+                    instance_id=instance_id,
+                    entry_id=entry_id,
+                    plugin=plugin,
+                    state=state,
+                    generation_refs=generation_refs,
+                    generations=reaching,
+                    retained_by=tuple(sorted(retained_by)),
+                )
+            )
         return GenerationPressureReport(
             current_generation_id=None if current is None else current.generation_id,
             live_generations=len(live),
@@ -650,16 +753,12 @@ class Diagnostics:
             total_leases=total,
             oldest_lease_age_seconds=oldest,
             generations=tuple(entries),
-            instance_generations={
-                key: tuple(
-                    generation_id for _sequence, generation_id in sorted(value, reverse=True)
-                )
-                for key, value in instance_generations.items()
-            },
+            instance_generations=generations_by_instance,
             history_limit=manager.history_limit,
             history_retained=len(manager.history),
             history_evicted=manager.evicted,
             generated_at=now,
+            resources=tuple(resources),
         )
 
     def instance_generations(self, instance_id: str) -> tuple[str, ...]:
