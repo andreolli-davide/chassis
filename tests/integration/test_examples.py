@@ -28,7 +28,13 @@ def load_example(name: str) -> ModuleType:
 
 @pytest.mark.parametrize(
     "name",
-    ["quickstart", "basic_agent", "reactive_cascade", "safe_provider_replacement"],
+    [
+        "quickstart",
+        "basic_agent",
+        "reactive_cascade",
+        "safe_provider_replacement",
+        "scoped_composition",
+    ],
 )
 async def test_example_runs_and_verifies_itself(name: str) -> None:
     module = load_example(name)
@@ -44,4 +50,5 @@ def test_examples_directory_contains_the_shipped_examples() -> None:
         "basic_agent",
         "reactive_cascade",
         "safe_provider_replacement",
+        "scoped_composition",
     } <= names
