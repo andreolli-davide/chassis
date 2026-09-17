@@ -72,13 +72,15 @@ class PluginInstance:
     manifest: PluginManifest
     plugin: Plugin
     scope: Scope
-    config: Mapping[str, Any] = field(default_factory=dict)
+    #: Effective configuration. ``repr=False`` because it can carry secret material
+    #: and a dataclass repr reaches logs, assertions, and debuggers.
+    config: Mapping[str, Any] = field(default_factory=dict, repr=False)
     resolved: Mapping[str, CapabilityRegistration] = field(default_factory=dict)
     context: PluginContext | None = None
     entry_revision: int = 1
     state: PluginState = PluginState.PENDING
     health: PluginHealth = PluginHealth.UNKNOWN
-    error: BaseException | None = None
+    error: BaseException | None = field(default=None, repr=False)
     generation_refs: int = 0
     semantic_identity: SemanticIdentity | None = None
 

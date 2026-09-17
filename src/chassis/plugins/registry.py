@@ -53,7 +53,8 @@ class PluginEntry:
     entry_id: str
     plugin: Plugin
     manifest: PluginManifest
-    config: Mapping[str, object] = field(default_factory=dict)
+    #: Effective configuration. ``repr=False`` because it can carry secret material.
+    config: Mapping[str, object] = field(default_factory=dict, repr=False)
     revision: int = 1
     scope: str = ROOT_SCOPE
 
