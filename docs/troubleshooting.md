@@ -242,6 +242,74 @@ Replay covers tool and model boundaries only; interrupts, snapshots, and lifecyc
 events are recorded as attribution and never answer an operation
 ([replay.md](replay.md)).
 
+## A scoped plugin never activates, or resolves to the wrong provider
+
+Scoped composition adds three statuses and an origin to the explanation. Ask for
+provenance rather than guessing:
+
+```python
+harness.diagnostics.explain_requirement("agent", "database", scope="/tenant:acme/research")
+harness.diagnostics.explain_scope("/tenant:acme/research")
+```
+
+| Status / field | Meaning | Fix |
+| --- | --- | --- |
+| `no_provider` | nothing anywhere in the composition provides it | install/provide the capability |
+| `not_visible` | a provider exists but is not in this scope's lineage (a sibling's or a descendant's) | declare the provider in an ancestor scope, or consume it where it lives |
+| `provider_pending` | a visible provider cannot activate itself | fix that provider's own requirement |
+| `ambiguous` | a local and an inherited provider are both valid | `prefer_provider(..., consumer=...)` or `(..., scope=...)` |
+| candidate `rejection: capability_not_exposed` | a capability view on the path hides it | widen that scope's `capabilities` (intersection is along the whole path) |
+
+An **unexpected inherited provider** is reported with `origin: inherited (<scope>)`;
+narrow the consuming scope's view to stop inheriting it. A **missing provider after
+narrowing** is the intersection rule: an intermediate scope can hide a capability a
+descendant declares ([scopes.md](scopes.md#6-capability-narrowing)).
+
+## An old scope's resources are still alive after removing the scope
+
+Removing a scope removes its entries from desired state and from the next
+generation; it does not destroy instances a live generation can reach. That is the
+same unload rule as 0.2, applied to a subtree:
+
+```python
+harness.composition.remove("/tenant:acme/research")   # uninstalls its entries
+await harness.reconcile()
+
+harness.diagnostics.explain_scope("/tenant:acme/research", generation_id=old_id)  # old tree
+harness.diagnostics.generation_pressure()    # which generation still retains it
+```
+
+`explain_scope(path, generation_id=...)` reads a specific generation, so an operator
+can see what the old run still observes. The instance is disposed when the last
+lease on that generation is released (see
+[lifecycle.md](lifecycle.md#logical-unload-is-not-physical-disposal)).
+
+## `ConfigurationError: cannot install into an undeclared composition scope`
+
+`install(..., scope=...)` validates the path against the desired-state tree.
+Declare the scope first — creating a scope or narrowing a view marks the harness
+dirty, so the next `reconcile()` (or the next asynchronous entry point) publishes
+it:
+
+```python
+research = harness.composition.child("research")          # /research
+research.install(MyPlugin(), entry_id="search")
+await harness.reconcile()
+```
+
+## A generation changed even though no plugin did
+
+Scope topology is part of composition identity. Adding a scope, removing one,
+restricting a capability view, or changing a requirement's selected provider
+publishes a new generation even when the mounted instances are identical — a run
+observing `generation.scopes` would otherwise see a different composition. Confirm
+what moved with a semantic diff instead of guessing from instance ids:
+
+```python
+harness.diagnostics.diff_generations(old_id, new_id).to_text()   # SCOPES / PROVIDERS / REQUIREMENTS
+harness.diagnostics.diff_generations(old_id, new_id, include_unchanged=True)
+```
+
 ## An example or a snippet from the docs fails
 
 The examples assert what they print, and the test suite runs all of them

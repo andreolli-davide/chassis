@@ -15,6 +15,13 @@ a remote service. Chassis's architecture does not prevent those (`Scope` and
 `PluginRegistry` treat a plugin as an opaque unit with a lifecycle), but only
 in-process execution is implemented today, and no part of the API implies otherwise.
 
+**Capability narrowing is not authorization.** A composition scope's capability view
+decides what composition a scope *observes* during resolution
+([scopes.md](scopes.md#6-capability-narrowing)). It does not restrict what in-process
+code can do: a plugin in a narrowed scope can still import any module or open any
+socket, exactly as above. Treat the view as a composition control, never as a
+security boundary, and do not present it to users as one.
+
 ## What policy does cover
 
 Capability *availability* and *authorization* are different questions. A plugin may

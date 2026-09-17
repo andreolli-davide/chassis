@@ -27,6 +27,9 @@ below is enforced by tests, and the tests are the specification of record.
 | G12 | Equivalent canonical desired state resolves to equivalent providers and ordering | `plugins/resolver.py`, `tests/capabilities` |
 | G13 | Generation liveness and lease age are read from authoritative runtime state, never derived from the bounded diagnostics history | `core/generations.py`, `diagnostics.py`, `tests/generations/test_generation_pressure.py` |
 | G14 | A configured budget limit states whether Chassis enforces it or an integration must account for it | `budget/models.py`, `tests/budget/test_budget_semantics.py` |
+| G15 | A scope observes only its own local composition, composition inherited from its ancestors, and composition its capability view permits; sibling-local composition is not implicitly visible | `plugins/resolver.py`, `composition.py`, `tests/composition/test_scopes.py` |
+| G16 | The scope tree and every composition-affecting field of a published generation are immutable; scope-affecting changes become visible only through a new generation | `composition.py`, `core/generation.py`, `tests/composition/test_scopes.py` |
+| G17 | Every resolved requirement has an authoritative provenance record (selected provider, origin scope, selection reason) and every unresolved requirement has an authoritative reason | `plugins/resolver.py`, `diagnostics.py`, `tests/composition/test_scope_diagnostics.py` |
 
 ## Decisions worth knowing
 
@@ -62,6 +65,25 @@ below is enforced by tests, and the tests are the specification of record.
 - **Configuration changes are replacements.** A changed config becomes `REPLACE`
   rather than an in-place `RECONFIGURE`, because mutating a live instance cannot be
   made safe for generations that still hold it.
+- **Composition scopes are derived views, not mutable overlays.** A scope is
+  control-plane desired state; resolution materializes it into an immutable tree
+  published with the generation. Scope topology is part of composition identity, so
+  adding a scope or narrowing a view publishes a new generation even when no
+  instance changed (G16).
+- **Scoped visibility is inheritance-plus-narrowing, and ambiguity stays explicit.**
+  A consumer sees its own and its ancestors' providers, filtered by the intersection
+  of the capability views along its path. A valid local provider does not silently
+  shadow a valid inherited one: the requirement stays `ambiguous` until a preference
+  selects one, which is the same rule flat composition has always used (G15).
+  Capability narrowing is composition visibility, not authorization.
+- **Scoped ownership reuses the existing lifecycle.** A composition scope owns the
+  entries it declares; the physical owner of a registration remains the plugin
+  instance's `Scope`. Rollback, reachability, and disposal are unchanged, so there is
+  no second teardown system.
+- **Provenance is authoritative structure, not parsed logs.** Each requirement
+  resolution records its candidates, their origin scopes, visibility, eligibility,
+  rejection reasons, the selected provider, and the selection reason. Explain and
+  diff APIs read that structure (G17).
 
 ## Deliberate absences
 
@@ -73,7 +95,14 @@ below is enforced by tests, and the tests are the specification of record.
 - `model_calls`, `tokens`, and `estimated_cost` budget dimensions are *accounted*,
   not enforced: graphs call models, not the harness, so only wall clock, tool calls,
   and child runs are guaranteed, and the accounted limits hold only when the
-  integration reports usage (see [plugin-author-guide.md](plugin-author-guide.md#budgets)).
+  integration reports usage (see [plugin-author-guide.md](plugin-author-guide.md#budgets));
+- no provider interception or generic middleware chains: scope resolution decides
+  *which* provider a consumer gets, and wrapping or transforming a provider is left
+  to a future release;
+- no content-addressed composition DAG or structural-sharing rewrite: 0.3 adds the
+  scope tree, provenance, and diagnostic metadata to the existing generation model;
+- no configuration-file schema for scopes: the composition-scope primitive is stable,
+  the file format is not ([configuration.md](configuration.md#composition-scopes)).
 
 ## What is public API
 

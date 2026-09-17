@@ -106,8 +106,9 @@ its old objects — nothing is mutated underneath it.
 | know exactly what the security model does and does not promise | [security.md](security.md) |
 | record and replay model/tool boundaries | [replay.md](replay.md) |
 | drive composition from YAML and reconcile drift | [configuration.md](configuration.md) |
+| build hierarchical composition scopes and explain provider choices | [scopes.md](scopes.md) |
 | see the design decisions and invariants | [design.md](design.md) |
-| upgrade from 0.1 | [migration.md](migration.md) |
+| upgrade from an earlier release | [migration.md](migration.md) |
 
 The other examples isolate one idea each:
 
@@ -115,6 +116,7 @@ The other examples isolate one idea each:
 uv run python examples/basic_agent.py                 # tools, checkpointing, streaming, interrupts, tracing
 uv run python examples/reactive_cascade.py            # database → memory → extension, removed and restored
 uv run python examples/safe_provider_replacement.py   # generations across a provider swap
+uv run python examples/scoped_composition.py          # hierarchical composition scopes
 ```
 
 ## Using it for real
@@ -129,4 +131,5 @@ uv run python examples/safe_provider_replacement.py   # generations across a pro
   dirty; the next run or explicit `reconcile()` publishes a new generation.
 - **Diagnostics**: `harness.diagnostics.status()` and
   `harness.diagnostics.explain("my-plugin")` answer "why is this plugin not active"
-  from authoritative state.
+  from authoritative state; `explain_requirement`, `explain_scope`, and
+  `diff_generations` answer the same for scoped composition and provider choice.

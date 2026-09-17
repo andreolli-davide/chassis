@@ -133,7 +133,7 @@ snapshot.digest()
 
 ```json
 {
-  "chassis_version": "0.2.0",
+  "chassis_version": "0.3.0",
   "generation_id": "gen_0004",
   "sequence": 4,
   "agent_runtime": "langgraph",
@@ -143,9 +143,32 @@ snapshot.digest()
   "plugin_graph_hash": "...",
   "tool_schema_hash": "...",
   "graph_definition_hash": "...",
-  "prompt_hash": null
+  "prompt_hash": null,
+  "scopes": {
+    "root": "/",
+    "scopes": [
+      {"path": "/", "parent": null, "children": ["/research"], "capabilities": null,
+       "entries": ["postgres"], "providers": {"database": ["plugin_…"]},
+       "selections": [{"consumer": "agent", "requirement": "database <2,>=1",
+                       "status": "resolved", "provider": "postgres", "provider_scope": "/"}]},
+      {"path": "/research", "parent": "/", "children": [], "capabilities": ["database", "model"],
+       "entries": ["agent"], "providers": {}, "selections": []}
+    ]
+  }
 }
 ```
+
+`scopes` identifies the scope tree, the local providers of each scope, the
+capability view in effect, and the resolved selection of every requirement, using
+identities and instance ids only. Scope *metadata* is never included, and
+configuration values never appear anywhere in a snapshot.
+
+**Scope structure is part of the digest, on purpose.** Topology and per-requirement
+selection are observable through the generation a run acquires: two generations
+whose scope trees differ would behave differently for a run that reads
+`generation.scopes`, so their digests must differ. Republishing an unchanged
+composition reuses the current generation and therefore reproduces the identical
+digest.
 
 Snapshots contain **no configuration values**. Configuration is represented by a
 hash computed over the redacted payload, so a snapshot explains composition
@@ -180,6 +203,12 @@ semantics cannot be explained is useless for debugging:
 | `graph_definition_hash` | compiled-graph cache key for the run's agent |
 | `tool_schema_hash` | tool names, descriptions, argument schemas |
 | `prompt_hash` | a prompt body, when supplied |
+| `scopes` (in `to_dict`) | scope topology, capability views, local providers, and requirement selections |
+
+Composition decisions are also explainable without reading a snapshot:
+`harness.diagnostics.explain_requirement(...)`, `explain_scope(...)`, and
+`diff_generations(...)` read the same authoritative state
+([scopes.md](scopes.md#diagnostics)).
 
 ## Evaluation
 

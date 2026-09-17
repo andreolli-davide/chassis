@@ -240,7 +240,14 @@ harness.diagnostics.agents()        # registered runtimes
 harness.diagnostics.desired_state() # drift against the applied configuration
 harness.diagnostics.status()        # summary
 harness.diagnostics.explain("memory")  # why one plugin is active, pending, or excluded
+harness.diagnostics.scopes()        # the resolved scope tree of the current generation
+harness.diagnostics.explain_requirement("agent", "database")  # provenance of one requirement
+harness.diagnostics.explain_scope("/research")                # visibility and ownership of one scope
+harness.diagnostics.diff_generations("gen_0004", "gen_0005")  # semantic composition diff
 ```
+
+Scoped composition is described in [scopes.md](scopes.md): hierarchy, inheritance,
+capability narrowing, provenance, and the explain and diff APIs.
 
 Diagnostics are generated from authoritative state, never scraped from logs, and
 they describe configuration by key rather than by value. Effect descriptions are

@@ -45,6 +45,7 @@ nav:
   - Why generations: why-generations.md
   - Guides:
       - Lifecycle and ownership: lifecycle.md
+      - Scoped composition: scopes.md
       - Writing a plugin: plugin-author-guide.md
       - LangGraph integration: langgraph.md
       - Configuration and reconciliation: configuration.md
@@ -53,7 +54,7 @@ nav:
   - Recipes: recipes.md
   - Troubleshooting: troubleshooting.md
   - Design guarantees: design.md
-  - Migrating from 0.1: migration.md
+  - Migration: migration.md
   - Security: security.md
 
 validation:

@@ -43,6 +43,24 @@ async with Harness("harness.yaml") as harness:
     result = await harness.agents.invoke("research-agent", {"messages": [...]})
 ```
 
+## Composition scopes
+
+Declarative configuration describes a **flat** composition: every entry it names is
+declared in the root scope. Composition scopes are declared programmatically in
+0.3, and a harness may mix the two — a configuration file for the root, scopes
+created in code:
+
+```python
+harness.apply_config("harness.yaml")                       # entries in the root scope
+research = harness.composition.child("research")
+research.install(SearchPlugin(), entry_id="search")
+await harness.reconcile()
+```
+
+A scope-aware configuration schema is a candidate for a later release; the scope
+primitive is stable, and only the file format is deferred. See
+[scopes.md](scopes.md) for the model.
+
 ## The catalog
 
 ```python

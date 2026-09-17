@@ -88,6 +88,32 @@ No activation logic, no deregistration calls, no task bookkeeping: the harness
 orders plugins by declared capabilities, owns every effect through the plugin's
 scope, and cancels its tasks on unload.
 
+## Hierarchical composition scopes
+
+Composition can be a tree, not a list. A scope inherits the providers visible from
+its ancestors, adds its own, narrows what it exposes, and owns what it declares —
+and it is still only desired state until a generation is published:
+
+```python
+harness.install(postgres, entry_id="postgres")                 # shared, at the root
+tier = harness.composition.child("tier-a", capabilities=[MODEL, DATABASE])
+research = tier.child("research")
+research.install(search, entry_id="search")
+research.require(MODEL, ">=1,<2")
+
+async with harness:
+    harness.diagnostics.explain_requirement("agent", "database").to_text()
+    harness.diagnostics.explain_scope("/tier-a/research").to_dict()
+    harness.diagnostics.diff_generations(old_id, new_id).to_text()
+```
+
+Sibling-local composition stays invisible, an ambiguity between a local and an
+inherited provider stays explicit until a preference resolves it, and a run that
+acquired a scope tree keeps observing exactly that tree.
+
+Full guide: [docs/scopes.md](docs/scopes.md). Runnable:
+`uv run python examples/scoped_composition.py`.
+
 ## The core proposition
 
 > Chassis allows agent runtime composition to change over time while active runs
@@ -110,9 +136,9 @@ what Chassis refuses to promise.
 
 ## Status
 
-Pre-1.0 (`0.2.0`). The surface covered by `tests/test_public_api.py` may break in a
+Pre-1.0 (`0.3.0`). The surface covered by `tests/test_public_api.py` may break in a
 minor release; every break is recorded in [CHANGELOG.md](CHANGELOG.md), and
-[migrations](docs/migration.md) lists the 0.1 → 0.2 changes.
+[migrations](docs/migration.md) lists the 0.1 → 0.2 and 0.2 → 0.3 changes.
 
 ## Development
 
@@ -150,6 +176,7 @@ uv run python examples/quickstart.py                  # smallest useful app
 uv run python examples/basic_agent.py                 # LangGraph agent end to end
 uv run python examples/reactive_cascade.py            # database → memory → extension
 uv run python examples/safe_provider_replacement.py   # generations across a provider swap
+uv run python examples/scoped_composition.py          # hierarchical composition scopes
 ```
 
 Each example asserts what it prints, so running it verifies the behaviour. The test
@@ -163,8 +190,8 @@ suite runs all of them.
   hot provider swaps, budgets, durable runs.
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) — symptom, cause, and the exact
   diagnostics output for each.
-- [`docs/migration.md`](docs/migration.md) — the 0.1 → 0.2 changes and how to migrate.
-- [`docs/`](docs/README.md) — lifecycle, plugin authoring, LangGraph, observability,
+- [`docs/migration.md`](docs/migration.md) — the 0.2 → 0.3 and 0.1 → 0.2 changes and how to migrate.
+- [`docs/`](docs/README.md) — lifecycle, scoped composition, plugin authoring, LangGraph, observability,
   security assumptions, replay limitations, configuration, and design guarantees.
 
 ## Layout
@@ -172,6 +199,7 @@ suite runs all of them.
 ```text
 src/chassis/
   core/          scopes, effects, generations, errors
+  composition.py composition scopes and resolved scope trees
   capabilities/  versioned contracts, provider registry, snapshots
   plugins/       manifests, author API, resolver, registry
   hooks/         scope-owned hook registry

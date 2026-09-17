@@ -77,13 +77,14 @@ async def healthz() -> dict:
 
 ## Per-tenant composition and identity
 
-Identity is per run; composition is per harness. Two workable shapes:
+Identity is per run; composition is per harness. Three workable shapes, from
+cheapest to most expressive:
 
 ```python
-# Per-request identity (the common case): same composition, different tenant.
+# 1. Per-request identity: same composition, different tenant.
 await harness.agents.invoke("support-agent", {"messages": [...]}, tenant_id=tenant.id)
 
-# Per-tenant wiring: a provider that depends on the tenant, resolved per generation.
+# 2. Per-tenant wiring through the flat configuration: one entry per tenant.
 config = {
     "version": 1,
     "plugins": [
@@ -92,20 +93,41 @@ config = {
     ],
     "provider_preferences": {"database": f"db-{tenant.id}"},
 }
+
+# 3. A composition scope per tenant: shared providers inherited from the root,
+#    tenant-local providers, and isolation between tenants for free.
+model = harness.install(OpenAIModelPlugin(), entry_id="model")     # shared, root scope
+tenant_scope = harness.composition.child(f"tenant:{tenant.id}")
+tenant_scope.install(PostgresPoolPlugin(dsn_ref=tenant.dsn_ref), entry_id="db")
+tenant_scope.install(SupportAgentPlugin(), entry_id="support-agent")
+await harness.reconcile()
 ```
 
-The second shape is deliberately declarative: entries carry stable ids, a provider
-change is a `REPLACE` that publishes a new generation, and runs already in flight keep
-the one they acquired ([configuration.md](configuration.md)).
-
-When one capability has several providers, decide explicitly instead of relying on
-resolution order:
+Shape 3 is what 0.3 is for. Each tenant sees the shared model and its own database,
+never another tenant's; a plugin that needs the database resolves it without any
+per-consumer preference, because siblings are not candidates
+([scopes.md](scopes.md)). Add always-on shared infrastructure at the root and narrow
+what a tenant may observe when it should not see everything:
 
 ```python
-harness.prefer_provider("database", "postgres")              # globally
-entry = "consumer:database"                                  # or per entry
-harness.prefer_provider(entry, "postgres")
+tenant_scope.restrict(MODEL, DATABASE, TOOLS)
 ```
+
+Entries carry stable ids, so a provider change is a `REPLACE` that publishes a new
+generation, while runs already in flight keep the one they acquired
+([configuration.md](configuration.md)).
+
+When one capability genuinely has several visible providers, decide explicitly
+instead of relying on resolution order:
+
+```python
+harness.prefer_provider("database", "postgres")                     # globally
+harness.prefer_provider("database", "postgres", consumer="agent")   # per consumer entry
+harness.prefer_provider("database", "postgres", scope="/tenant:acme")  # per scope
+```
+
+Ambiguity is never resolved by shadowing: a valid local provider and a valid
+inherited provider both stay candidates until a preference selects one.
 
 ## Swap a provider while runs are in flight
 

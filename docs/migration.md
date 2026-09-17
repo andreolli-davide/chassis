@@ -1,12 +1,85 @@
-# Migrating from 0.1
+# Migrating between versions
 
-Chassis is pre-1.0, and 0.2 uses that freedom to remove ambiguity. This page lists
-every change that can break a 0.1 caller, why it was made, and what to do instead.
-Nothing here changes lifecycle behaviour: published generations are still immutable,
-publication is still transactional, and logical unload is still distinct from
-physical disposal.
+Chassis is pre-1.0, and each minor release uses that freedom to remove ambiguity.
+Each section lists every change that can break a caller from the previous version,
+why it was made, and what to do instead. Lifecycle behaviour is unchanged across
+these releases: published generations are still immutable, publication is still
+transactional, and logical unload is still distinct from physical disposal.
 
-## Installation
+- [0.2 → 0.3](#02-03): composition scopes, explain and diff diagnostics
+- [0.1 → 0.2](#01-02): optional extras, tool protocol, lease identity, budgets
+
+## 0.2 → 0.3
+
+0.3 is additive for existing code: a composition with no declared scopes behaves
+exactly as it did, and every 0.2 guarantee still holds. Two changes are worth
+checking against.
+
+### `RuntimeSnapshot.scopes` is part of the digest
+
+A snapshot now carries the resolved scope tree — scope topology, the capability
+view in effect, the local providers of each scope, and the selected provider of
+every requirement — and that payload participates in `RuntimeSnapshot.digest()`.
+The decision is deliberate: scope topology and resolution are observable through the
+generation a run acquires, so two generations that differ there must not share a
+digest.
+
+What this means in practice:
+
+- a digest recorded with 0.2 will not equal the digest of the same composition in
+  0.3, because the snapshot gained a field. Recorded LangSmith metadata, evaluation
+  metadata, and any stored snapshot comparisons should be re-baselined;
+- a no-op reconcile still reuses the generation and reproduces the identical digest,
+  so digest stability within a version is unchanged;
+- `snapshot.scopes` never contains configuration or scope metadata values.
+
+### Provider preference keys gained a scope form
+
+`Harness.prefer_provider` keeps its 0.2 behaviour and gained keyword arguments:
+
+```python
+harness.prefer_provider("database", "postgres")                     # global (0.2 behaviour)
+harness.prefer_provider("database", "postgres", consumer="agent")   # "<entry>:<capability>"
+harness.prefer_provider("database", "postgres", scope="/research")  # "scope:<path>:<capability>"
+```
+
+`prefer_provider("agent:database", "postgres")` (the 0.2 positional form) is now
+rejected by the type signature: pass `consumer="agent"` instead. Configuration-level
+`provider_preferences` and per-entry `provider_preference` are unchanged.
+
+### Additive APIs
+
+Nothing was removed and no existing signature changed otherwise. New in 0.3:
+
+- `harness.composition` — the desired-state tree of composition scopes
+  (`chassis.composition.CompositionTree`, `CompositionScope`);
+- `Harness.install(..., scope=...)`, `CompositionScope.install(...)`,
+  `CompositionScope.require(...)`, `.restrict(...)`;
+- `RuntimeGeneration.scopes` (`chassis.composition.ScopeTree` of `ResolvedScope`);
+- `harness.diagnostics.scopes()`, `.explain_requirement(...)`, `.explain_scope(...)`,
+  `.diff_generations(...)`;
+- structured types `chassis.plugins.resolver.ProviderAssessment`,
+  `ScopePlan`, `RequirementResolution` provenance fields, and the diagnostics
+  `RequirementExplanation`, `ScopeExplanation`, `GenerationDiff`, `CompositionChange`.
+
+`ResolutionPlan.scopes` is populated whenever the harness resolves; the resolver
+also accepts `scopes=` directly. A plan produced without scopes still has a root
+scope, so `plan.scope_for("/")` is never `None`.
+
+### Scoped composition checklist
+
+- Entries installed through `harness.install(...)` before 0.3 are root-scope entries;
+  no migration is needed to keep them there.
+- A child scope's consumers see their ancestors' providers; if a 0.2 composition now
+  lives inside one scope alongside a sibling, confirm sibling isolation is what you
+  want (it is the guarantee, not a configuration).
+- If two valid providers (one local, one inherited) now make a requirement
+  `ambiguous`, that is the same explicit-ambiguity rule as 0.2 applied across scopes:
+  declare a preference rather than expecting a local provider to shadow.
+
+## 0.1 → 0.2
+
+### Installation
 
 The core no longer depends on `langgraph`, `langchain-core`, or `langsmith`.
 
@@ -26,7 +99,7 @@ If you use `LangSmithTelemetry` with tracing enabled, or `evaluate_agent`, insta
 the `langsmith` extra. Importing those without the extra raises a `MissingExtraError`
 that names the extra to install.
 
-## `ToolSnapshot.to_langchain_tools()` → `to_tools()`
+### `ToolSnapshot.to_langchain_tools()` → `to_tools()`
 
 The core no longer names a specific tool library, so the accessor no longer does
 either. The returned objects are unchanged.
@@ -45,7 +118,7 @@ A tool registered with the harness must now satisfy the structural
 `BaseTool` satisfies the protocol unchanged, so existing tools keep working; the
 change only removes the import-time dependency.
 
-## `GenerationManager.acquire()` / `release()` → `acquire_lease()` / `release_lease()`
+### `GenerationManager.acquire()` / `release()` → `acquire_lease()` / `release_lease()`
 
 Leases now carry identity so that lease *age* is authoritative. `Harness.acquire()`
 is unchanged: it still yields the acquired `RuntimeGeneration`.
@@ -62,7 +135,7 @@ manager.release_lease(lease)          # lease.generation is the generation
 
 Most code uses `async with harness.acquire() as generation:` and needs no change.
 
-## Budget enforcement is now explicit
+### Budget enforcement is now explicit
 
 `BudgetLimits(...)` and the enforced/accounted split are unchanged in shape, but the
 API now states which is which:
@@ -80,7 +153,7 @@ If you configured a token or cost limit in 0.1 expecting automatic enforcement,
 the point where the model response is received. See
 [Budgets](plugin-author-guide.md#budgets) for a worked example.
 
-## Nothing removed from the lifecycle
+### Nothing removed from the lifecycle
 
 `Harness`, `Scope`, `Plugin`, plugin manifests, the resolver, reconciliation,
 `RuntimeGeneration`, run contexts, and diagnostics keep their 0.1 shape. Everything
