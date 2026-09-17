@@ -27,6 +27,10 @@ provider_preferences:
 - `enabled: false` parks an entry without deleting it, so it is treated as absent.
 - `provider_preference` disambiguates requirements this entry has
   (`consumer:database`), and the top-level map disambiguates globally.
+- A `provider_preference` is *resolution intent*, not plugin configuration, so
+  changing it never derives `REPLACE`. It is applied before the next
+  reconciliation; if it selects a different provider, the consumer is rebuilt and
+  reported as `REWIRED`, and if it still selects the same provider nothing changes.
 - YAML and JSON ordering never defines dependency semantics: capabilities do.
 
 Configuration loads from a mapping, a YAML or JSON string, or a path:

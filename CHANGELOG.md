@@ -5,7 +5,7 @@ All notable changes to Chassis are recorded here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with the pre-1.0 caveat
 that a minor release may break the documented surface.
 
-## [Unreleased]
+## [0.4.1] - 2026-09-17
 
 Hardening found by an architectural review of 0.4's incremental reuse model. No
 public API changes.
