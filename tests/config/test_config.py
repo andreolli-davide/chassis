@@ -6,6 +6,7 @@ from typing import cast
 import pytest
 
 from chassis import MODEL, Harness, PluginContext, plugin
+from chassis.capabilities import CapabilityKey
 from chassis.config import (
     DesiredStateAction,
     HarnessConfig,
@@ -45,6 +46,25 @@ async def web_search(ctx: PluginContext) -> None:
     ctx.capabilities.provide(
         __import__("chassis.capabilities", fromlist=["TOOLS"]).TOOLS, "search-tools"
     )
+
+
+@plugin(name="db-a", version="1.0.0", provides={"database": "1.0.0"})
+async def db_a(ctx: PluginContext) -> None:
+    ctx.capabilities.provide(
+        CapabilityKey.from_version("database", "1.0.0"), "db-a", version="1.0.0"
+    )
+
+
+@plugin(name="db-b", version="1.0.0", provides={"database": "1.0.0"})
+async def db_b(ctx: PluginContext) -> None:
+    ctx.capabilities.provide(
+        CapabilityKey.from_version("database", "1.0.0"), "db-b", version="1.0.0"
+    )
+
+
+@plugin(name="agent", version="1.0.0", requires={"database": ">=1,<2"})
+async def agent(ctx: PluginContext) -> None:
+    ctx.require("database")
 
 
 def test_yaml_configuration_parses_into_models() -> None:
@@ -207,6 +227,63 @@ async def test_reapplying_an_unchanged_configuration_is_a_no_op() -> None:
         assert [change.action for change in result.changes] == [DesiredStateAction.UNCHANGED]
         assert result.applied == ()
         assert harness.current_generation is generation
+
+
+PREFERENCE_CONFIG = {
+    "plugins": [
+        {"id": "agent", "plugin": "agent", "provider_preference": {"database": "db-a"}},
+        {"id": "db-a", "plugin": "db-a"},
+        {"id": "db-b", "plugin": "db-b"},
+    ]
+}
+
+
+def _preference_harness(harness: TestHarness) -> None:
+    harness.register_plugin_type("agent", agent)
+    harness.register_plugin_type("db-a", db_a)
+    harness.register_plugin_type("db-b", db_b)
+
+
+async def test_reapplying_a_configuration_with_a_provider_preference_is_a_no_op() -> None:
+    async with TestHarness() as harness:
+        _preference_harness(harness)
+        harness.apply_config(PREFERENCE_CONFIG)
+        await harness.reconcile()
+        generation = harness.current_generation
+        agent_before = harness.instance("agent")
+
+        result = harness.apply_config(PREFERENCE_CONFIG)
+        await harness.reconcile()
+
+        assert [change.action for change in result.changes] == [DesiredStateAction.UNCHANGED] * 3
+        assert result.applied == ()
+        assert harness.current_generation is generation
+        assert harness.instance("agent") is agent_before
+
+
+async def test_changing_a_provider_preference_rewires_rather_than_replaces() -> None:
+    async with TestHarness() as harness:
+        _preference_harness(harness)
+        harness.apply_config(PREFERENCE_CONFIG)
+        await harness.reconcile()
+        agent_before = harness.instance("agent")
+
+        # Only the preference changes: it selects a different provider, so the
+        # consumer must be rebuilt, but the desired entry itself is unchanged.
+        changed = dict(PREFERENCE_CONFIG)
+        changed["plugins"] = [
+            {"id": "agent", "plugin": "agent", "provider_preference": {"database": "db-b"}},
+            {"id": "db-a", "plugin": "db-a"},
+            {"id": "db-b", "plugin": "db-b"},
+        ]
+        result = harness.apply_config(changed)
+        assert [change.action for change in result.changes] == [DesiredStateAction.UNCHANGED] * 3
+
+        reconciled = await harness.reconcile()
+        assert harness.instance("agent") is not agent_before
+        assert reconciled.impact is not None
+        node = reconciled.impact.get("agent")
+        assert node is not None and node.decision == "rewired"
 
 
 async def test_changing_plugin_configuration_replaces_the_instance() -> None:
