@@ -5,6 +5,98 @@ All notable changes to Chassis are recorded here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with the pre-1.0 caveat
 that a minor release may break the documented surface.
 
+## [0.3.0] - 2026-09-17
+
+Adds **hierarchical scoped composition** and **explainable composition provenance**.
+No agent-framework abstraction is introduced: a scope is a generic composition
+primitive, not an agent, tenant, or session, and Chassis still never executes an
+agent. Every 0.2 guarantee still holds, and a composition with no declared scopes
+behaves exactly as it did.
+
+### Added
+
+- **Composition scopes.** `chassis.composition` introduces `CompositionScope` and
+  `CompositionTree` (desired state, reached through `harness.composition`) and the
+  immutable `ScopeTree` of `ResolvedScope` (published state, reached through
+  `RuntimeGeneration.scopes`). A scope inherits the providers visible from its
+  ancestors, adds local providers, declares its own requirements, narrows the
+  composition it exposes with a capability view, nests, and owns the entries it
+  declares.
+- **`Harness.install(..., scope=...)`** and `CompositionScope.install(...)`,
+  `.require(...)`, `.restrict(...)`, `.unrestrict()`, `.child(...)`,
+  `.set_metadata(...)`.
+- **Scope-aware resolution with provenance.** The resolver accepts a scope hierarchy
+  and records, for every requirement, each candidate provider, its origin scope,
+  whether it was visible and eligible, its rejection reason, the selected provider,
+  and the selection reason. New structured types: `ScopePlan`,
+  `ProviderAssessment`, and provenance fields on `RequirementResolution`
+  (`consumer`, `provider_scope`, `provider_origin`, `selection_reason`,
+  `assessments`). New statuses: `not_visible`, `provider_pending`.
+- **Scoped provider preference.** `prefer_provider(capability, provider, *,
+  consumer=..., scope=...)` disambiguates most-specific-first: consumer, then scope,
+  then global.
+- **Explain and diff diagnostics.**
+  `harness.diagnostics.explain_requirement(consumer, capability, *, scope=..., generation_id=...)`
+  returns structured `RequirementExplanation`;
+  `harness.diagnostics.explain_scope(path, *, generation_id=...)` returns
+  `ScopeExplanation` (parent, children, capability view, local/inherited/visible
+  providers, requirements, unresolved requirements, owned registrations, tools,
+  hooks, redacted metadata); `harness.diagnostics.diff_generations(old, new, *,
+  include_unchanged=False)` returns a semantic `GenerationDiff` over
+  `CompositionChange` records (`ADDED`/`REMOVED`/`REPLACED`/`REWIRED`/`CHANGED`/
+  `UNCHANGED`). `harness.diagnostics.scopes()` lists the resolved tree.
+- **Scoped snapshots.** `RuntimeSnapshot.scopes` identifies the scope tree, each
+  scope's local providers, its capability view, and every requirement selection,
+  using identities only — never configuration or scope metadata values.
+- `examples/scoped_composition.py`, a runnable end-to-end example.
+
+### Changed
+
+- **`RuntimeSnapshot.digest()` now covers scope structure.** Topology and
+  resolution are observable through the generation a run acquires, so a change there
+  changes the digest. Snapshots recorded with 0.2 should be re-baselined; see
+  [migration.md](docs/migration.md#02-03).
+- Scope topology is part of composition identity: adding a scope, narrowing a view,
+  or changing a selected provider publishes a new generation even when no instance
+  changed.
+- `Diagnostics.plugins()` reports each entry's `scope`;
+  `Diagnostics.dependencies()` and `Diagnostics.status()` report the resolved scope
+  tree and its size.
+- `Harness.plan()` resolves with the declared scope hierarchy, so dry-run
+  diagnostics explain scoped resolutions before publication.
+
+### Guarantees
+
+- **G15 — scoped visibility.** A scope observes its own local composition, the
+  composition inherited from its ancestors, and what its capability view permits;
+  sibling-local composition is not implicitly visible.
+- **G16 — published scope immutability.** The scope tree and every
+  composition-affecting field of a published generation are immutable, and
+  scope-affecting changes become visible only through a new generation.
+- **G17 — explainability.** Every resolved requirement has an authoritative
+  provenance record (selected provider, origin scope, selection reason) and every
+  unresolved requirement has an authoritative reason.
+
+### Design decisions
+
+- Ambiguity stays explicit rather than gaining a shadowing rule: a valid local
+  provider and a valid inherited provider are both candidates until a preference
+  selects one.
+- Capability narrowing is composition visibility, not authorization; in-process
+  plugins remain trusted code.
+- A composition scope owns its entries logically; the physical owner of a
+  registration remains the plugin instance's `Scope`, so rollback, reachability, and
+  disposal reuse the existing lifecycle instead of adding a second teardown system.
+
+### Known limitations
+
+- Provider interception (`provider → wrapper → transformed provider`) is not part of
+  0.3.
+- Composition scopes are declarative-programmatic; the YAML configuration schema
+  still describes a flat composition.
+- Unchanged from 0.2: in-process Python plugins are trusted code; replay does not
+  virtualize clocks, randomness, networks, databases, or the filesystem.
+
 ## [0.2.0] - 2026-09-17
 
 Makes the kernel smaller, clearer, and harder to misuse. No new agent-framework
