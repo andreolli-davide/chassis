@@ -96,6 +96,9 @@ records, or exception strings. That is enforced by construction, not by conventi
 - Configuration snapshots contain no configuration values at all: configuration is
   represented by a hash over the redacted payload, and configuration is redacted by
   key name as well as by value.
+- Dataclass reprs of control-plane objects (`PluginInstance`, `PluginEntry`) exclude
+  the effective configuration and error text, so a log line, assertion diff, or
+  debugger view does not render secret material.
 - Recorded boundaries redact request fields whose names look sensitive.
 
 Explicit tests assert each of these, including that a tool failure whose text

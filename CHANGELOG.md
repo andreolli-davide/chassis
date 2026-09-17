@@ -5,6 +5,33 @@ All notable changes to Chassis are recorded here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with the pre-1.0 caveat
 that a minor release may break the documented surface.
 
+## [Unreleased]
+
+Hardening found by an architectural review of 0.4's incremental reuse model. No
+public API changes.
+
+### Fixed
+
+- **A per-entry `provider_preference` no longer makes desired-state reconciliation
+  non-convergent.** The desired fingerprint was computed with the preference while
+  the installed fingerprint was not, so re-applying the same declarative
+  configuration derived `REPLACE` on every apply and bumped the revision each time.
+  Preferences disambiguate resolution rather than configure the plugin; a change
+  that selects a different provider is reported through the consumer's dependency
+  bindings as `REWIRED`.
+- **A published generation no longer shares a mutable configuration mapping with
+  the control plane.** `PluginEntry.config` is frozen at install time, so mutating a
+  desired entry can no longer change the configuration an already-running
+  generation observes, or the `config_hash` of its snapshot.
+- **An unchanged composition no longer republishes a generation.** Scope
+  provenance records the instance actually mounted rather than the resolver's
+  pre-mount cached id, so full scope-tree equality does not churn on a physical id
+  that is not part of composition identity.
+- **Plugin object reprs no longer render configuration.** `PluginInstance` and
+  `PluginEntry` exclude the effective configuration (and `PluginInstance` its
+  error) from their dataclass repr, which previously reached logs and assertion
+  output.
+
 ## [0.4.0] - 2026-09-17
 
 Makes composition **incremental**: pending and published composition now carry a
