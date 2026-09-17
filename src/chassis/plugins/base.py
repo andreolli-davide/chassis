@@ -292,6 +292,7 @@ def plugin(
     optional: Mapping[str, str] | None = None,
     permissions: tuple[str, ...] | list[str] = (),
     config_version: int = 1,
+    implementation_revision: str | None = None,
     metadata: Mapping[str, Any] | None = None,
 ) -> Callable[[SetupFunction], type[Plugin]]:
     """Turn an async function into a plugin class.
@@ -311,6 +312,7 @@ def plugin(
         optional=dict(optional or {}),
         permissions=tuple(permissions),
         config_version=config_version,
+        implementation_revision=implementation_revision,
         metadata=dict(metadata or {}),
     )
 

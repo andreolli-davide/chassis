@@ -78,3 +78,18 @@ def test_manifest_serialization_is_key_sorted() -> None:
 
     assert list(payload["provides"]) == ["a", "b"]
     assert list(payload["metadata"]) == ["a", "z"]
+
+
+def test_implementation_revision_is_optional_and_validated() -> None:
+    default = PluginManifest(name="x", version="1.0.0")
+
+    assert default.implementation_revision is None
+    assert default.to_dict()["implementation_revision"] is None
+
+    declared = PluginManifest(name="x", version="1.0.0", implementation_revision="build-7")
+
+    assert declared.implementation_revision == "build-7"
+    assert declared.to_dict()["implementation_revision"] == "build-7"
+
+    with pytest.raises(ValidationError):
+        PluginManifest(name="x", version="1.0.0", implementation_revision="  ")

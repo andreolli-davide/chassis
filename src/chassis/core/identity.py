@@ -123,15 +123,18 @@ def implementation_fingerprint(
 
     The manifest identity (``name@version``) is the primary signal. The
     implementation hint disambiguates two classes that declare the same manifest,
-    which a replacement install can produce.
+    which a replacement install can produce. An author-declared
+    ``implementation_revision`` disambiguates two builds that share both, and is
+    absent from the payload when unset so existing identities are unchanged.
     """
 
-    return stable_hash(
-        {
-            "identity": manifest.identity,
-            "implementation": implementation_hint or "",
-        }
-    )
+    payload: dict[str, object] = {
+        "identity": manifest.identity,
+        "implementation": implementation_hint or "",
+    }
+    if manifest.implementation_revision is not None:
+        payload["implementation_revision"] = manifest.implementation_revision
+    return stable_hash(payload)
 
 
 def contract_fingerprint(manifest: PluginManifest) -> str:

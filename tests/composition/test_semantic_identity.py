@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from tests.composition.support import consumer, mounted, tracked_provider
 
-from chassis import Harness
+from chassis import Harness, plugin
 from chassis.core.identity import SemanticIdentity
 
 
@@ -163,3 +163,50 @@ async def test_semantically_equal_ignores_provider_instance_identity() -> None:
         assert after.reuse_key() != before.reuse_key()
     finally:
         await harness.stop()
+
+
+def build(implementation_revision: str | None = None):  # type: ignore[no-untyped-def]
+    """A plugin whose manifest declares an author-declared implementation revision."""
+
+    @plugin(
+        name="generated",
+        version="1.0.0",
+        provides={"database": "1.0.0"},
+        implementation_revision=implementation_revision,
+    )
+    async def generated(ctx) -> None:  # type: ignore[no-untyped-def]
+        return None
+
+    return generated
+
+
+async def test_implementation_revision_changes_the_implementation_input() -> None:
+    """Two builds that share name@version and qualname are still distinguishable."""
+
+    harness = Harness()
+    harness.install(build("a"), entry_id="db")
+    try:
+        await harness.start()
+        first = identity_of(harness, "db")
+
+        harness.install(build("b"), entry_id="db", replace=True)
+        await harness.reconcile()
+        second = identity_of(harness, "db")
+
+        assert first.contract_fingerprint == second.contract_fingerprint
+        assert first.implementation_fingerprint != second.implementation_fingerprint
+        assert "implementation" in second.changed_inputs(first)
+    finally:
+        await harness.stop()
+
+
+def test_implementation_revision_is_optional_and_distinguishing() -> None:
+    """Two builds that share name@version and qualname are still distinguishable."""
+
+    from chassis.core.identity import implementation_fingerprint
+
+    assert build().manifest.implementation_revision is None
+    assert build("a").manifest.implementation_revision == "a"
+    assert implementation_fingerprint(build("a").manifest, "m.q") != implementation_fingerprint(
+        build("b").manifest, "m.q"
+    )

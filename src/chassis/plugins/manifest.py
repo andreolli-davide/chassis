@@ -37,6 +37,12 @@ class PluginManifest(BaseModel):
             boundaries. Declaring a permission is not a sandbox; in-process
             plugins are trusted code.
         config_version: Schema version of the plugin's configuration.
+        implementation_revision: Optional author-declared identity of the code
+            implementation. Use it when two builds share ``name@version`` and a
+            module qualname but are not the same code (a generated, vendored, or
+            externally authored implementation). It participates in the
+            implementation fingerprint and therefore in semantic identity; when
+            it is absent, identity falls back to the previous behaviour.
         metadata: Free-form, non-secret metadata.
     """
 
@@ -49,7 +55,17 @@ class PluginManifest(BaseModel):
     optional: Mapping[str, str] = Field(default_factory=dict)
     permissions: Sequence[str] = ()
     config_version: int = 1
+    implementation_revision: str | None = None
     metadata: Mapping[str, Any] = Field(default_factory=dict)
+
+    @field_validator("implementation_revision")
+    @classmethod
+    def _validate_implementation_revision(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not value.strip() or value != value.strip():
+            raise ValueError("implementation_revision must be a non-empty, trimmed string")
+        return value
 
     @field_validator("version")
     @classmethod
@@ -125,5 +141,6 @@ class PluginManifest(BaseModel):
             "optional": dict(sorted(self.optional.items())),
             "permissions": sorted(self.permissions),
             "config_version": self.config_version,
+            "implementation_revision": self.implementation_revision,
             "metadata": dict(sorted(self.metadata.items())),
         }
