@@ -18,7 +18,7 @@ from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from chassis.agent_spec import AgentRevision, AgentSpec
+from chassis.agent_spec import AgentRevision, AgentSpec, composition_payload
 from chassis.budget.governor import BudgetGovernor, budget_scope, current_budget
 from chassis.budget.models import BudgetLimits
 from chassis.core.errors import (
@@ -30,6 +30,7 @@ from chassis.core.errors import (
 from chassis.core.scope import Scope
 from chassis.hooks.registry import HookSnapshot
 from chassis.hooks.types import HookEvent
+from chassis.persistence.hashing import stable_hash
 from chassis.runtime import (
     AgentEvent,
     AgentRequest,
@@ -38,6 +39,7 @@ from chassis.runtime import (
     HarnessRunContext,
     RunEnvironment,
 )
+from chassis.secrets.redaction import redact_config
 
 if TYPE_CHECKING:
     from chassis.core.generation import RuntimeGeneration
@@ -51,6 +53,12 @@ __all__ = [
     "AgentSpec",
     "ScopedAgents",
 ]
+
+#: Prefix of the plugin entry ids an agent's scope declares.
+_AGENT_ENTRY_PREFIX = "agent:"
+#: Reserved scope-metadata keys identifying the agent revision a scope materialized.
+_AGENT_METADATA_KEY = "chassis.agent"
+_AGENT_REVISION_METADATA_KEY = "chassis.agent_revision"
 
 
 class AgentNotFound(ChassisError):
@@ -82,6 +90,10 @@ class AgentRegistry:
     def __init__(self, *, harness: Harness | None = None) -> None:
         self._harness = harness
         self._runtimes: dict[str, AgentRuntime] = {}
+        self._spec_history: dict[str, dict[str, AgentRevision]] = {}
+        self._active_revisions: dict[str, str] = {}
+        self._retired: set[str] = set()
+        self._owned_scope_paths: set[str] = set()
 
     # ------------------------------------------------------------- registration
 
@@ -141,7 +153,272 @@ class AgentRegistry:
         return isinstance(name, str) and name in self._runtimes
 
     def to_dict(self) -> dict[str, Any]:
-        return {"agents": list(self.names())}
+        return {
+            "agents": list(self.names()),
+            "specs": [revision.to_dict() for revision in self.specs()],
+            "revisions": {name: list(self.revisions(name)) for name in sorted(self._spec_history)},
+            "retired": sorted(self._retired),
+        }
+
+    # ------------------------------------------------------------ agent specs
+
+    def install(self, spec: AgentSpec, *, replace: bool = False) -> AgentRevision:
+        """Publish an immutable agent revision and materialize its composition.
+
+        The spec materializes through the existing composition primitives: a
+        :class:`~chassis.composition.CompositionScope` at ``spec.scope_path`` owns
+        the plugin contributions, the capability and tool views, the scope
+        requirements, and the agent's reserved metadata. Nothing here introduces a
+        second composition engine.
+
+        Args:
+            spec: The composition description to publish.
+            replace: Required to make a different revision current for a name that
+                already has one. A ``(name, revision)`` pair that was published with
+                different content is rejected: revisions are immutable.
+
+        Raises:
+            ConfigurationError: the revision is already published with different
+                content, a different revision is active without ``replace``, or a
+                declared plugin reference is unknown.
+        """
+
+        self._require_harness()
+        history = self._spec_history.setdefault(spec.name, {})
+        published = history.get(spec.revision)
+        if published is not None and published.spec != spec:
+            raise ConfigurationError(
+                "a published agent revision is immutable; declare a new revision",
+                agent=spec.name,
+                revision=spec.revision,
+            )
+        active = self._active_revisions.get(spec.name)
+        if active == spec.revision and published is not None:
+            return published
+        if active is not None and active != spec.revision and not replace:
+            raise ConfigurationError(
+                "agent already has an active revision; pass replace=True to change it",
+                agent=spec.name,
+                active=active,
+                requested=spec.revision,
+            )
+        previous: AgentRevision | None = None
+        if active is not None and active != spec.revision:
+            candidate = history.get(active)
+            if candidate is not None and candidate.scope != spec.scope_path:
+                # The revision moves to a different scope: withdraw the old one
+                # entirely. A revision that stays in the same scope is reconciled
+                # in place so unchanged contributions stay mounted and reusable.
+                self._withdraw(candidate)
+            else:
+                previous = candidate
+        revision = self._materialize(spec, previous=previous)
+        history[spec.revision] = revision
+        self._active_revisions[spec.name] = spec.revision
+        self._retired.discard(spec.name)
+        return revision
+
+    def replace(self, spec: AgentSpec) -> AgentRevision:
+        """Publish ``spec`` as the current revision of its agent."""
+
+        return self.install(spec, replace=True)
+
+    def remove(self, name: str) -> bool:
+        """Retire an agent: no new run selects it.
+
+        The active revision's contributions leave desired state, so the next
+        generation no longer contains them. Published generations, and the
+        resources they reach, are unaffected: a run pinned to an older generation
+        keeps observing it until its lease ends. Historical revisions stay
+        reachable for diagnostics and diffing.
+        """
+
+        history = self._spec_history.get(name)
+        if history is None:
+            return False
+        self._retired.add(name)
+        active = self._active_revisions.pop(name, None)
+        if active is not None:
+            previous = history.get(active)
+            if previous is not None:
+                self._withdraw(previous)
+        return True
+
+    def is_retired(self, name: str) -> bool:
+        """Whether an agent has been retired and no new run selects it."""
+
+        return name in self._retired
+
+    def active_spec(self, name: str) -> AgentRevision | None:
+        """The revision new runs select, or ``None`` when none is active."""
+
+        revision = self._active_revisions.get(name)
+        if revision is None:
+            return None
+        return self._spec_history.get(name, {}).get(revision)
+
+    def spec(self, name: str, revision: str | None = None) -> AgentRevision:
+        """Return a published revision, active when ``revision`` is omitted.
+
+        Raises:
+            AgentNotFound: the agent or revision is unknown.
+            AgentRetired: the agent has been retired and no revision was named.
+        """
+
+        history = self._spec_history.get(name)
+        if history is None:
+            raise AgentNotFound(
+                f"agent {name!r} has no published spec",
+                agent=name,
+                available=sorted(self._spec_history),
+            )
+        if revision is None:
+            revision = self._active_revisions.get(name)
+            if revision is None:
+                raise AgentRetired(
+                    "agent has been retired; name a revision to inspect it",
+                    agent=name,
+                    revisions=sorted(history),
+                )
+        published = history.get(revision)
+        if published is None:
+            raise AgentNotFound(
+                f"agent {name!r} has no revision {revision!r}",
+                agent=name,
+                revision=revision,
+                revisions=sorted(history),
+            )
+        return published
+
+    def revisions(self, name: str) -> tuple[str, ...]:
+        """Published revisions of one agent, in the order they were published."""
+
+        return tuple(self._spec_history.get(name, {}))
+
+    def specs(self) -> tuple[AgentRevision, ...]:
+        """The active revision of every agent, in deterministic order."""
+
+        active = [
+            revision
+            for name in sorted(self._active_revisions)
+            if (revision := self.active_spec(name)) is not None
+        ]
+        return tuple(active)
+
+    def history(self) -> tuple[AgentRevision, ...]:
+        """Every published revision, newest publication last, name-major order."""
+
+        collected: list[AgentRevision] = []
+        for name in sorted(self._spec_history):
+            collected.extend(self._spec_history[name].values())
+        return tuple(collected)
+
+    def _entry_id(self, agent: str, plugin: str) -> str:
+        return f"{_AGENT_ENTRY_PREFIX}{agent}:{plugin}"
+
+    def _materialize(
+        self, spec: AgentSpec, *, previous: AgentRevision | None = None
+    ) -> AgentRevision:
+        """Declare the spec's composition in the control plane.
+
+        Reuses the exact machinery a hand-authored scope uses: the scope owns its
+        entries, its capability and tool views narrow resolution and visibility,
+        and its requirements are resolved with provenance. Desired-state changes
+        take effect on the next reconciliation.
+        """
+
+        harness = self._require_harness()
+        tree = harness.composition
+        path = spec.scope_path
+        existed = tree.get(path) is not None
+        scope = tree.ensure(path)
+        if not existed:
+            self._owned_scope_paths.add(path)
+
+        if spec.capabilities is None:
+            scope.unrestrict()
+        else:
+            scope.restrict(*sorted(spec.capabilities))
+        if spec.tools is None:
+            scope.expose_all_tools()
+        else:
+            scope.select_tools(*sorted(spec.tools))
+
+        for requirement in scope.requirements:
+            scope.drop_requirement(requirement.name)
+        for name, specifier in sorted(spec.requires.items()):
+            scope.require(name, specifier)
+        for name, specifier in sorted(spec.optional.items()):
+            scope.require(name, specifier, optional=True)
+
+        # An agent scope is agent-owned, so the reserved keys are safe. They are
+        # what lets a published generation say which revision it materialized,
+        # which is how a run stays pinned to the revision it started with.
+        metadata = dict(spec.metadata)
+        metadata[_AGENT_METADATA_KEY] = spec.name
+        metadata[_AGENT_REVISION_METADATA_KEY] = spec.revision
+        scope.set_metadata(metadata)
+
+        entries = self._install_contributions(spec, path)
+        if previous is not None:
+            for entry_id in previous.entries:
+                if entry_id not in entries:
+                    harness.uninstall(entry_id)
+        digest = stable_hash(redact_config(composition_payload(spec), harness.redactor))
+        return AgentRevision(spec=spec, scope=path, entries=entries, composition_digest=digest)
+
+    def _install_contributions(self, spec: AgentSpec, path: str) -> tuple[str, ...]:
+        """Declare each plugin contribution as an entry local to the agent scope.
+
+        An unchanged contribution is left exactly as it is, so its entry revision
+        does not move and 0.4 incremental reuse can carry the mounted instance
+        across the revision change.
+        """
+
+        harness = self._require_harness()
+        entries: list[str] = []
+        for plugin_name, value in sorted(spec.plugins.items()):
+            entry_id = self._entry_id(spec.name, plugin_name)
+            existing = harness.entry(entry_id)
+            if isinstance(value, Mapping):
+                config = dict(value)
+                plugin_type = harness.catalog.get(plugin_name)
+                if (
+                    existing is not None
+                    and existing.manifest.name == plugin_name
+                    and dict(existing.config) == config
+                    and existing.scope == path
+                ):
+                    entries.append(entry_id)
+                    continue
+                harness.install(
+                    plugin_type,
+                    entry_id=entry_id,
+                    config=config,
+                    replace=existing is not None,
+                    scope=path,
+                )
+            else:
+                harness.install(
+                    value,
+                    entry_id=entry_id,
+                    replace=existing is not None,
+                    scope=path,
+                )
+            entries.append(entry_id)
+        return tuple(sorted(entries))
+
+    def _withdraw(self, revision: AgentRevision) -> None:
+        """Withdraw a revision's contributions from desired state."""
+
+        harness = self._require_harness()
+        tree = harness.composition
+        if revision.scope in self._owned_scope_paths and tree.get(revision.scope) is not None:
+            tree.remove(revision.scope)
+            self._owned_scope_paths.discard(revision.scope)
+            return
+        for entry_id in revision.entries:
+            harness.uninstall(entry_id)
 
     # -------------------------------------------------------------- invocation
 
