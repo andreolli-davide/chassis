@@ -31,6 +31,7 @@ from chassis.capabilities import (
     CapabilitySnapshot,
     ScopedCapabilities,
 )
+from chassis.composition import CompositionScope
 from chassis.core.errors import (
     BudgetExceeded,
     CapabilityAmbiguous,
@@ -110,6 +111,7 @@ __all__ = [
     "CapabilityVersionMismatch",
     "ChassisError",
     "CleanupFailure",
+    "CompositionScope",
     "ConfigurationError",
     "DependencyResolver",
     "Diagnostics",

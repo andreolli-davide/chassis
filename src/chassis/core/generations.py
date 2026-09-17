@@ -34,6 +34,7 @@ from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from chassis.capabilities.snapshot import CapabilitySnapshot
+from chassis.composition import ScopeTree
 from chassis.core.errors import GenerationConflictError, HarnessStateError
 from chassis.core.generation import (
     GenerationAccounting,
@@ -143,11 +144,14 @@ class GenerationManager:
         snapshot_factory: Callable[[str], CapabilitySnapshot],
         instances: Iterable[PluginInstance],
         metadata: Mapping[str, Any] | None = None,
+        scopes: ScopeTree | None = None,
     ) -> RuntimeGeneration:
         """Create a candidate generation. It is invisible until published.
 
         ``snapshot_factory`` receives the new generation id so that the immutable
-        capability snapshot can name its own generation.
+        capability snapshot can name its own generation. ``scopes`` is the resolved
+        composition tree for the candidate; it defaults to a flat root scope, which
+        is what a composition with no declared scopes resolves to.
         """
 
         sequence = next(self._counter)
@@ -159,6 +163,7 @@ class GenerationManager:
             instances=tuple(instances),
             accounting=GenerationAccounting(clock=self._clock),
             metadata=dict(metadata or {}),
+            scopes=ScopeTree.root_only() if scopes is None else scopes,
         )
 
     def publish(self, generation: RuntimeGeneration) -> RuntimeGeneration | None:

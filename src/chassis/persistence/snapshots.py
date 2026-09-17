@@ -58,12 +58,15 @@ class RuntimeSnapshot:
     agent: str | None = None
     created_at: float = field(default_factory=time.time)
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    scopes: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "plugins", MappingProxyType(dict(self.plugins)))
         object.__setattr__(self, "capabilities", MappingProxyType(dict(self.capabilities)))
         if not isinstance(self.metadata, MappingProxyType):
             object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
+        if not isinstance(self.scopes, MappingProxyType):
+            object.__setattr__(self, "scopes", MappingProxyType(dict(self.scopes)))
 
     def to_dict(self) -> dict[str, Any]:
         """Canonical, JSON-compatible representation used for hashing and emission."""
@@ -84,6 +87,7 @@ class RuntimeSnapshot:
             "tool_schema_hash": self.tool_schema_hash,
             "prompt_hash": self.prompt_hash,
             "metadata": dict(sorted(self.metadata.items(), key=lambda item: str(item[0]))),
+            "scopes": self.scopes,
         }
 
     def digest(self) -> str:
@@ -125,6 +129,7 @@ class RuntimeSnapshot:
             prompt_hash=prompt_hash,
             created_at=generation.created_at,
             metadata=effective_redactor.redact_value(dict(metadata or {})),
+            scopes=generation.scopes.fingerprint(),
         )
 
 

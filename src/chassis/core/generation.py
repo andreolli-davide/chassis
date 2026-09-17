@@ -27,6 +27,7 @@ from types import MappingProxyType
 from typing import Any
 
 from chassis.capabilities.snapshot import CapabilitySnapshot
+from chassis.composition import ScopeTree
 from chassis.plugins.lifecycle import PluginInstance
 
 __all__ = [
@@ -123,6 +124,7 @@ class RuntimeGeneration:
     accounting: GenerationAccounting = field(compare=False, repr=False)
     created_at: float = field(default_factory=time.time)
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    scopes: ScopeTree = field(default_factory=ScopeTree.root_only)
 
     def __post_init__(self) -> None:
         if not isinstance(self.metadata, MappingProxyType):
@@ -168,6 +170,7 @@ class RuntimeGeneration:
             "plugins": self.plugin_versions(),
             "capabilities": self.snapshot.versions(),
             "metadata": dict(self.metadata),
+            "scopes": self.scopes.to_dict(),
         }
 
 

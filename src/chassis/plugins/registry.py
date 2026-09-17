@@ -29,7 +29,7 @@ from chassis.hooks.registry import HookRegistry
 from chassis.plugins.base import Plugin, PluginContext
 from chassis.plugins.lifecycle import PluginHealth, PluginInstance, PluginState
 from chassis.plugins.manifest import PluginManifest
-from chassis.plugins.resolver import PluginCandidate
+from chassis.plugins.resolver import ROOT_SCOPE, PluginCandidate
 from chassis.secrets.base import SecretProvider
 from chassis.tools.registry import ToolRegistry
 
@@ -43,6 +43,10 @@ class PluginEntry:
     ``revision`` increases every time the entry is installed. A mounted instance
     records the revision it was created for, so a re-installed entry is never
     mistaken for the instance that is already running.
+
+    ``scope`` is the composition scope path that declares the entry. It decides
+    which providers the entry may see when resolving requirements, and which
+    scope owns the entry in diagnostics.
     """
 
     entry_id: str
@@ -50,6 +54,7 @@ class PluginEntry:
     manifest: PluginManifest
     config: Mapping[str, object] = field(default_factory=dict)
     revision: int = 1
+    scope: str = ROOT_SCOPE
 
 
 class PluginRegistry:
@@ -83,6 +88,7 @@ class PluginRegistry:
         entry_id: str | None = None,
         config: Mapping[str, object] | None = None,
         replace: bool = False,
+        scope: str = ROOT_SCOPE,
     ) -> PluginEntry:
         """Register a desired plugin entry.
 
@@ -99,6 +105,7 @@ class PluginRegistry:
             replace: Replace an existing desired entry and bump its revision. A
                 running instance of the previous revision stays alive until no
                 generation can reach it.
+            scope: Composition scope path that declares this entry.
         """
 
         plugin_instance = plugin(config) if isinstance(plugin, type) else plugin
@@ -122,6 +129,7 @@ class PluginRegistry:
             manifest=manifest,
             config=effective_config,
             revision=revision,
+            scope=scope,
         )
         self._entries[resolved_entry_id] = entry
         return entry
@@ -181,9 +189,15 @@ class PluginRegistry:
                     instance_id=None if instance is None else instance.instance_id,
                     active=active,
                     registrations=registrations,
+                    scope=entry.scope,
                 )
             )
         return tuple(candidates)
+
+    def entries_for_scope(self, path: str) -> tuple[str, ...]:
+        """Entry ids declared in one composition scope, in deterministic order."""
+
+        return tuple(entry.entry_id for entry in self.entries() if entry.scope == path)
 
     # -------------------------------------------------------------- lifecycle
 

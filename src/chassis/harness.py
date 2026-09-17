@@ -43,6 +43,12 @@ from chassis.budget.models import BudgetLimits
 from chassis.capabilities.keys import POLICY, SECRETS, CapabilityKey
 from chassis.capabilities.registry import CapabilityRegistration, CapabilityRegistry
 from chassis.capabilities.snapshot import CapabilitySnapshot
+from chassis.composition import (
+    CompositionScope,
+    CompositionTree,
+    ScopeTree,
+    build_scope_tree,
+)
 from chassis.config.loader import PluginCatalog, parse_config
 from chassis.config.models import HarnessConfig
 from chassis.config.reconcile import (
@@ -54,6 +60,7 @@ from chassis.config.reconcile import (
 )
 from chassis.core.errors import (
     CleanupFailure,
+    ConfigurationError,
     EffectCleanupError,
     HarnessStateError,
     HookExecutionError,
@@ -227,6 +234,7 @@ class Harness:
         self._catalog = PluginCatalog()
         self._replay = replay
         self._provisions: dict[str, tuple[CapabilityKey, object, str | None]] = {}
+        self._composition = CompositionTree(self)
         self._config: HarnessConfig | None = None
         self._dirty = False
         self._default_budget_limits = default_budget_limits
@@ -286,6 +294,19 @@ class Harness:
         return self._catalog
 
     @property
+    def composition(self) -> CompositionTree:
+        """Desired-state tree of composition scopes.
+
+        Scopes are control-plane desired state: create one with
+        ``harness.composition.child("research")``, declare entries with
+        ``scope.install(...)``, and they become visible only when the next
+        generation is published. A published generation carries an immutable
+        resolved copy (:class:`~chassis.composition.ScopeTree`).
+        """
+
+        return self._composition
+
+    @property
     def config(self) -> HarnessConfig | None:
         """Configuration applied most recently, if any."""
 
@@ -329,7 +350,7 @@ class Harness:
             self.prefer_provider(capability, provider)
         for entry in config.enabled_entries:
             for capability, provider in entry.provider_preference.items():
-                self.prefer_provider(f"{entry.id}:{capability}", provider)
+                self.prefer_provider(capability, provider, consumer=entry.id)
 
         self._config = config
         return ConfigApplyResult(config=config, changes=changes, applied=tuple(applied))
@@ -420,6 +441,7 @@ class Harness:
         entry_id: str | None = None,
         config: Mapping[str, object] | None = None,
         replace: bool = False,
+        scope: CompositionScope | str | None = None,
     ) -> str:
         """Add a desired plugin entry and return its stable entry id.
 
@@ -427,13 +449,42 @@ class Harness:
         :func:`~chassis.plugins.plugin`. Desired-state changes take effect on the
         next :meth:`reconcile`; ``replace=True`` swaps an existing entry for a new
         revision without disturbing the running instance until then.
+
+        Args:
+            scope: Composition scope that declares the entry, either a
+                :class:`~chassis.composition.CompositionScope` or its path. The
+                scope decides which providers the entry may see. Defaults to the
+                root scope.
         """
 
+        path = self._scope_path(scope)
         entry = self._plugin_registry.install(
-            plugin, entry_id=entry_id, config=config, replace=replace
+            plugin, entry_id=entry_id, config=config, replace=replace, scope=path
         )
         self._dirty = True
         return entry.entry_id
+
+    def entries_for_scope(self, path: str) -> tuple[str, ...]:
+        """Entry ids declared in one composition scope."""
+
+        return self._plugin_registry.entries_for_scope(path)
+
+    def mark_dirty(self) -> None:
+        """Signals that desired composition changed and needs reconciliation."""
+
+        self._dirty = True
+
+    def _scope_path(self, scope: CompositionScope | str | None) -> str:
+        """Resolve a scope argument to a validated path."""
+
+        if scope is None:
+            return self._composition.root.path
+        path = scope.path if isinstance(scope, CompositionScope) else scope
+        if self._composition.get(path) is None:
+            raise ConfigurationError(
+                "cannot install into an undeclared composition scope", path=path
+            )
+        return path
 
     def provide(
         self,
@@ -484,14 +535,42 @@ class Harness:
         self._dirty = self._dirty or removed
         return removed
 
-    def prefer_provider(self, capability: str, provider_entry_id: str) -> None:
+    def prefer_provider(
+        self,
+        capability: str,
+        provider_entry_id: str,
+        *,
+        consumer: str | None = None,
+        scope: CompositionScope | str | None = None,
+    ) -> None:
         """Disambiguate a capability that several providers satisfy.
 
-        Keyed by capability name, or ``"<entry id>:<capability>"`` to disambiguate
-        for one consumer only.
+        The argument selects how broadly the preference applies, most specific
+        first at resolution time:
+
+        - ``consumer``: only for that entry's requirements
+          (``"<entry id>:<capability>"``);
+        - ``scope``: only for requirements resolved in that composition scope
+          (``"scope:<path>:<capability>"``);
+        - neither: for every consumer of the capability.
+
+        A preference never hides an ambiguity that has no preference: without one,
+        a requirement satisfied by several visible providers stays ambiguous and
+        its consumer stays pending.
         """
 
-        self._provider_preference[capability] = provider_entry_id
+        if consumer is not None and scope is not None:
+            raise ConfigurationError(
+                "a provider preference cannot be scoped to a consumer and a scope at once",
+                consumer=consumer,
+            )
+        if consumer is not None:
+            key = f"{consumer}:{capability}"
+        elif scope is not None:
+            key = f"scope:{self._scope_path(scope)}:{capability}"
+        else:
+            key = capability
+        self._provider_preference[key] = provider_entry_id
         self._dirty = True
 
     # --------------------------------------------------------------- lifecycle
@@ -668,7 +747,9 @@ class Harness:
             self._require_composable()
 
             plan = self._resolver.resolve(
-                self._plugin_registry.candidates(), prefer=self._provider_preference
+                self._plugin_registry.candidates(),
+                prefer=self._provider_preference,
+                scopes=self._composition.specs(),
             )
             self._telemetry.event(
                 "dependency.resolve",
@@ -677,6 +758,7 @@ class Harness:
                     "pending": len(plan.pending),
                     "cycles": len(plan.cycles),
                     "edges": len(plan.edges),
+                    "scopes": len(plan.scopes),
                 },
             )
             plan.raise_for_cycles()
@@ -693,9 +775,16 @@ class Harness:
                 self._last_failures = tuple(failures)
                 raise
 
+            scope_tree = build_scope_tree(
+                plan=plan,
+                instances=instances,
+                registrations=self._capability_registry.registrations(),
+            )
             snapshot_factory = self._snapshot_factory(instances)
             current = self._generations.current
-            if current is not None and self._same_composition(current, instances, snapshot_factory):
+            if current is not None and self._same_composition(
+                current, instances, snapshot_factory, scope_tree
+            ):
                 # Nothing changed: never churn generations for a no-op reconcile.
                 generation = current
                 reused = [instance.entry_id for instance in instances]
@@ -706,7 +795,8 @@ class Harness:
                 generation = self._generations.build(
                     snapshot_factory=snapshot_factory,
                     instances=instances,
-                    metadata={"plugins": len(instances)},
+                    metadata={"plugins": len(instances), "scopes": len(scope_tree)},
+                    scopes=scope_tree,
                 )
                 previous = self._generations.publish(generation)
                 if previous is not None:
@@ -912,11 +1002,20 @@ class Harness:
         current: RuntimeGeneration,
         instances: tuple[PluginInstance, ...],
         snapshot_factory: Any,
+        scope_tree: ScopeTree,
     ) -> bool:
-        """Whether the candidate is composition-identical to the current generation."""
+        """Whether the candidate is composition-identical to the current generation.
+
+        Scope topology is part of composition identity: adding an empty child scope
+        or narrowing a capability view is observable through the generation a run
+        acquires, so it must publish a new generation even when the mounted
+        instances are unchanged.
+        """
 
         candidate_ids = tuple(instance.instance_id for instance in instances)
         if candidate_ids != current.instance_ids:
+            return False
+        if scope_tree != current.scopes:
             return False
         return snapshot_factory(current.generation_id) == current.snapshot
 
@@ -1176,11 +1275,17 @@ class Harness:
     # ------------------------------------------------------------- dry-run plan
 
     def plan(self, *, prefer: Mapping[str, str] | None = None) -> ResolutionPlan:
-        """Resolve the desired state without applying it."""
+        """Resolve the desired state without applying it.
+
+        The plan includes the composition scope tree and per-requirement
+        provenance, so diagnostics can explain a resolution before it is
+        published -- including why a requirement is still pending.
+        """
 
         return self._resolver.resolve(
             self._plugin_registry.candidates(),
             prefer=dict(self._provider_preference) if prefer is None else prefer,
+            scopes=self._composition.specs(),
         )
 
     def entry(self, entry_id: str) -> PluginEntry | None:
