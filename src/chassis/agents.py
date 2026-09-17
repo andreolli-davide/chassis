@@ -18,6 +18,7 @@ from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
+from chassis.agent_spec import AgentRevision, AgentSpec
 from chassis.budget.governor import BudgetGovernor, budget_scope, current_budget
 from chassis.budget.models import BudgetLimits
 from chassis.core.errors import (
@@ -42,13 +43,31 @@ if TYPE_CHECKING:
     from chassis.core.generation import RuntimeGeneration
     from chassis.harness import Harness
 
-__all__ = ["AgentNotFound", "AgentRegistry", "ScopedAgents"]
+__all__ = [
+    "AgentNotFound",
+    "AgentRegistry",
+    "AgentRetired",
+    "AgentRevision",
+    "AgentSpec",
+    "ScopedAgents",
+]
 
 
 class AgentNotFound(ChassisError):
     """Raised when an agent name is not registered."""
 
     code = "agent_not_found"
+
+
+class AgentRetired(ChassisError):
+    """Raised when a new run selects an agent that has been retired.
+
+    Retirement means *no new execution selects it*; runs already pinned to a
+    published revision keep observing it, and its resources are disposed only when
+    no live generation reaches them.
+    """
+
+    code = "agent_retired"
 
 
 class AgentRegistry:

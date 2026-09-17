@@ -12,9 +12,10 @@ warnings, which ``types.MappingProxyType`` does not.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
-__all__ = ["FrozenDict"]
+__all__ = ["FrozenDict", "freeze"]
 
 
 class FrozenDict(dict[str, Any]):
@@ -43,3 +44,24 @@ class FrozenDict(dict[str, Any]):
         """Return a mutable copy, so callers can change a copy explicitly."""
 
         return dict(self)
+
+
+def freeze(value: Any) -> Any:
+    """Deep-freeze a JSON-compatible value for publication.
+
+    Mappings become :class:`FrozenDict`, sequences become tuples, and sets become
+    frozensets, recursively. Values that are not containers (plugin types,
+    instances, scalars) are returned unchanged, so a caller can freeze a mapping
+    whose values include callables. Freezing is what stops a control-plane
+    authoring object from aliasing mutable state into a published revision.
+    """
+
+    if isinstance(value, FrozenDict):
+        return value
+    if isinstance(value, Mapping):
+        return FrozenDict({str(key): freeze(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(freeze(item) for item in value)
+    if isinstance(value, (set, frozenset)):
+        return frozenset(freeze(item) for item in value)
+    return value
