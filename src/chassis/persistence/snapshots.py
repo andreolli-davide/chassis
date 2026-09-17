@@ -56,6 +56,7 @@ class RuntimeSnapshot:
     graph_definition_hash: str | None = None
     prompt_hash: str | None = None
     agent: str | None = None
+    agent_revision: str | None = None
     created_at: float = field(default_factory=time.time)
     metadata: Mapping[str, Any] = field(default_factory=dict)
     scopes: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
@@ -84,6 +85,7 @@ class RuntimeSnapshot:
             "sequence": self.sequence,
             "agent_runtime": self.agent_runtime,
             "agent": self.agent,
+            "agent_revision": self.agent_revision,
             "plugins": dict(sorted(self.plugins.items())),
             "capabilities": {
                 name: list(versions) for name, versions in sorted(self.capabilities.items())
@@ -125,6 +127,27 @@ class RuntimeSnapshot:
 
         return stable_hash(self.semantic_composition())
 
+    def public_composition_digest(self) -> str:
+        """Additive alias for :meth:`semantic_digest`.
+
+        The name states what the digest is: the *public* composition identity a
+        consumer can observe, as opposed to :meth:`physical_digest`, which covers
+        the runtime instances. ``semantic_digest`` is unchanged and remains the
+        supported name.
+        """
+
+        return self.semantic_digest()
+
+    @property
+    def agent_identity(self) -> str | None:
+        """``name@revision`` identity of the agent this snapshot describes."""
+
+        if self.agent is None:
+            return None
+        if self.agent_revision is None:
+            return self.agent
+        return f"{self.agent}@{self.agent_revision}"
+
     def physical_digest(self) -> str:
         """Stable hash of the runtime instances this snapshot was published with.
 
@@ -148,6 +171,7 @@ class RuntimeSnapshot:
         tools: ToolSnapshot | None = None,
         redactor: SecretRedactor | None = None,
         agent: str | None = None,
+        agent_revision: str | None = None,
         agent_runtime: str = "langgraph",
         graph_definition_hash: str | None = None,
         prompt_hash: str | None = None,
@@ -162,6 +186,7 @@ class RuntimeSnapshot:
             sequence=generation.sequence,
             agent_runtime=agent_runtime,
             agent=agent,
+            agent_revision=agent_revision,
             plugins={
                 instance.manifest.name: instance.manifest.version
                 for instance in generation.instances

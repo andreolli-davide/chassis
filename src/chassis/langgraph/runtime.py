@@ -227,6 +227,7 @@ class LangGraphAgent:
             kind, data = self._split_chunk(chunk)
             yield AgentEvent(
                 agent=self._definition.name,
+                agent_revision=run_context.agent_revision,
                 generation_id=run_context.generation_id,
                 run_id=run_context.run_id,
                 kind=kind,
@@ -251,6 +252,7 @@ class LangGraphAgent:
             {
                 "chassis_agent": self._definition.name,
                 "chassis_agent_version": self._definition.version,
+                "chassis_agent_revision": run_context.agent_revision,
                 "chassis_generation_id": run_context.generation_id,
                 "chassis_run_id": run_context.run_id,
                 "chassis_user_id": run_context.user_id,
@@ -277,6 +279,7 @@ class LangGraphAgent:
             run_id=run_context.run_id,
             output=raw,
             thread_id=request.thread_id,
+            agent_revision=run_context.agent_revision,
             interrupts=_interrupts(raw),
             duration_seconds=duration,
             metadata={

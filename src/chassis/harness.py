@@ -1350,6 +1350,7 @@ class Harness:
         generation: RuntimeGeneration,
         *,
         agent: str | None = None,
+        agent_revision: str | None = None,
         graph_definition_hash: str | None = None,
         prompt_hash: str | None = None,
         metadata: Mapping[str, Any] | None = None,
@@ -1365,6 +1366,7 @@ class Harness:
             tools=self.tool_snapshot(generation),
             redactor=self._redactor,
             agent=agent,
+            agent_revision=agent_revision,
             graph_definition_hash=graph_definition_hash,
             prompt_hash=prompt_hash,
             metadata=metadata,
@@ -1380,7 +1382,9 @@ class Harness:
         for generation in self._generations.all_generations():
             if generation.generation_id == run_context.generation_id:
                 return self.snapshot_for(
-                    generation, agent=getattr(run_context, "agent", None) or None
+                    generation,
+                    agent=getattr(run_context, "agent", None) or None,
+                    agent_revision=getattr(run_context, "agent_revision", None),
                 )
         raise HarnessStateError(
             "run context refers to an unknown generation",

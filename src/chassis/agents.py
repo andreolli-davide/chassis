@@ -420,6 +420,55 @@ class AgentRegistry:
         for entry_id in revision.entries:
             harness.uninstall(entry_id)
 
+    # ----------------------------------------------------------- run selection
+
+    def _resolve_agent(self, agent: str) -> tuple[AgentRuntime, AgentRevision | None]:
+        """Resolve the runtime and the revision new runs select for ``agent``.
+
+        An agent published through a spec selects its active revision and the
+        runtime that revision references. An agent that was only registered as a
+        runtime keeps working unchanged, with no revision attribution.
+        """
+
+        revision: AgentRevision | None = None
+        if agent in self._spec_history:
+            revision = self.active_spec(agent)
+            if revision is None:
+                raise AgentRetired(
+                    "agent has been retired; no new run selects it",
+                    agent=agent,
+                    revisions=sorted(self._spec_history[agent]),
+                )
+        runtime_name = agent
+        if revision is not None and revision.runtime_ref is not None:
+            runtime_name = revision.runtime_ref
+        return self.get(runtime_name), revision
+
+    def _pin_revision(
+        self,
+        agent: str,
+        selected: AgentRevision | None,
+        generation: RuntimeGeneration,
+    ) -> AgentRevision | None:
+        """The revision the acquired generation actually materialized.
+
+        The active revision and the acquired generation normally agree, because
+        invocation reconciles pending changes first. If a concurrent publication
+        slipped in between, the generation wins: a run is attributed to the
+        composition it acquired, never to one that replaced it.
+        """
+
+        if selected is None:
+            return None
+        resolved = generation.scopes.get(selected.scope)
+        if resolved is None:
+            return selected
+        revision = resolved.metadata.get(_AGENT_REVISION_METADATA_KEY)
+        if not isinstance(revision, str) or revision == selected.revision:
+            return selected
+        published = self._spec_history.get(agent, {}).get(revision)
+        return selected if published is None else published
+
     # -------------------------------------------------------------- invocation
 
     async def invoke(
@@ -442,7 +491,7 @@ class AgentRegistry:
         """
 
         harness = self._require_harness()
-        runtime = self.get(agent)
+        runtime, selected = self._resolve_agent(agent)
         agent_request = self._build_request(
             request,
             input=input,
@@ -454,11 +503,19 @@ class AgentRegistry:
 
         await harness.ensure_ready()
         async with harness.acquire() as generation:
-            environment = self._budgeted_environment(harness, generation, limits)
+            pinned = self._pin_revision(agent, selected, generation)
+            agent_revision = None if pinned is None else pinned.revision
+            environment = self._budgeted_environment(
+                harness,
+                generation,
+                limits,
+                scope=None if pinned is None else pinned.scope,
+            )
             run_context = HarnessRunContext.new(
                 generation=generation,
                 environment=environment,
                 agent=agent,
+                agent_revision=agent_revision,
                 user_id=user_id,
                 tenant_id=tenant_id,
                 thread_id=agent_request.thread_id,
@@ -466,11 +523,15 @@ class AgentRegistry:
             )
             graph_digest = _definition_digest(runtime, run_context)
             snapshot = harness.snapshot_for(
-                generation, agent=agent, graph_definition_hash=graph_digest
+                generation,
+                agent=agent,
+                agent_revision=agent_revision,
+                graph_definition_hash=graph_digest,
             )
             hooks = harness.hook_snapshot(generation)
             run_payload: dict[str, Any] = {
                 "agent": agent,
+                "agent_revision": agent_revision,
                 "generation_id": generation.generation_id,
                 "thread_id": agent_request.thread_id,
                 "user_id": user_id,
@@ -482,6 +543,7 @@ class AgentRegistry:
                     "agent.run",
                     {
                         "agent": agent,
+                        "agent_revision": agent_revision,
                         "generation_id": generation.generation_id,
                         "thread_id": agent_request.thread_id,
                         "chassis_version": snapshot.chassis_version,
@@ -521,7 +583,8 @@ class AgentRegistry:
                         hooks,
                     )
             return _with_duration(
-                _with_snapshot(result, snapshot.digest()), time.monotonic() - started
+                _with_attribution(result, agent, agent_revision, snapshot.digest()),
+                time.monotonic() - started,
             )
 
     async def stream(
@@ -544,7 +607,7 @@ class AgentRegistry:
         """
 
         harness = self._require_harness()
-        runtime = self.get(agent)
+        runtime, selected = self._resolve_agent(agent)
         agent_request = self._build_request(
             request,
             input=input,
@@ -556,11 +619,19 @@ class AgentRegistry:
 
         await harness.ensure_ready()
         async with harness.acquire() as generation:
-            environment = self._budgeted_environment(harness, generation, limits)
+            pinned = self._pin_revision(agent, selected, generation)
+            agent_revision = None if pinned is None else pinned.revision
+            environment = self._budgeted_environment(
+                harness,
+                generation,
+                limits,
+                scope=None if pinned is None else pinned.scope,
+            )
             run_context = HarnessRunContext.new(
                 generation=generation,
                 environment=environment,
                 agent=agent,
+                agent_revision=agent_revision,
                 user_id=user_id,
                 tenant_id=tenant_id,
                 thread_id=agent_request.thread_id,
@@ -569,6 +640,7 @@ class AgentRegistry:
             hooks = harness.hook_snapshot(generation)
             run_payload: dict[str, Any] = {
                 "agent": agent,
+                "agent_revision": agent_revision,
                 "generation_id": generation.generation_id,
                 "thread_id": agent_request.thread_id,
                 "user_id": user_id,
@@ -600,7 +672,12 @@ class AgentRegistry:
     # -------------------------------------------------------------- internals
 
     def _budgeted_environment(
-        self, harness: Harness, generation: RuntimeGeneration, limits: BudgetLimits | None
+        self,
+        harness: Harness,
+        generation: RuntimeGeneration,
+        limits: BudgetLimits | None,
+        *,
+        scope: str | None = None,
     ) -> RunEnvironment:
         """Assemble the run environment, inheriting a parent run's budget when nested.
 
@@ -608,10 +685,11 @@ class AgentRegistry:
         budget: the child's consumption propagates upward, so a parent can never be
         overdrawn by its children, and the nested run counts against
         :attr:`~chassis.budget.BudgetDimension.CHILD_RUNS`, which is enforced here --
-        a boundary the harness mediates.
+        a boundary the harness mediates. ``scope`` narrows the tool view to the
+        agent's composition scope when it was published through an ``AgentSpec``.
         """
 
-        environment = harness.run_environment(generation, limits=limits)
+        environment = harness.run_environment(generation, limits=limits, scope=scope)
         parent = current_budget()
         if parent is None:
             return environment
@@ -743,10 +821,24 @@ def _definition_digest(runtime: AgentRuntime, run_context: HarnessRunContext) ->
     return value if isinstance(value, str) else None
 
 
-def _with_snapshot(result: AgentResult, digest: str) -> AgentResult:
+def _with_attribution(
+    result: AgentResult, agent: str, agent_revision: str | None, digest: str
+) -> AgentResult:
+    """Stamp the logical agent identity and revision the run executed under.
+
+    A runtime referenced by ``AgentSpec.runtime_ref`` may report its own internal
+    name; attribution belongs to the logical agent the caller selected, so the
+    wrapper states it explicitly.
+    """
+
     from dataclasses import replace
 
-    return replace(result, metadata={**dict(result.metadata), "snapshot_digest": digest})
+    return replace(
+        result,
+        agent=agent,
+        agent_revision=agent_revision,
+        metadata={**dict(result.metadata), "snapshot_digest": digest},
+    )
 
 
 def _with_duration(result: AgentResult, duration: float) -> AgentResult:

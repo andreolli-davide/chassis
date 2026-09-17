@@ -80,6 +80,9 @@ class HarnessRunContext:
         run_id: Unique identifier of this run.
         capabilities: Immutable capability snapshot of the generation.
         agent: Name of the agent being executed.
+        agent_revision: Revision of the agent composition this run executes
+            against, when the agent was published through an ``AgentSpec``. A run
+            remains associated with the revision selected when it started.
         environment: Generation-scoped boundary services. ``None`` only when an
             agent runtime is invoked without a harness (for example in unit tests
             of a graph's own logic).
@@ -93,6 +96,7 @@ class HarnessRunContext:
     run_id: str
     capabilities: CapabilitySnapshot
     agent: str = ""
+    agent_revision: str | None = None
     environment: RunEnvironment | None = None
     user_id: str | None = None
     tenant_id: str | None = None
@@ -102,6 +106,16 @@ class HarnessRunContext:
     def __post_init__(self) -> None:
         if not isinstance(self.metadata, MappingProxyType):
             object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
+
+    @property
+    def agent_identity(self) -> str | None:
+        """``name@revision`` identity of the agent, when the run has one."""
+
+        if not self.agent:
+            return None
+        if self.agent_revision is None:
+            return self.agent
+        return f"{self.agent}@{self.agent_revision}"
 
     @property
     def budget(self) -> BudgetGovernor | None:
@@ -131,6 +145,7 @@ class HarnessRunContext:
         generation: RuntimeGeneration,
         environment: RunEnvironment | None = None,
         agent: str = "",
+        agent_revision: str | None = None,
         user_id: str | None = None,
         tenant_id: str | None = None,
         thread_id: str | None = None,
@@ -144,6 +159,7 @@ class HarnessRunContext:
             run_id=run_id or f"run_{uuid.uuid4().hex[:12]}",
             capabilities=generation.snapshot,
             agent=agent,
+            agent_revision=agent_revision,
             environment=environment,
             user_id=user_id,
             tenant_id=tenant_id,
@@ -158,6 +174,8 @@ class HarnessRunContext:
             "generation_id": self.generation_id,
             "run_id": self.run_id,
             "agent": self.agent,
+            "agent_revision": self.agent_revision,
+            "agent_identity": self.agent_identity,
             "user_id": self.user_id,
             "tenant_id": self.tenant_id,
             "thread_id": self.thread_id,
@@ -218,6 +236,7 @@ class AgentResult:
     run_id: str
     output: Any = None
     thread_id: str | None = None
+    agent_revision: str | None = None
     interrupts: tuple[AgentInterrupt, ...] = ()
     duration_seconds: float = 0.0
     metadata: Mapping[str, Any] = field(default_factory=dict)
@@ -254,6 +273,7 @@ class AgentResult:
     def to_dict(self) -> dict[str, Any]:
         return {
             "agent": self.agent,
+            "agent_revision": self.agent_revision,
             "generation_id": self.generation_id,
             "run_id": self.run_id,
             "thread_id": self.thread_id,
@@ -272,10 +292,12 @@ class AgentEvent:
     run_id: str
     kind: str
     data: Any = None
+    agent_revision: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "agent": self.agent,
+            "agent_revision": self.agent_revision,
             "generation_id": self.generation_id,
             "run_id": self.run_id,
             "kind": self.kind,

@@ -79,6 +79,13 @@ DOCUMENTED = {
         "HarnessRunContext",
         "RunEnvironment",
     ],
+    "chassis.agents": [
+        "AgentNotFound",
+        "AgentRegistry",
+        "AgentRetired",
+        "AgentRevision",
+        "AgentSpec",
+    ],
     "chassis.tools": [
         "RegisteredTool",
         "ScopedTools",
