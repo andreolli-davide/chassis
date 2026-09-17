@@ -214,6 +214,72 @@ async def test_run_snapshot_rejects_an_unknown_generation() -> None:
             harness.run_snapshot(run_context)
 
 
+async def test_snapshot_digests_distinguish_semantic_from_physical_identity() -> None:
+    from chassis import Harness
+
+    first_secret = "sk-live-aaaaaaaaaaaa"
+    second_secret = "sk-live-bbbbbbbbbbbb"
+    harness = Harness()
+    harness.redactor.add(first_secret)
+    harness.redactor.add(second_secret)
+    harness.install(
+        provider_plugin("postgres", "database"),
+        entry_id="db",
+        config={"api_key": first_secret, "pool": 1},
+    )
+    try:
+        await harness.start()
+        base_generation = harness.current_generation
+        assert base_generation is not None
+        base = harness.snapshot_for(base_generation)
+
+        # A secret-only configuration change is invisible in the semantic digest
+        # but must still be a different runtime generation.
+        harness.install(
+            provider_plugin("postgres", "database"),
+            entry_id="db",
+            config={"api_key": second_secret, "pool": 1},
+            replace=True,
+        )
+        await harness.reconcile()
+        secret_generation = harness.current_generation
+        assert secret_generation is not None
+        secret = harness.snapshot_for(secret_generation)
+        assert secret.semantic_digest() == base.semantic_digest()
+        assert secret.physical_digest() != base.physical_digest()
+
+        # A non-secret configuration change is visible in both.
+        harness.install(
+            provider_plugin("postgres", "database"),
+            entry_id="db",
+            config={"api_key": second_secret, "pool": 2},
+            replace=True,
+        )
+        await harness.reconcile()
+        configured_generation = harness.current_generation
+        assert configured_generation is not None
+        configured = harness.snapshot_for(configured_generation)
+        assert configured.semantic_digest() != secret.semantic_digest()
+        assert configured.physical_digest() != secret.physical_digest()
+
+        # Semantically identical replacement: a new instance, but the semantic
+        # composition (and therefore its digest) is unchanged.
+        harness.install(
+            provider_plugin("postgres", "database"),
+            entry_id="db",
+            config={"api_key": second_secret, "pool": 2},
+            replace=True,
+        )
+        await harness.reconcile()
+        replaced_generation = harness.current_generation
+        assert replaced_generation is not None
+        replaced = harness.snapshot_for(replaced_generation)
+        assert replaced.semantic_digest() == configured.semantic_digest()
+        assert replaced.physical_digest() != configured.physical_digest()
+    finally:
+        await harness.stop()
+
+
 async def test_langgraph_runs_are_attributed_to_a_snapshot() -> None:
     from typing import Any
 

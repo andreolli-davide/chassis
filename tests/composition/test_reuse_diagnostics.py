@@ -171,6 +171,72 @@ async def test_diff_distinguishes_semantic_sameness_from_physical_reuse() -> Non
         await harness.stop()
 
 
+async def test_diagnostics_and_reprs_do_not_expose_secret_material() -> None:
+    first_secret = "sk-live-aaaaaaaaaaaa"
+    second_secret = "sk-live-bbbbbbbbbbbb"
+    harness = Harness()
+    harness.redactor.add(first_secret)
+    harness.redactor.add(second_secret)
+    harness.install(
+        tracked_provider("db", "database"),
+        entry_id="db",
+        config={"api_key": first_secret, "pool": 1},
+    )
+    try:
+        await harness.start()
+        first = generation_of(harness)
+
+        harness.install(
+            tracked_provider("db", "database"),
+            entry_id="db",
+            config={"api_key": second_secret, "pool": 1},
+            replace=True,
+        )
+        result = await harness.reconcile()
+        second = generation_of(harness)
+
+        instance = mounted(harness, "db")
+        entry = harness.entry("db")
+        assert entry is not None
+        identity = instance.semantic_identity
+        assert identity is not None
+        private = {
+            identity.config_fingerprint,
+            identity.identity_digest(),
+        }
+
+        explained = harness.diagnostics.explain_reuse(
+            first.generation_id, second.generation_id, "db"
+        )
+        assert explained is not None
+        payloads = [
+            explained.to_dict(),
+            harness.diagnostics.analyze_impact(first.generation_id, second.generation_id).to_dict(),
+            harness.diagnostics.diff_generations(
+                first.generation_id, second.generation_id
+            ).to_dict(),
+            harness.diagnostics.generation_pressure().to_dict(),
+            harness.snapshot_for(second).to_dict(),
+            result.to_dict(),
+        ]
+        for payload in payloads:
+            rendered = str(payload)
+            assert first_secret not in rendered
+            assert second_secret not in rendered
+            assert not any(value in rendered for value in private)
+
+        for rendered in (repr(instance), repr(entry), repr(identity)):
+            assert first_secret not in rendered
+            assert second_secret not in rendered
+            assert not any(value in rendered for value in private)
+
+        # The rebuild is explained without disclosing the configuration that caused it.
+        assert explained.reasons == ("config_changed",)
+        assert explained.old_semantic_id == explained.new_semantic_id
+    finally:
+        await harness.stop()
+
+
 async def test_pressure_shows_a_resource_reachable_from_several_generations() -> None:
     harness = Harness()
     harness.install(tracked_provider("db", "database"), entry_id="db")
