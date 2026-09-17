@@ -5,13 +5,18 @@ Five minutes from install to a running agent, and a map of where to go next.
 ## Install
 
 ```bash
-pip install chassis-harness
+pip install chassis-harness                       # core lifecycle kernel
+pip install "chassis-harness[langgraph]"          # LangGraph adapter + langchain-core
+pip install "chassis-harness[langsmith]"          # LangSmith telemetry + evaluation
 ```
 
 The import package is `chassis`; the distribution is `chassis-harness`. Python 3.12
-or newer. The only mandatory dependencies are `langchain-core`, `langgraph`,
-`langsmith`, `pydantic`, `packaging`, and `pyyaml` — no credentials are needed to
-follow this page, because the quickstart uses a scripted model.
+or newer.
+
+The core depends only on `pydantic`, `packaging`, and `pyyaml`; it imports and runs
+without `langgraph`, `langchain-core`, or `langsmith`. This page uses the LangGraph
+adapter and a scripted model, so install the `langgraph` extra — no credentials are
+needed to follow it.
 
 ## The smallest useful application
 
@@ -102,6 +107,7 @@ its old objects — nothing is mutated underneath it.
 | record and replay model/tool boundaries | [replay.md](replay.md) |
 | drive composition from YAML and reconcile drift | [configuration.md](configuration.md) |
 | see the design decisions and invariants | [design.md](design.md) |
+| upgrade from 0.1 | [migration.md](migration.md) |
 
 The other examples isolate one idea each:
 

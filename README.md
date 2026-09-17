@@ -6,23 +6,33 @@
 [![License](https://img.shields.io/pypi/l/chassis-harness)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-mkdocs--material-blue)](https://andreolli-davide.github.io/chassis/)
 
-**Chassis** is a production-grade Python agent harness.
+**Chassis** is a transactional runtime composition layer for dynamic agent systems.
 
 It owns the runtime environment in which agents execute — plugins, capabilities,
 scoped resources, reversible effects, immutable runtime generations, policy,
 budgets, secrets, configuration, diagnostics, and observability metadata — and
 hands an immutable view of that environment to an execution engine.
 
-LangGraph is the first-class execution engine *mounted within* Chassis.
-Chassis is not a graph framework.
+Composition may change over time; every in-flight run stays pinned to the immutable
+runtime generation it started with. LangGraph is the first-class execution engine
+*mounted within* Chassis. Chassis is not a graph framework.
 
 ## Install
 
 ```bash
-pip install chassis-harness
+pip install chassis-harness                       # the core lifecycle kernel
+pip install "chassis-harness[langgraph]"          # the LangGraph adapter
+pip install "chassis-harness[langsmith]"          # LangSmith telemetry + evaluation
+pip install "chassis-harness[langgraph,langsmith]"
 ```
 
 Python 3.12+. The import package is `chassis`.
+
+The core has no dependency on `langgraph`, `langchain-core`, or `langsmith`:
+importing `chassis`, the plugin lifecycle, generations, budgets, and diagnostics all
+work without them. The extras add the LangGraph adapter, the langchain-core test
+doubles, and the LangSmith backend; using an integration whose extra is missing
+raises a `MissingExtraError` that names the extra to install.
 
 ## Quickstart
 
@@ -49,6 +59,9 @@ async with harness:
 
 A run acquires one immutable generation and keeps it: swapping a provider publishes
 a new generation without mutating the environment underneath an in-flight run.
+
+The LangGraph quickstart needs the adapter extra:
+`pip install "chassis-harness[langgraph]"`.
 
 Runnable end to end — no credentials, scripted model, asserts its own output:
 
@@ -97,8 +110,9 @@ what Chassis refuses to promise.
 
 ## Status
 
-Pre-1.0 (`0.1.0`). The surface covered by `tests/test_public_api.py` may break in a
-minor release; every break is recorded in [CHANGELOG.md](CHANGELOG.md).
+Pre-1.0 (`0.2.0`). The surface covered by `tests/test_public_api.py` may break in a
+minor release; every break is recorded in [CHANGELOG.md](CHANGELOG.md), and
+[migrations](docs/migration.md) lists the 0.1 → 0.2 changes.
 
 ## Development
 
@@ -149,6 +163,7 @@ suite runs all of them.
   hot provider swaps, budgets, durable runs.
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) — symptom, cause, and the exact
   diagnostics output for each.
+- [`docs/migration.md`](docs/migration.md) — the 0.1 → 0.2 changes and how to migrate.
 - [`docs/`](docs/README.md) — lifecycle, plugin authoring, LangGraph, observability,
   security assumptions, replay limitations, configuration, and design guarantees.
 

@@ -3,7 +3,12 @@
 LangGraph is Chassis's first-class execution engine. Chassis owns composition and
 lifecycle; LangGraph owns graph execution, state, durability, streaming, and
 interrupts. Chassis never reimplements them, and the lifecycle kernel never imports
-LangGraph.
+LangGraph or `langchain-core` — the adapter lives behind the `langgraph` extra
+(`pip install "chassis-harness[langgraph]"`), which also provides the
+`langchain-core` models and tools this page composes with.
+
+Importing `chassis.langgraph` without the extra raises a `MissingExtraError` naming
+the extra to install.
 
 ## Wiring an agent
 

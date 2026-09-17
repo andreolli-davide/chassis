@@ -1,5 +1,5 @@
 site_name: Chassis
-site_description: A production-grade Python agent harness built on scoped ownership, reactive capabilities, and immutable runtime generations.
+site_description: Transactional runtime composition for dynamic agent systems — scoped ownership, reactive capabilities, and immutable runtime generations.
 site_url: https://andreolli-davide.github.io/chassis/
 repo_url: https://github.com/andreolli-davide/chassis
 repo_name: andreolli-davide/chassis
@@ -53,6 +53,7 @@ nav:
   - Recipes: recipes.md
   - Troubleshooting: troubleshooting.md
   - Design guarantees: design.md
+  - Migrating from 0.1: migration.md
   - Security: security.md
 
 validation:

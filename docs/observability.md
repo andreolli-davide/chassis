@@ -23,6 +23,11 @@ telemetry universe.
 
 ## Enabling LangSmith
 
+The backend lives behind the `langsmith` extra
+(`pip install "chassis-harness[langsmith]"`). Importing it without the extra is
+fine — the class loads lazily — but constructing an *enabled* backend, or calling
+`evaluate_agent`, raises a `MissingExtraError` naming the extra.
+
 ```python
 from chassis import Harness
 from chassis.telemetry import LangSmithTelemetry
@@ -52,6 +57,48 @@ harness = Harness(telemetry=TeeTelemetry(LangSmithTelemetry(), my_otel_backend))
 
 Any object implementing the two-method `Telemetry` protocol works; Chassis does not
 require a specific vendor SDK.
+
+## Generation pressure metrics
+
+Generation lifetime is observable as structured data, so a metrics backend can export
+it without Chassis depending on that backend. `generation_pressure()` reads
+authoritative state (the live generation set, each generation's lease table, and the
+instances each generation was published with) and performs no `await`, so it is cheap
+enough to scrape:
+
+```python
+report = harness.diagnostics.generation_pressure()
+
+report.metrics()
+# {
+#   "chassis.generations.live": 4.0,
+#   "chassis.generations.draining": 3.0,
+#   "chassis.generations.leases": 3.0,
+#   "chassis.generations.oldest_lease_age_seconds": 862.0,
+# }
+
+report.to_dict()   # full structured form, including per-generation retained plugins
+report.to_text()   # the human-readable rendering
+```
+
+Feed it to whatever exporter you already run:
+
+```python
+harness = Harness(telemetry=TeeTelemetry(my_otel_backend, LangSmithTelemetry()))
+for name, value in harness.diagnostics.generation_pressure().metrics().items():
+    my_otel_backend.gauge(name, value)
+```
+
+Chassis reports pressure; it does not act on it. There is no default age limit, and
+nothing is reclaimed because it is old — a loitering generation is visible and
+attributable, never silently destroyed
+([lifecycle.md](lifecycle.md#generation-pressure)).
+
+Budget enforcement is observable the same way: `harness.diagnostics.budgets()`
+returns the configured defaults with each dimension's `enforcement`
+(`enforced`/`accounted`), and `BudgetGovernor.to_dict()` carries the same for a live
+run. A token or cost limit reported as `accounted` holds only when the integration
+reports usage ([plugin-author-guide.md](plugin-author-guide.md#budgets)).
 
 ## Redaction
 
@@ -86,7 +133,7 @@ snapshot.digest()
 
 ```json
 {
-  "chassis_version": "0.1.0",
+  "chassis_version": "0.2.0",
   "generation_id": "gen_0004",
   "sequence": 4,
   "agent_runtime": "langgraph",

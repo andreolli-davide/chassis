@@ -144,6 +144,64 @@ many newer generations are published.
 Disposal order is derived from the providers each instance actually resolved, so
 consumers are disposed before the providers they still reach.
 
+## Generation pressure
+
+Draining for a long time is correct but not free: while a run holds a lease, the
+generation keeps its plugin instances alive and the resources behind them. Chassis
+does not guess whether that is too long — it reports it.
+
+```python
+report = harness.diagnostics.generation_pressure()
+print(report.to_text())
+```
+
+```text
+current_generation: gen_00a2
+live_generations: 4
+draining_generations: 3
+oldest_lease_age_seconds: 862
+
+gen_009f
+  state: draining
+  age_seconds: 912
+  leases: 1
+  oldest_lease_age_seconds: 862
+  retained_plugins:
+    - postgres-primary (postgres)
+```
+
+`GenerationPressureReport` is structured data; `to_dict()` gives a JSON-compatible
+form and `metrics()` gives vendor-neutral gauges for a telemetry backend:
+
+```python
+report.live_generations           # how many generations are still live
+report.draining_generations       # how many are waiting for their last lease
+report.oldest_lease_age_seconds   # age of the oldest outstanding lease, if any
+report.generations                # per-generation age, state, leases, retained plugins
+report.instance_generations       # instance id -> live generations that reach it
+
+harness.diagnostics.instance_generations(instance.instance_id)  # newest first
+```
+
+Four different things are easy to conflate, and the report keeps them apart:
+
+| Concept | Meaning | Where it lives |
+| --- | --- | --- |
+| Diagnostic history | Retired generations kept for *diagnostics* only, bounded by `generation_history_limit` | `GenerationManager.history` |
+| Liveness | Generations a run can still reach: current + draining | `GenerationManager.live()` |
+| Lease | One run's hold on one generation, with a start time | `GenerationAccounting`, `GenerationLease` |
+| Physical disposal | Closing the scope of an instance no live generation reaches | `Harness._reclaim` |
+
+The bounded history never decides liveness: it only evicts *retired* generations, so
+a leased generation survives any number of newer publications and its plugin
+instances stay alive. `report.history_limit`, `report.history_retained`, and
+`report.history_evicted` make the difference visible.
+
+Pressure is observability, not enforcement. Chassis adds no default limit and
+reclaims nothing because it is old: a loitering generation is reported so the
+operator can find the run keeping it alive (see
+[troubleshooting.md](troubleshooting.md#an-old-generation-is-still-live)).
+
 ## Reconciliation is transactional
 
 `reconcile()` computes a plan, mounts or reuses instances, publishes a generation,
@@ -173,6 +231,9 @@ harness.diagnostics.plugins()       # state, health, eligibility, per-requiremen
 harness.diagnostics.capabilities()  # registered providers
 harness.diagnostics.dependencies()  # edges, activation order, pending, cycles
 harness.diagnostics.generations()   # state, leases, instances, plugins
+harness.diagnostics.generation_pressure()     # liveness, lease age, retained work
+harness.diagnostics.instance_generations(id)  # live generations reaching one instance
+harness.diagnostics.budgets()       # default limits and their enforcement modes
 harness.diagnostics.tools()         # owner, policy
 harness.diagnostics.hooks()         # owner, mode, ordering
 harness.diagnostics.agents()        # registered runtimes

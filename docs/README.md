@@ -19,6 +19,7 @@ below for task-oriented detail.
 | [replay.md](replay.md) | record/replay boundaries and their explicit limitations |
 | [configuration.md](configuration.md) | declarative configuration, the catalog, reconciliation, drift |
 | [design.md](design.md) | guarantees, decisions, and deliberate absences |
+| [migration.md](migration.md) | the 0.1 → 0.2 changes and how to migrate |
 
 ## Examples
 

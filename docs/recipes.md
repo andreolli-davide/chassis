@@ -148,13 +148,16 @@ await harness.agents.invoke(
 #    (a graph node calling harness.agents.invoke(...) is a child run)
 ```
 
-Enforced today: wall clock, tool calls, child runs. `model_calls`, `tokens`, and
-`estimated_cost` are declarative, because graphs call models and not the harness; if
-you want them enforced, record them where you own the call:
+Enforced by Chassis: wall clock, tool calls, child runs. Accounted: `model_calls`,
+`tokens`, and `estimated_cost`, because graphs call models and not the harness — they
+hold only when the code that owns the call reports usage:
 
 ```python
-run_context.budget.consume(BudgetDimension.TOKENS, amount=usage.total_tokens)
+run_context.budget.record(model_calls=1, tokens=usage.total_tokens, estimated_cost=cost)
 ```
+
+`BudgetDimension.TOKENS.enforcement` and `harness.diagnostics.budgets()` tell you
+which is which at runtime, so a token limit is never mistaken for a guarantee.
 
 A `BudgetExceeded` carries `dimension`, `limit`, `used`, and `requested`, so a
 service can map it to a 429 rather than a 500. Children can never exceed what the

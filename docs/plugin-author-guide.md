@@ -143,22 +143,43 @@ callbacks, and Chassis does not duplicate them.
 
 ## Budgets
 
-`BudgetLimits` declares six dimensions; the harness enforces the ones it actually
-mediates, and never claims to stop work it does not control:
+`BudgetLimits` declares six dimensions, and each one states *who* keeps it within its
+limit. `BudgetDimension.enforcement` is either `ENFORCED` (Chassis owns the boundary
+where it is consumed, so the limit is a guarantee) or `ACCOUNTED` (the work happens
+inside the execution engine, so the limit is intent until an integration reports it):
 
-| Dimension | Enforced at |
-| --- | --- |
-| `wall_clock_seconds` | tool execution (deadline) |
-| `tool_calls` | tool execution |
-| `child_runs` | a nested agent run started through `harness.agents` |
-| `model_calls`, `tokens`, `estimated_cost` | not enforced — declarative |
+| Dimension | Enforcement | Charged at |
+| --- | --- | --- |
+| `wall_clock_seconds` | enforced | tool execution (deadline) |
+| `tool_calls` | enforced | tool execution |
+| `child_runs` | enforced | a nested agent run started through `harness.agents` |
+| `model_calls` | accounted | `run_context.budget.record(model_calls=…)` |
+| `tokens` | accounted | `run_context.budget.record(tokens=…)` |
+| `estimated_cost` | accounted | `run_context.budget.record(estimated_cost=…)` |
 
-Model calls happen inside graphs, not through the harness, so `model_calls`,
-`tokens`, and `estimated_cost` carry intent and are reported in usage but raise
-nothing. A graph node that wants them enforced records them itself:
+Model calls happen inside graphs, not through the harness, so Chassis cannot observe
+them. Report them where you own the call, and the governor checks the report exactly
+like any other charge:
 
 ```python
-run_context.budget.consume(BudgetDimension.TOKENS, amount=usage.total_tokens)
+usage = response.usage_metadata or {}
+run_context.budget.record(
+    model_calls=1,
+    tokens=usage.get("total_tokens", 0),
+    estimated_cost=estimate_cost(response),
+)
+```
+
+`record(...)` raises `BudgetExceeded` if the report would cross a limit, propagates to
+the parent allocation, and is a no-op for dimensions you leave at zero. If you never
+report token usage, a configured token limit never fires — which is exactly why the
+API marks it `accounted` rather than pretending otherwise:
+
+```python
+BudgetDimension.TOKENS.enforcement             # BudgetEnforcement.ACCOUNTED
+BudgetDimension.TOOL_CALLS.enforcement         # BudgetEnforcement.ENFORCED
+BudgetLimits(tokens=1000).accounted_dimensions()   # (BudgetDimension.TOKENS,)
+harness.diagnostics.budgets()                  # default limits + enforcement modes
 ```
 
 Budgets are hierarchical. A run started from inside another run — a graph node

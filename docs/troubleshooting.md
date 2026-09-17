@@ -11,6 +11,7 @@ harness.diagnostics.status()            # harness state, plugin/tool/hook/agent 
 harness.diagnostics.plugins()           # per-entry state, health, effects, resolution
 harness.diagnostics.explain("memory")   # why one plugin is active, pending, or excluded
 harness.diagnostics.generations()       # leases, state, instances per generation
+harness.diagnostics.generation_pressure()  # who is still live, and why
 harness.diagnostics.desired_state()     # drift against the applied configuration
 ```
 
@@ -89,18 +90,28 @@ grants it.
 
 ## `BudgetExceeded`
 
-`error.context` carries `dimension`, `limit`, `used`, and `requested`. Enforced
-dimensions and where they are charged:
+`error.context` carries `dimension`, `limit`, `used`, and `requested`. A dimension is
+either **enforced** (a guarantee at a Chassis-owned boundary) or **accounted** (it
+holds only when an integration reports usage):
 
-| Dimension | Enforced at |
-| --- | --- |
-| `wall_clock_seconds` | tool execution (deadline) |
-| `tool_calls` | tool execution |
-| `child_runs` | a nested `harness.agents.invoke(...)` from inside a run |
-| `model_calls`, `tokens`, `estimated_cost` | declared only - graphs call models, not the harness |
+| Dimension | Enforcement | Charged at |
+| --- | --- | --- |
+| `wall_clock_seconds` | enforced | tool execution (deadline) |
+| `tool_calls` | enforced | tool execution |
+| `child_runs` | enforced | a nested `harness.agents.invoke(...)` from inside a run |
+| `model_calls` | accounted | `run_context.budget.record(model_calls=1)` |
+| `tokens` | accounted | `run_context.budget.record(tokens=usage)` |
+| `estimated_cost` | accounted | `run_context.budget.record(estimated_cost=cost)` |
 
-`tokens` and `estimated_cost` raise nothing unless the code that owns the model call
-records them: `run_context.budget.consume(BudgetDimension.TOKENS, amount=usage)`.
+An accounted dimension raises nothing unless the code that owns the model call
+reports it; Chassis cannot observe a call it does not mediate. To see which is which
+at runtime:
+
+```python
+BudgetDimension.TOKENS.enforcement          # BudgetEnforcement.ACCOUNTED
+harness.diagnostics.budgets()["accounted"]  # ['tokens', ...]
+```
+
 A nested run inherits the parent's remaining allowance, so a child cannot spend what
 the parent does not have.
 
@@ -122,6 +133,36 @@ async for event in harness.agents.stream("agent", {"messages": [...]}):
 The generation is leased for as long as the stream is consumed. Close it
 (`await generator.aclose()`) rather than dropping it, or bound shutdown explicitly in
 tests with `Harness(shutdown_grace_seconds=0.05)`.
+
+## An old generation is still live
+
+A generation stays live while a run holds a lease, which keeps its plugin instances
+and their resources alive. `generation_pressure()` shows which generation, how old it
+is, and who is retaining what:
+
+```python
+report = harness.diagnostics.generation_pressure()
+print(report.to_text())
+
+report.oldest_lease_age_seconds              # age of the oldest outstanding lease
+report.instance_generations                  # instance id -> live generations
+harness.diagnostics.instance_generations(instance_id)   # newest first
+```
+
+The two usual causes are an abandoned stream and a run that never returned:
+
+- a stream is leased for as long as it is consumed; breaking out of
+  `harness.agents.stream(...)` without closing the generator holds the lease
+  (close it with `await generator.aclose()`);
+- a run that is blocked on an external system keeps its generation alive for as long
+  as it blocks, so bound it with a `wall_clock_seconds` budget or a tool timeout.
+
+`report.history_evicted` counting up while a generation is still in
+`report.generations` is *expected*, not a bug: the bounded diagnostics history evicts
+only retired generations, and it never decides liveness. Chassis will not reclaim a
+generation a run still holds, and 0.2 adds no age limit that would; the report is
+there to make the retention attributable (see
+[lifecycle.md](lifecycle.md#generation-pressure)).
 
 ## The graph recompiles far more often than expected
 

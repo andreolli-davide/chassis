@@ -5,6 +5,70 @@ All notable changes to Chassis are recorded here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with the pre-1.0 caveat
 that a minor release may break the documented surface.
 
+## [0.2.0] - 2026-09-17
+
+Makes the kernel smaller, clearer, and harder to misuse. No new agent-framework
+abstraction: composition, ownership, generation publication, and disposal behave as
+they did in 0.1.
+
+### Added
+
+- **Optional integrations.** The core installs without `langgraph`,
+  `langchain-core`, or `langsmith`. Extras: `chassis-harness[langgraph]`,
+  `chassis-harness[langsmith]`. A missing extra raises `MissingExtraError` (an
+  `ImportError`) naming the extra to install. The LangSmith and replayable-model
+  modules, and the langchain-core test doubles, load lazily.
+- **Generation pressure diagnostics.** `harness.diagnostics.generation_pressure()`
+  returns a structured `GenerationPressureReport`: the current generation, live and
+  draining counts, per-generation age and lease count, the oldest outstanding lease
+  age, the plugin instances an old generation still retains, and which live
+  generations reach a given instance. It also renders `to_text()` and vendor-neutral
+  `metrics()` gauges. `harness.diagnostics.instance_generations(instance_id)`
+  answers "who still reaches this instance?".
+- **Lease identity and age.** `GenerationAccounting` records each lease's start
+  time, so `GenerationManager.acquire_lease()`/`release_lease()` and
+  `RuntimeGeneration.oldest_lease_age_seconds` expose authoritative lease age.
+  `GenerationManager` gained an injectable clock, `history_limit`, and an
+  `evicted` counter.
+- **Explicit budget enforcement semantics.** `BudgetEnforcement`
+  (`enforced`/`accounted`), `BudgetDimension.enforcement`, `BudgetLimit`, and
+  `BudgetLimits.describe()`/`enforced_dimensions()`/`accounted_dimensions()` make it
+  impossible to mistake a token or cost limit for a guarantee Chassis does not make.
+  `BudgetGovernor.record(model_calls=…, tokens=…, estimated_cost=…)` is the canonical
+  way an integration reports usage Chassis cannot observe. `harness.diagnostics.budgets()`
+  reports the configured defaults with their enforcement modes.
+- **`chassis.tools.Tool`.** The tool boundary is now a structural protocol (`name`,
+  `description`, `ainvoke`), so the core does not import a tool library. A
+  `langchain-core` `BaseTool` satisfies it unchanged.
+
+### Changed
+
+- `chassis.ToolSnapshot.to_langchain_tools()` is now `to_tools()`, since the core no
+  longer names a specific tool library.
+- `GenerationManager.acquire()`/`release()` are now
+  `acquire_lease()`/`release_lease()`, returning an identity-bearing
+  `GenerationLease`. `Harness.acquire()` still yields the `RuntimeGeneration`.
+- `RuntimeSnapshot` tool hashing tolerates a tool with no `get_input_schema`,
+  recording `args: null` instead of failing.
+- `chassis.telemetry`, `chassis.replay`, and `chassis.testing` import their
+  langchain/langsmith-dependent members lazily; `chassis.telemetry.langsmith` is not
+  imported unless a LangSmith object is used.
+
+### Known limitations
+
+- In-process Python plugins are trusted code; the policy engine is not a sandbox.
+- Replay does not virtualize clocks, randomness, networks, databases, or the
+  filesystem, and only tool and model boundaries are replayable.
+- Configuration changes are reconciled as replacements, not in-place
+  reconfiguration.
+- An abandoned `AgentRegistry.stream` generator holds its generation lease until it
+  is closed or collected.
+- Accounted budget dimensions (`model_calls`, `tokens`, `estimated_cost`) are only
+  enforced when the integration that owns the model call reports usage; Chassis
+  cannot observe them itself.
+- Generation pressure reports; it does not evict, cap, or refuse. A loitering
+  generation is visible, not reclaimed.
+
 ## [0.1.0] - 2026-09-16
 
 First release. The distribution is `chassis-harness`; the import package is
