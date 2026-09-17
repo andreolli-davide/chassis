@@ -142,6 +142,25 @@ resource.retained_by     # ("lease", "sharing")
 means more than one live generation reaches it, so no single generation's
 retirement would release it.
 
+### Stateful resources
+
+Some runtime resources are inherently stateful — DB pools, HTTP clients, caches,
+model clients, telemetry exporters. Statefulness alone does not forbid reuse. What
+matters is whether the resource's **behavioural contract** is unchanged: the same
+pool configuration, credential source, endpoint, and lifecycle semantics reuse
+safely, because they are part of the node's configuration fingerprint. A changed
+credential or endpoint changes that fingerprint and forces a rebuild.
+
+Chassis makes no assumption about third-party mutability it cannot enforce. A
+resource that is reconfigured in place is not reused: a change is a new instance,
+and the old one is shared only until no live generation reaches it. If a plugin
+mutates shared state outside the inputs Chassis can see, that is the plugin's
+contract to keep, not something structural sharing will paper over.
+
+Reuse safety is inferred from semantic identity; 0.4 adds no opt-in or opt-out
+policy, because the conservative default is already the safe one: anything Chassis
+cannot prove safe is rebuilt.
+
 ## Semantic sameness is not physical reuse
 
 These are two different facts, and 0.4 keeps both explicit:
