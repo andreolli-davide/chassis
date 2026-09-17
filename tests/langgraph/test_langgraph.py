@@ -13,6 +13,7 @@ from langgraph.types import interrupt
 from typing_extensions import TypedDict
 
 from chassis import MODEL
+from chassis.agent_spec import AgentSpec
 from chassis.capabilities import CapabilityKey
 from chassis.core.errors import GraphBuildError, HarnessStateError
 from chassis.langgraph import (
@@ -501,3 +502,26 @@ async def test_active_run_keeps_its_generation_while_provider_is_replaced() -> N
         assert (
             harness.plugin_registry.instance("chassis.services").state is PluginState.ACTIVE  # type: ignore[union-attr]
         )
+
+
+async def test_agent_spec_binds_to_a_langgraph_agent_definition() -> None:
+    """AgentSpec is composition; AgentDefinition is the graph-build contract."""
+
+    async with TestHarness() as harness:
+        harness.provide(MODEL, FakeChatModel(responses=["hello from finance"]))
+        # The graph's own name differs from the logical agent: the spec's
+        # runtime_ref is what binds them, and attribution follows the agent.
+        harness.register_agent(
+            harness.agent(agent_definition(name="finance-graph", with_tools=False))
+        )
+        harness.agents.install(
+            AgentSpec(name="finance", revision="17", runtime_ref="finance-graph")
+        )
+
+        result = await harness.agents.invoke("finance", {"messages": [HumanMessage("hi")]})
+
+        assert result.agent == "finance"
+        assert result.agent_revision == "17"
+        assert result.text == "hello from finance"
+        assert result.metadata["runtime"] == "langgraph"
+        assert result.metadata["snapshot_digest"]
