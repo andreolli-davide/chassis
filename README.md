@@ -215,6 +215,7 @@ uv run python examples/basic_agent.py                 # LangGraph agent end to e
 uv run python examples/reactive_cascade.py            # database → memory → extension
 uv run python examples/safe_provider_replacement.py   # generations across a provider swap
 uv run python examples/scoped_composition.py          # hierarchical composition scopes
+uv run python examples/agent_composition.py           # versioned agents: revisions, pinning, reuse
 ```
 
 Each example asserts what it prints, so running it verifies the behaviour. The test
@@ -228,7 +229,9 @@ suite runs all of them.
   hot provider swaps, budgets, durable runs.
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) — symptom, cause, and the exact
   diagnostics output for each.
-- [`docs/migration.md`](docs/migration.md) — the 0.3 → 0.4, 0.2 → 0.3, and 0.1 → 0.2 changes and how to migrate.
+- [`docs/migration.md`](docs/migration.md) — the 0.4 → 0.5, 0.3 → 0.4, 0.2 → 0.3, and 0.1 → 0.2 changes and how to migrate.
+- [`docs/agent-composition.md`](docs/agent-composition.md) — `AgentSpec`, immutable agent
+  revisions, materialization, revision pinning, retirement, and agent diagnostics.
 - [`docs/incremental-composition.md`](docs/incremental-composition.md) — how composition
   changes incrementally: semantic identity, impact analysis, structural sharing, reuse diagnostics.
 - [`docs/`](docs/README.md) — lifecycle, scoped composition, plugin authoring, LangGraph, observability,
@@ -240,6 +243,8 @@ suite runs all of them.
 src/chassis/
   core/          scopes, effects, generations, errors
   composition.py composition scopes and resolved scope trees
+  agent_spec.py  AgentSpec and AgentRevision (agent composition descriptions)
+  agents.py      agent revision registry, materialization, invocation
   capabilities/  versioned contracts, provider registry, snapshots
   plugins/       manifests, author API, resolver, registry
   hooks/         scope-owned hook registry
