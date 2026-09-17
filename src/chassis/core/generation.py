@@ -28,6 +28,7 @@ from typing import Any
 
 from chassis.capabilities.snapshot import CapabilitySnapshot
 from chassis.composition import ScopeTree
+from chassis.core.identity import SemanticIdentity
 from chassis.plugins.lifecycle import PluginInstance
 
 __all__ = [
@@ -150,6 +151,28 @@ class RuntimeGeneration:
 
     def has_instance(self, instance_id: str) -> bool:
         return any(instance.instance_id == instance_id for instance in self.instances)
+
+    @property
+    def identities(self) -> Mapping[str, SemanticIdentity]:
+        """Semantic identity of every mounted node, keyed by entry id.
+
+        Derived from the instances the generation was published with, so it is a
+        view of the immutable composition rather than stored state. An instance
+        that predates semantic identity contributes nothing.
+        """
+
+        return MappingProxyType(
+            {
+                instance.entry_id: instance.semantic_identity
+                for instance in self.instances
+                if instance.semantic_identity is not None
+            }
+        )
+
+    def identity_for(self, entry_id: str) -> SemanticIdentity | None:
+        """Semantic identity of one node, or ``None`` when it is not published."""
+
+        return self.identities.get(entry_id)
 
     def plugin_versions(self) -> dict[str, str]:
         """Plugin name to version for the plugins in this generation."""

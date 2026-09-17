@@ -52,6 +52,14 @@ from typing import Any, Protocol, runtime_checkable
 from chassis.capabilities.keys import CapabilityKey, CapabilityRequirement
 from chassis.capabilities.registry import CapabilityRegistration
 from chassis.core.errors import ConfigurationError
+from chassis.core.identity import (
+    DependencyBinding,
+    ImpactAnalysis,
+    NodeImpact,
+    ReuseDecision,
+    ReuseReason,
+    SemanticIdentity,
+)
 from chassis.plugins.lifecycle import PluginInstance
 from chassis.plugins.resolver import (
     ROOT_SCOPE,
@@ -65,9 +73,15 @@ __all__ = [
     "ROOT_PATH",
     "CompositionScope",
     "CompositionTree",
+    "DependencyBinding",
+    "ImpactAnalysis",
+    "NodeImpact",
     "ResolvedScope",
+    "ReuseDecision",
+    "ReuseReason",
     "ScopeSpec",
     "ScopeTree",
+    "SemanticIdentity",
     "build_scope_tree",
 ]
 

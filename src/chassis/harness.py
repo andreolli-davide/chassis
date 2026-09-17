@@ -67,6 +67,7 @@ from chassis.core.errors import (
 )
 from chassis.core.generation import RuntimeGeneration
 from chassis.core.generations import GenerationManager
+from chassis.core.identity import SemanticIdentity, build_semantic_identity
 from chassis.core.scope import Scope
 from chassis.diagnostics import Diagnostics
 from chassis.hooks.registry import HookRegistry, HookSnapshot
@@ -906,6 +907,7 @@ class Harness:
         """Mount or reuse one instance per eligible entry, in activation order."""
 
         ordered: list[PluginInstance] = []
+        identities: dict[str, SemanticIdentity] = {}
         for entry_id in plan.activation_order:
             entry = self._plugin_registry.entry(entry_id)
             if entry is None:  # pragma: no cover - defensive
@@ -918,6 +920,8 @@ class Harness:
             ):
                 ordered.append(existing)
                 reused.append(entry_id)
+                if existing.semantic_identity is not None:
+                    identities[entry_id] = existing.semantic_identity
                 continue
             if existing is not None and existing.state is PluginState.FAILED:
                 # Retry: release the failed instance before mounting a new one.
@@ -940,6 +944,8 @@ class Harness:
                 instance = await self._plugin_registry.mount(
                     entry, self._resolutions_for(plan, entry_id)
                 )
+                instance.semantic_identity = self._semantic_identity(entry, plan, identities)
+                identities[entry_id] = instance.semantic_identity
                 span.set_attribute("instance_id", instance.instance_id)
                 self._record_lifecycle(
                     "plugin.mount",
@@ -996,6 +1002,59 @@ class Harness:
             if registration is not None:
                 resolved[resolution.requirement.name] = registration
         return resolved
+
+    def _semantic_identity(
+        self,
+        entry: PluginEntry,
+        plan: ResolutionPlan,
+        identities: Mapping[str, SemanticIdentity],
+    ) -> SemanticIdentity:
+        """Compute the semantic identity of one entry in a candidate composition.
+
+        Dependency bindings are read from live control-plane state rather than
+        from the plan: providers are materialized before their consumers, so this
+        sees the instance the candidate will actually publish.
+        """
+
+        registry = self._plugin_registry
+        preferences = self._provider_preference
+
+        def provider_instance(provider_entry: str) -> str | None:
+            instance = registry.instance(provider_entry)
+            return None if instance is None else instance.instance_id
+
+        def provider_identity(provider_entry: str) -> str | None:
+            known = identities.get(provider_entry)
+            if known is not None:
+                return known.identity_digest()
+            instance = registry.instance(provider_entry)
+            if instance is not None and instance.semantic_identity is not None:
+                return instance.semantic_identity.identity_digest()
+            return None
+
+        def preference(consumer: str, capability: str, scope: str) -> str | None:
+            scoped = preferences.get(f"{consumer}:{capability}")
+            if scoped is not None:
+                return scoped
+            by_scope = preferences.get(f"scope:{scope}:{capability}")
+            if by_scope is not None:
+                return by_scope
+            return preferences.get(capability)
+
+        plan_entry = plan.plan_for(entry.entry_id)
+        resolutions = () if plan_entry is None else plan_entry.requirements
+        plugin_type = type(entry.plugin)
+        return build_semantic_identity(
+            entry_id=entry.entry_id,
+            scope_path=entry.scope,
+            manifest=entry.manifest,
+            config=entry.config,
+            resolutions=resolutions,
+            provider_instance=provider_instance,
+            provider_identity=provider_identity,
+            preference=preference,
+            implementation_hint=f"{plugin_type.__module__}.{plugin_type.__qualname__}",
+        )
 
     @staticmethod
     def _same_composition(

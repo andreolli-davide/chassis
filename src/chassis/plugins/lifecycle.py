@@ -14,13 +14,16 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chassis.capabilities.registry import CapabilityRegistration
 from chassis.core.errors import HarnessStateError
 from chassis.core.scope import Scope
 from chassis.plugins.base import Plugin, PluginContext
 from chassis.plugins.manifest import PluginManifest
+
+if TYPE_CHECKING:
+    from chassis.core.identity import SemanticIdentity
 
 __all__ = ["PluginHealth", "PluginInstance", "PluginState"]
 
@@ -77,6 +80,7 @@ class PluginInstance:
     health: PluginHealth = PluginHealth.UNKNOWN
     error: BaseException | None = None
     generation_refs: int = 0
+    semantic_identity: SemanticIdentity | None = None
 
     @property
     def identity(self) -> str:
@@ -112,6 +116,9 @@ class PluginInstance:
             "scope_id": self.scope.id,
             "generation_refs": self.generation_refs,
             "config_keys": sorted(self.config),
+            "semantic_id": (
+                None if self.semantic_identity is None else self.semantic_identity.semantic_id
+            ),
             "resolved_capabilities": {
                 name: registration.registration_id for name, registration in self.resolved.items()
             },
