@@ -50,6 +50,7 @@ CORE_LIFECYCLE = """
 import asyncio
 import chassis
 from chassis import Harness, PluginContext, plugin
+from chassis.agent_spec import AgentSpec
 
 
 @plugin(name="resource", version="1.0.0", provides={"database": "1.0.0"})
@@ -60,9 +61,16 @@ async def resource(ctx: PluginContext) -> None:
 async def main() -> None:
     harness = Harness()
     harness.install(resource, entry_id="db")
+    harness.agents.install(
+        AgentSpec(name="finance", revision="1", requires={"database": ">=1,<2"})
+    )
     await harness.start()
     generation = harness.current_generation
     assert generation is not None
+    scope = generation.scopes.get("/agents/finance")
+    assert scope is not None
+    assert scope.metadata["chassis.agent_revision"] == "1"
+    assert harness.diagnostics.explain_agent("finance").identity == "finance@1"
     async with harness.acquire() as acquired:
         assert acquired is generation
         assert generation.lease_count == 1

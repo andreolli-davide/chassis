@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 import pytest
 
 from chassis import Harness, PluginContext, plugin
@@ -180,5 +183,54 @@ async def test_materialized_capability_and_tool_views_narrow_the_scope() -> None
         assert scope is not None
         assert scope.capabilities == ("database",)
         assert scope.tools == ("web",)
+    finally:
+        await h.stop()
+
+
+async def test_mutating_an_authoring_object_cannot_change_a_published_revision() -> None:
+    config: dict[str, Any] = {"pool": {"size": 1}, "hosts": ["a"]}
+    metadata: dict[str, Any] = {"team": "finance"}
+    spec = AgentSpec(
+        name="finance",
+        revision="17",
+        plugins={"ledger": config},
+        metadata=metadata,
+    )
+    h = harness()
+    h.agents.install(spec)
+    try:
+        await h.start()
+        entry = h.entry("agent:finance:ledger")
+        assert entry is not None
+
+        def pool_size() -> object:
+            pool = entry.config["pool"]
+            assert isinstance(pool, Mapping)
+            return pool["size"]
+
+        def hosts() -> tuple[object, ...]:
+            value = entry.config["hosts"]
+            assert isinstance(value, tuple)
+            return value
+
+        assert pool_size() == 1
+        assert hosts() == ("a",)
+
+        # Mutating the objects the spec was built from must not reach the
+        # materialized composition: the spec froze copies at construction.
+        config["pool"]["size"] = 99
+        config["hosts"].append("b")
+        metadata["team"] = "other"
+
+        assert pool_size() == 1
+        assert hosts() == ("a",)
+        scope = h.current_generation.scopes.get("/agents/finance")  # type: ignore[union-attr]
+        assert scope is not None
+        assert scope.metadata["team"] == "finance"
+
+        # An unchanged reconcile still reuses the generation.
+        before = h.current_generation
+        await h.reconcile()
+        assert h.current_generation is before
     finally:
         await h.stop()
