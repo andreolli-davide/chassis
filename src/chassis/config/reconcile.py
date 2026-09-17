@@ -131,11 +131,7 @@ def diff_desired_state(
             )
             continue
         if (
-            config_fingerprint(
-                plugin=entry.plugin,
-                config=entry.config,
-                provider_preference=entry.provider_preference,
-            )
+            config_fingerprint(plugin=entry.plugin, config=entry.config)
             != current.config_fingerprint
         ):
             changes.append(
@@ -162,12 +158,18 @@ def config_fingerprint(
     *,
     plugin: str,
     config: Mapping[str, Any],
-    provider_preference: Mapping[str, str] | None = None,
 ) -> str:
     """Stable identity of an entry's effective configuration.
 
     Shared by the reconciler's desired side and the harness's installed side so the
     two can never disagree about whether a configuration changed.
+
+    Provider preferences are deliberately *not* part of this identity. They
+    disambiguate resolution rather than configure the plugin, and 0.4 resolves
+    dependencies on every reconciliation: a preference change is applied by
+    :meth:`~chassis.harness.Harness.prefer_provider` and reported through the
+    consumer's dependency bindings, never as a configuration change. Including it
+    here made a re-applied declarative configuration look like it had changed.
     """
 
     from chassis.persistence.hashing import stable_hash
@@ -176,6 +178,5 @@ def config_fingerprint(
         {
             "plugin": plugin,
             "config": dict(config),
-            "provider_preference": dict(provider_preference or {}),
         }
     )
