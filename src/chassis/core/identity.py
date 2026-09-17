@@ -158,6 +158,10 @@ class DependencyBinding:
     is physical and participates in reuse; both are compared by
     :meth:`SemanticIdentity` equality.
 
+    ``provider_display`` is the provider's displayable semantic id: it exists only
+    so the node's own ``semantic_id`` stays free of secret-derived digests, and it
+    never participates in equality or reuse.
+
     ``preference`` records which explicit preference (if any) selected the
     provider. It is explanatory only: it never participates in reuse, because a
     preference change that selects the same provider does not change behaviour.
@@ -167,7 +171,8 @@ class DependencyBinding:
     consumer: str
     provider_entry_id: str | None = None
     provider_instance_id: str | None = None
-    provider_identity: str | None = None
+    provider_identity: str | None = field(default=None, repr=False)
+    provider_display: str | None = field(default=None, compare=False, repr=False)
     status: str = "no_provider"
     preference: str | None = field(default=None, compare=False, repr=False)
 
@@ -201,7 +206,7 @@ class DependencyBinding:
         return (
             self.capability,
             self.provider_entry_id,
-            self.provider_identity,
+            self.provider_display,
             self.status,
             self.preference,
         )
@@ -346,6 +351,7 @@ def build_semantic_identity(
     resolutions: Sequence[RequirementResolution],
     provider_instance: Callable[[str], str | None],
     provider_identity: Callable[[str], str | None],
+    provider_display: Callable[[str], str | None],
     preference: Callable[[str, str, str], str | None],
     implementation_hint: str | None = None,
     kind: str = "plugin",
@@ -373,6 +379,7 @@ def build_semantic_identity(
                 provider_entry_id=provider,
                 provider_instance_id=None if provider is None else provider_instance(provider),
                 provider_identity=None if provider is None else provider_identity(provider),
+                provider_display=None if provider is None else provider_display(provider),
                 status=resolution.status,
                 preference=_applicable_preference(preference, entry_id, capability, scope_path),
             )

@@ -1058,6 +1058,15 @@ class Harness:
                 return instance.semantic_identity.identity_digest()
             return None
 
+        def provider_display(provider_entry: str) -> str | None:
+            known = identities.get(provider_entry)
+            if known is not None:
+                return known.semantic_id
+            instance = registry.instance(provider_entry)
+            if instance is not None and instance.semantic_identity is not None:
+                return instance.semantic_identity.semantic_id
+            return None
+
         def preference(consumer: str, capability: str, scope: str) -> str | None:
             scoped = preferences.get(f"{consumer}:{capability}")
             if scoped is not None:
@@ -1078,6 +1087,7 @@ class Harness:
             resolutions=resolutions,
             provider_instance=provider_instance,
             provider_identity=provider_identity,
+            provider_display=provider_display,
             preference=preference,
             implementation_hint=f"{plugin_type.__module__}.{plugin_type.__qualname__}",
             redactor=self._redactor,

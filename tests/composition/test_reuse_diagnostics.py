@@ -86,6 +86,41 @@ async def test_explain_reports_a_rewire_and_the_dependency_that_changed() -> Non
         await harness.stop()
 
 
+async def test_a_secret_only_change_forces_a_rebuild_but_leaks_nothing() -> None:
+    secret = "sk-live-abcdef123456"
+    harness = Harness()
+    harness.redactor.add(secret)
+    harness.install(tracked_provider("db", "database"), entry_id="db", config={"api_key": secret})
+    try:
+        await harness.start()
+        first = generation_of(harness)
+
+        harness.install(
+            tracked_provider("db", "database"),
+            entry_id="db",
+            config={"api_key": "sk-live-999999999999"},
+            replace=True,
+        )
+        await harness.reconcile()
+        second = generation_of(harness)
+
+        explained = harness.diagnostics.explain_reuse(
+            first.generation_id, second.generation_id, "db"
+        )
+        assert explained is not None
+        # The change is detected through the private fingerprint...
+        assert explained.decision == "rebuilt"
+        assert explained.reasons == ("config_changed",)
+        # ...but the secret-derived value never reaches the explanation.
+        assert explained.old_semantic_id == explained.new_semantic_id
+        assert secret not in str(explained.to_dict())
+        instance = mounted(harness, "db")
+        assert instance.semantic_identity is not None
+        assert secret not in str(instance.semantic_identity.to_dict())
+    finally:
+        await harness.stop()
+
+
 async def test_explain_reports_added_and_removed_nodes() -> None:
     harness = Harness()
     harness.install(tracked_provider("db", "database"), entry_id="db")
