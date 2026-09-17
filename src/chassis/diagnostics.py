@@ -17,6 +17,13 @@ from typing import TYPE_CHECKING, Any
 
 from chassis.composition import ResolvedScope, ScopeTree
 from chassis.core.errors import HarnessStateError
+from chassis.core.identity import (
+    ImpactAnalysis,
+    NodeImpact,
+    NodeObservation,
+    analyse_impact,
+    observations_from,
+)
 from chassis.plugins.resolver import ProviderAssessment, RequirementResolution
 
 if TYPE_CHECKING:
@@ -31,6 +38,7 @@ __all__ = [
     "GenerationPressureReport",
     "RequirementExplanation",
     "ResourceReachability",
+    "ReuseExplanation",
     "ScopeExplanation",
 ]
 
@@ -446,9 +454,15 @@ class GenerationDiff:
     new_generation_id: str
     changes: tuple[CompositionChange, ...]
     include_unchanged: bool = False
+    nodes: tuple[NodeImpact, ...] = ()
 
     def by_category(self, category: str) -> tuple[CompositionChange, ...]:
         return tuple(item for item in self.changes if item.category == category)
+
+    def by_decision(self, decision: str) -> tuple[NodeImpact, ...]:
+        """Semantic reuse/rebuild decisions for provider nodes."""
+
+        return tuple(node for node in self.nodes if node.decision == decision)
 
     @property
     def scopes(self) -> tuple[CompositionChange, ...]:
@@ -471,6 +485,7 @@ class GenerationDiff:
             "old_generation_id": self.old_generation_id,
             "new_generation_id": self.new_generation_id,
             "changes": [item.to_dict() for item in self.changes],
+            "nodes": [node.to_dict() for node in self.nodes],
         }
 
     def to_text(self) -> str:
@@ -497,9 +512,71 @@ class GenerationDiff:
                     if item.reason:
                         lines.append(f"      reason: {item.reason}")
             lines.append("")
+        if self.nodes:
+            lines.append("NODES")
+            for node in self.nodes:
+                lines.append(f"  {node.entry_id}: {node.decision}")
+                if node.reasons:
+                    lines.append(f"    reason: {', '.join(node.reasons)}")
+                elif node.dependency_changes:
+                    lines.append(f"    reason: {', '.join(node.dependency_changes)} changed")
+            lines.append("")
         if len(lines) == 2:
             lines.append("(no composition changes)")
         return "\n".join(lines).rstrip()
+
+
+@dataclass(frozen=True, slots=True)
+class ReuseExplanation:
+    """Why one node was reused, rebuilt, rewired, added, or removed.
+
+    Built from the semantic identities published with each generation, never from
+    logs. ``shared_instance_id`` is present only when the exact same runtime
+    instance was retained, which is what distinguishes physical reuse from
+    semantic sameness.
+    """
+
+    node: str
+    old_generation_id: str
+    new_generation_id: str
+    decision: str
+    reasons: tuple[str, ...]
+    changed_inputs: tuple[str, ...]
+    dependency_changes: tuple[str, ...]
+    old_semantic_id: str | None
+    new_semantic_id: str | None
+    shared_instance_id: str | None
+    semantically_unchanged: bool
+    physically_reused: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "node": self.node,
+            "old_generation_id": self.old_generation_id,
+            "new_generation_id": self.new_generation_id,
+            "decision": self.decision,
+            "reasons": list(self.reasons),
+            "changed_inputs": list(self.changed_inputs),
+            "dependency_changes": list(self.dependency_changes),
+            "old_semantic_id": self.old_semantic_id,
+            "new_semantic_id": self.new_semantic_id,
+            "shared_instance_id": self.shared_instance_id,
+            "semantically_unchanged": self.semantically_unchanged,
+            "physically_reused": self.physically_reused,
+        }
+
+    def to_text(self) -> str:
+        lines = [f"{self.node}: {self.decision}"]
+        lines.append(f"  {self.old_generation_id} -> {self.new_generation_id}")
+        if self.reasons:
+            lines.append(f"  reasons: {', '.join(self.reasons)}")
+        if self.changed_inputs:
+            lines.append(f"  changed inputs: {', '.join(self.changed_inputs)}")
+        if self.dependency_changes:
+            lines.append(f"  dependencies changed: {', '.join(self.dependency_changes)}")
+        if self.shared_instance_id is not None:
+            lines.append(f"  shared instance: {self.shared_instance_id}")
+        return "\n".join(lines)
 
 
 class Diagnostics:
@@ -926,7 +1003,92 @@ class Diagnostics:
             new_generation_id=new_id,
             changes=tuple(changes),
             include_unchanged=include_unchanged,
+            nodes=self._impact_nodes(old, new, include_unchanged=include_unchanged),
         )
+
+    def analyze_impact(
+        self,
+        old_id: str,
+        new_id: str,
+        *,
+        include_unchanged: bool = True,
+    ) -> ImpactAnalysis:
+        """Incremental reuse/rebuild analysis between two published generations.
+
+        Follows real dependency bindings rather than scope membership: a change in
+        one scope does not rebuild an unrelated sibling whose nodes are
+        semantically identical.
+        """
+
+        old = self._lookup_generation(old_id)
+        new = self._lookup_generation(new_id)
+        return analyse_impact(
+            self._observations(old),
+            self._observations(new),
+            old_generation_id=old_id,
+            new_generation_id=new_id,
+            include_unchanged=include_unchanged,
+        )
+
+    def explain_reuse(
+        self,
+        old_id: str,
+        new_id: str,
+        node: str,
+    ) -> ReuseExplanation | None:
+        """Why one node was reused, rebuilt, rewired, added, or removed.
+
+        Args:
+            old_id: Generation the node came from.
+            new_id: Generation the node entered.
+            node: Entry id of the composition node.
+
+        Returns:
+            Structured explanation, or ``None`` when the node is in neither
+            generation. ``decision == "reused"`` (and a non-``None``
+            ``shared_instance_id``) is only reported when the same runtime instance
+            was actually retained.
+        """
+
+        old = self._lookup_generation(old_id)
+        new = self._lookup_generation(new_id)
+        impact = analyse_impact(
+            self._observations(old), self._observations(new), include_unchanged=True
+        ).get(node)
+        if impact is None:
+            return None
+        return ReuseExplanation(
+            node=node,
+            old_generation_id=old_id,
+            new_generation_id=new_id,
+            decision=impact.decision,
+            reasons=impact.reasons,
+            changed_inputs=impact.changed_inputs,
+            dependency_changes=impact.dependency_changes,
+            old_semantic_id=impact.old_semantic_id,
+            new_semantic_id=impact.new_semantic_id,
+            shared_instance_id=impact.shared_instance_id,
+            semantically_unchanged=impact.semantically_unchanged,
+            physically_reused=impact.physically_reused,
+        )
+
+    # ---------------------------------------------------- semantic impact helpers
+
+    def _impact_nodes(
+        self, old: Any, new: Any, *, include_unchanged: bool
+    ) -> tuple[NodeImpact, ...]:
+        return analyse_impact(
+            self._observations(old),
+            self._observations(new),
+            include_unchanged=include_unchanged,
+        ).nodes
+
+    def _observations(self, generation: Any) -> dict[str, NodeObservation]:
+        def view(path: str) -> tuple[str, ...] | None:
+            resolved = generation.scopes.get(path)
+            return None if resolved is None else resolved.capabilities
+
+        return observations_from(generation.instances, scope_view=view)
 
     # ------------------------------------------------- composition explain helpers
 
