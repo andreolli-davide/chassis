@@ -101,7 +101,7 @@ def test_snapshot_is_restricted_to_a_generations_owners_and_sorted() -> None:
 
     every = registry.snapshot("gen_0002")
     assert every.names == ("add_numbers", "echo")
-    assert [item.name for item in every.to_langchain_tools()] == ["add_numbers", "echo"]
+    assert [item.name for item in every.to_tools()] == ["add_numbers", "echo"]
 
     empty = registry.snapshot("gen_0003", owner_ids=[])
     assert len(empty) == 0

@@ -112,6 +112,9 @@ async def evaluate_agent(
     be traced back to the exact runtime composition that produced it.
     """
 
+    from chassis._optional import EXTRA_LANGSMITH, require_extra
+
+    require_extra(EXTRA_LANGSMITH, "langsmith", purpose="the LangSmith evaluation helper")
     from langsmith import aevaluate
 
     target = agent_target(harness, agent, input_key=input_key, output_key=output_key)

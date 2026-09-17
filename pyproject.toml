@@ -1,13 +1,13 @@
 [project]
 name = "chassis-harness"
-version = "0.1.0"
-description = "Chassis: a production-grade Python agent harness built on scoped ownership, reactive capabilities, and immutable runtime generations."
+version = "0.2.0"
+description = "Chassis: transactional runtime composition for dynamic agent systems -- scoped ownership, reactive capabilities, and immutable runtime generations."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Chassis contributors" }]
-keywords = ["agents", "harness", "langgraph", "runtime", "lifecycle"]
+keywords = ["agents", "runtime", "composition", "langgraph", "lifecycle"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -17,12 +17,20 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "langchain-core>=1.6.3",
-    "langgraph>=1.2.11",
-    "langsmith>=0.12.5",
     "packaging>=26.3",
     "pydantic>=2.13.5",
     "pyyaml>=6.0.3",
+]
+
+[project.optional-dependencies]
+# The LangGraph adapter and the langchain-core tools it compiles into graphs.
+langgraph = [
+    "langchain-core>=1.6.3",
+    "langgraph>=1.2.11",
+]
+# The LangSmith telemetry backend and evaluation helper.
+langsmith = [
+    "langsmith>=0.12.5",
 ]
 
 [project.urls]
@@ -34,6 +42,9 @@ Documentation = "https://github.com/andreolli-davide/chassis/tree/main/docs"
 
 [dependency-groups]
 dev = [
+    "langchain-core>=1.6.3",
+    "langgraph>=1.2.11",
+    "langsmith>=0.12.5",
     "pyright>=1.1.414",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",

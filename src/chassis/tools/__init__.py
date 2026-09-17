@@ -16,6 +16,7 @@ from chassis.tools.metadata import ToolPolicy
 from chassis.tools.registry import (
     RegisteredTool,
     ScopedTools,
+    Tool,
     ToolNotFound,
     ToolRegistry,
     ToolSnapshot,
@@ -28,6 +29,7 @@ __all__ = [
     "DenyApprovals",
     "RegisteredTool",
     "ScopedTools",
+    "Tool",
     "ToolExecutionResult",
     "ToolExecutor",
     "ToolNotFound",

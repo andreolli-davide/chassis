@@ -11,8 +11,6 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from langchain_core.tools import BaseTool
-
 from chassis.capabilities.keys import TOOLS, CapabilityKey
 from chassis.core.errors import ChassisError
 from chassis.harness import Harness
@@ -25,7 +23,7 @@ from chassis.telemetry.base import TeeTelemetry, Telemetry
 from chassis.telemetry.recording import RecordingTelemetry
 from chassis.testing.fakes import FakePolicy, FakeSecrets, FakeTelemetry
 from chassis.tools.metadata import ToolPolicy
-from chassis.tools.registry import ToolSnapshot
+from chassis.tools.registry import Tool, ToolSnapshot
 
 if TYPE_CHECKING:
     from chassis.langgraph.graphs import AgentDefinition, GraphCache
@@ -59,7 +57,7 @@ class TestHarness(Harness):
         policy: PolicyEngine | None = None,
         secrets: SecretProvider | None = None,
         telemetry: Telemetry | None = None,
-        tools: Sequence[BaseTool] = (),
+        tools: Sequence[Tool] = (),
         tool_policies: Mapping[str, ToolPolicy] | None = None,
         plugins: Sequence[Plugin | type[Plugin]] = (),
         **kwargs: Any,
@@ -97,7 +95,7 @@ class TestHarness(Harness):
 
     def install_tools(
         self,
-        *tools: BaseTool,
+        *tools: Tool,
         policies: Mapping[str, ToolPolicy] | None = None,
         entry_id: str = "toolbox",
     ) -> str:

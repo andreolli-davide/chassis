@@ -11,18 +11,26 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from langchain_core.callbacks import (
+from chassis._optional import EXTRA_LANGGRAPH, require_extra
+
+require_extra(
+    EXTRA_LANGGRAPH,
+    "langchain_core",
+    purpose="the replayable model boundary (ReplayChatModel)",
+)
+
+from langchain_core.callbacks import (  # noqa: E402
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
-from pydantic import ConfigDict
+from langchain_core.language_models.chat_models import BaseChatModel  # noqa: E402
+from langchain_core.messages import AIMessage, BaseMessage  # noqa: E402
+from langchain_core.outputs import ChatGeneration, ChatResult  # noqa: E402
+from pydantic import ConfigDict  # noqa: E402
 
-from chassis.core.errors import ReplayMismatch
-from chassis.replay.models import BoundaryKind, ReplayFallback
-from chassis.replay.session import ReplaySession, boundary_key
+from chassis.core.errors import ReplayMismatch  # noqa: E402
+from chassis.replay.models import BoundaryKind, ReplayFallback  # noqa: E402
+from chassis.replay.session import ReplaySession, boundary_key  # noqa: E402
 
 __all__ = ["ReplayChatModel"]
 

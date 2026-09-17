@@ -43,13 +43,21 @@ class ToolLike(Protocol):
     """Structural view of a tool needed for schema hashing.
 
     Duck-typed on purpose so the hashing module does not depend on a tool library.
+    Only ``name`` and ``description`` are required. An optional
+    ``get_input_schema`` hook contributes the argument schema when present; a tool
+    without one contributes ``args: null`` rather than failing, so the core can hash
+    tools that were never built on a schema-bearing tool library.
     """
 
-    name: str
-    description: str
+    @property
+    def name(self) -> str:
+        """Stable tool name."""
 
-    def get_input_schema(self) -> Any:
-        """Return the tool's input schema (a pydantic model)."""
+        ...
+
+    @property
+    def description(self) -> str:
+        """Human-readable description."""
 
         ...
 
@@ -139,17 +147,26 @@ def schema_hash(schema: Any) -> str:
 def tool_schema_payload(tool: ToolLike) -> dict[str, Any]:
     """Canonical description of one tool's externally visible contract."""
 
+    return {
+        "name": tool.name,
+        "description": tool.description,
+        "args": _tool_input_schema(tool),
+    }
+
+
+def _tool_input_schema(tool: ToolLike) -> Any:
+    """The tool's argument schema, or ``None`` when it does not declare one."""
+
+    get_input_schema = getattr(tool, "get_input_schema", None)
+    if not callable(get_input_schema):
+        return None
     try:
-        input_schema = tool.get_input_schema().model_json_schema()
+        schema: Any = get_input_schema()
+        return schema.model_json_schema()
     except Exception as error:
         raise ConfigurationError(
             "tool input schema cannot be serialized", tool=tool.name
         ) from error
-    return {
-        "name": tool.name,
-        "description": tool.description,
-        "args": input_schema,
-    }
 
 
 def tool_schema_hash(tools: Iterable[ToolLike]) -> str:

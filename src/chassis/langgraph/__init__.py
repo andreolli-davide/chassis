@@ -8,7 +8,16 @@ execution to it.
 
 from __future__ import annotations
 
-from chassis.langgraph.graphs import (
+from chassis._optional import EXTRA_LANGGRAPH, require_extra
+
+require_extra(
+    EXTRA_LANGGRAPH,
+    "langchain_core",
+    "langgraph",
+    purpose="the LangGraph adapter (chassis.langgraph)",
+)
+
+from chassis.langgraph.graphs import (  # noqa: E402
     AgentDefinition,
     GraphBuildInputs,
     GraphCache,
@@ -16,8 +25,8 @@ from chassis.langgraph.graphs import (
     GraphCacheStats,
     build_cache_key,
 )
-from chassis.langgraph.runtime import LangGraphAgent
-from chassis.langgraph.tools import harness_tool_node
+from chassis.langgraph.runtime import LangGraphAgent  # noqa: E402
+from chassis.langgraph.tools import harness_tool_node  # noqa: E402
 
 __all__ = [
     "AgentDefinition",

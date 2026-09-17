@@ -1,10 +1,12 @@
-"""Harness metadata attached to a LangChain-compatible tool.
+"""Harness metadata attached to a registered tool.
 
-The tool itself stays a ``langchain-core`` object: Chassis wraps rather than
+The tool itself stays the object the plugin registered: Chassis wraps rather than
 replaces it, so names, descriptions, schemas, and execution behaviour remain
-upstream-compatible (invariant: no second tool ecosystem).
+upstream-compatible (invariant: no second tool ecosystem). Chassis core does not
+import a tool library; a tool only has to satisfy the structural contract in
+:mod:`chassis.tools.registry`.
 
-What Chassis adds is what langchain-core does not model: who owns the tool, what
+What Chassis adds is what a bare tool does not model: who owns the tool, what
 permissions the harness must check before running it, whether it is safe to retry,
 and how it should be bounded.
 """

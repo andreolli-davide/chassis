@@ -22,6 +22,7 @@ from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import asynccontextmanager
 from typing import Any
 
+from chassis._optional import EXTRA_LANGSMITH, require_extra
 from chassis.secrets.redaction import SecretRedactor
 from chassis.telemetry.base import NoopSpan
 
@@ -84,6 +85,7 @@ class LangSmithTelemetry:
         # Internal seams: tests substitute a recording run factory and current-run
         # lookup so the backend can be verified without network access.
         if self._enabled:
+            require_extra(EXTRA_LANGSMITH, "langsmith", purpose="LangSmith telemetry")
             from langsmith import get_current_run_tree, trace
 
             self._trace: Callable[..., Any] = trace

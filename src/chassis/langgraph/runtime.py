@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import AsyncIterator, Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
@@ -179,13 +179,15 @@ class LangGraphAgent:
         """The langchain-core tools compiled into the graph.
 
         The registry wraps tools with harness metadata; the graph must receive the
-        underlying tools, never the wrappers.
+        underlying tools, never the wrappers. The core stores them structurally, so
+        the cast is where the LangGraph adapter asserts they are ``BaseTool``s --
+        the only place that guarantee is needed.
         """
 
         snapshot = run_context.tools
         if snapshot is None:
             return ()
-        return tuple(entry.tool for entry in snapshot.entries)
+        return cast("tuple[BaseTool, ...]", tuple(entry.tool for entry in snapshot.entries))
 
     def _build_time_versions(self, run_context: HarnessRunContext) -> dict[str, str]:
         versions: dict[str, str] = {}

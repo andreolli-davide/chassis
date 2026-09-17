@@ -3,10 +3,11 @@
 Every harness-mediated tool call flows through here::
 
     agent -> tool request -> ToolExecutor -> policy -> approval -> budget/deadline
-          -> tracing -> langchain-core tool -> normalized result
+          -> tracing -> tool ainvoke -> normalized result
 
-The tool itself is untouched: it remains the ``langchain-core`` object the plugin
-registered, so schemas, names, and behaviour stay upstream-compatible.
+The tool itself is untouched: it remains the object the plugin registered, so
+schemas, names, and behaviour stay upstream-compatible. Chassis core never imports
+a tool library; the executor calls the structural ``ainvoke`` contract only.
 
 Refusals by the harness (unknown tool, policy denial, budget exhaustion) raise
 typed errors, because the caller must not confuse "the harness refused" with "the
@@ -21,8 +22,6 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
-
-from langchain_core.runnables import RunnableConfig
 
 from chassis.budget.governor import BudgetGovernor
 from chassis.budget.models import BudgetDimension
@@ -578,7 +577,7 @@ class ToolExecutor:
                 output = await entry.tool.ainvoke(payload, config=config)
         return _split_output(output)
 
-    def _runnable_config(self, entry: RegisteredTool, request: ToolRequest) -> RunnableConfig:
+    def _runnable_config(self, entry: RegisteredTool, request: ToolRequest) -> dict[str, Any]:
         metadata: dict[str, Any] = {
             "chassis_tool": entry.name,
             "chassis_tool_owner": entry.owner_name,
@@ -586,7 +585,7 @@ class ToolExecutor:
             "chassis_generation_id": request.generation_id,
             "chassis_run_id": request.run_id,
         }
-        config: RunnableConfig = {
+        config: dict[str, Any] = {
             "tags": [f"chassis:tool:{entry.name}"],
             "metadata": self._redactor.redact_value({k: v for k, v in metadata.items() if v}),
         }

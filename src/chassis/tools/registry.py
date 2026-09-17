@@ -1,8 +1,14 @@
-"""Scope-owned registry of LangChain-compatible tools.
+"""Scope-owned registry of tools.
 
-Registration wraps a ``langchain-core`` tool with harness metadata; it never
-replaces the tool. Registration is owned by the scope that created it, so a tool
-cannot outlive its plugin and unregistering is not the plugin author's job.
+Registration wraps a tool object with harness metadata; it never replaces the
+tool. Registration is owned by the scope that created it, so a tool cannot
+outlive its plugin and unregistering is not the plugin author's job.
+
+A registrable tool is anything satisfying the structural :class:`Tool` contract:
+a ``name``, a ``description``, and an awaitable ``ainvoke``. Chassis core does not
+depend on a tool library; a ``langchain-core`` ``BaseTool`` satisfies the contract
+by construction, which is what lets the LangGraph adapter compile registered tools
+into a graph without the kernel importing LangGraph.
 
 A tool the harness executes must come from the generation the run acquired, so
 execution takes an immutable :class:`ToolSnapshot` rather than reading the live
@@ -14,15 +20,47 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterable, Mapping
 from types import MappingProxyType
-from typing import Any
-
-from langchain_core.tools import BaseTool
+from typing import Any, Protocol
 
 from chassis.core.errors import ConfigurationError
 from chassis.core.scope import Scope
 from chassis.tools.metadata import ToolPolicy
 
-__all__ = ["RegisteredTool", "ScopedTools", "ToolRegistry", "ToolSnapshot"]
+__all__ = ["RegisteredTool", "ScopedTools", "Tool", "ToolRegistry", "ToolSnapshot"]
+
+
+class Tool(Protocol):
+    """Structural contract a registrable tool must satisfy.
+
+    Deliberately narrow: Chassis owns registration, ownership, and execution
+    boundaries, not the tool abstraction. ``langchain-core``'s ``BaseTool``
+    satisfies this protocol, as does any object with the same shape. Validation at
+    registration is duck-typed (see :func:`_is_tool`), so this protocol documents
+    the contract rather than gating it at runtime.
+    """
+
+    @property
+    def name(self) -> str:
+        """Stable tool name used in snapshots, policy, and tool requests."""
+
+        ...
+
+    @property
+    def description(self) -> str:
+        """Human-readable description, surfaced in diagnostics."""
+
+        ...
+
+    async def ainvoke(self, input: Any, config: Any = None, **kwargs: Any) -> Any:
+        """Execute the tool asynchronously."""
+
+        ...
+
+
+def _is_tool(tool: object) -> bool:
+    """Whether ``tool`` satisfies the structural contract, without importing one."""
+
+    return callable(getattr(tool, "ainvoke", None)) and isinstance(getattr(tool, "name", None), str)
 
 
 class ToolNotFound(ConfigurationError):
@@ -48,7 +86,7 @@ class RegisteredTool:
         self,
         *,
         registration_id: str,
-        tool: BaseTool,
+        tool: Tool,
         policy: ToolPolicy,
         owner_id: str,
         owner_name: str,
@@ -134,8 +172,8 @@ class ToolSnapshot:
             )
         return entry
 
-    def to_langchain_tools(self) -> list[BaseTool]:
-        """The underlying tools, for graph or ToolNode composition."""
+    def to_tools(self) -> list[Tool]:
+        """The underlying tools, for graph or ``ToolNode`` composition."""
 
         return [entry.tool for entry in self._entries]
 
@@ -164,7 +202,7 @@ class ToolRegistry:
         self,
         *,
         scope: Scope,
-        tool: BaseTool,
+        tool: Tool,
         policy: ToolPolicy | None = None,
         owner_id: str = "",
         owner_name: str = "",
@@ -173,14 +211,15 @@ class ToolRegistry:
         """Register ``tool`` for the lifetime of ``scope``.
 
         Raises:
-            ConfigurationError: the tool is not a ``BaseTool``, has no name, or a
-                tool with that name is already registered.
+            ConfigurationError: the object does not satisfy the tool contract
+                (no non-empty ``name`` or no awaitable ``ainvoke``), or a tool
+                with that name is already registered.
         """
 
         scope.assert_open(f"register tool {getattr(tool, 'name', '?')}")
-        if not isinstance(tool, BaseTool):
+        if not _is_tool(tool) or not tool.name:
             raise ConfigurationError(
-                "registered tools must be langchain-core BaseTool instances",
+                "registered tools must expose a non-empty name and an awaitable ainvoke",
                 tool=type(tool).__name__,
             )
         name = tool.name
@@ -260,7 +299,7 @@ class ScopedTools:
 
     def register(
         self,
-        tool: BaseTool,
+        tool: Tool,
         *,
         policy: ToolPolicy | None = None,
         metadata: Mapping[str, Any] | None = None,

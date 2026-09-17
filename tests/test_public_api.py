@@ -80,6 +80,7 @@ DOCUMENTED = {
     "chassis.tools": [
         "RegisteredTool",
         "ScopedTools",
+        "Tool",
         "ToolExecutionResult",
         "ToolExecutor",
         "ToolNotFound",
