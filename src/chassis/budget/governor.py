@@ -5,6 +5,16 @@ A governor tracks consumption against limits and raises
 get a child governor; consumption propagates upward so a parent can never be
 overdrawn by its children, and a child can never exceed what the parent has left.
 
+Two ways to charge a governor, matching the two enforcement modes of
+:class:`~chassis.budget.models.BudgetDimension`:
+
+* :meth:`BudgetGovernor.consume` -- used by Chassis at boundaries it owns (tool
+  calls, child runs). The limit is a guarantee.
+* :meth:`BudgetGovernor.record` -- the canonical entry point for an integration
+  reporting model calls, tokens, and cost that Chassis cannot observe itself. The
+  limit only holds if the integration reports; the governor still refuses the
+  report that would cross it.
+
 Governors are not thread-safe. A run's governor is mutated from the task driving
 that run, which is the only writer.
 """
@@ -17,7 +27,13 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
 
-from chassis.budget.models import BudgetDimension, BudgetLimits, BudgetUsage
+from chassis.budget.models import (
+    BudgetDimension,
+    BudgetEnforcement,
+    BudgetLimit,
+    BudgetLimits,
+    BudgetUsage,
+)
 from chassis.core.errors import BudgetExceeded
 
 __all__ = ["BudgetGovernor", "budget_scope", "current_budget"]
@@ -76,6 +92,21 @@ class BudgetGovernor:
     @property
     def parent(self) -> BudgetGovernor | None:
         return self._parent
+
+    def enforcement(self, dimension: BudgetDimension) -> BudgetEnforcement:
+        """Who keeps this dimension within its limit."""
+
+        return dimension.enforcement
+
+    def spec(self, dimension: BudgetDimension) -> BudgetLimit:
+        """Limit and enforcement mode of one dimension for this allocation."""
+
+        return self._limits.spec_for(dimension)
+
+    def describe(self) -> dict[str, dict[str, Any]]:
+        """Every dimension's limit and enforcement mode for this allocation."""
+
+        return self._limits.describe()
 
     def now(self) -> float:
         return self._clock()
@@ -146,12 +177,48 @@ class BudgetGovernor:
             self._parent.check(dimension, amount=amount)
 
     def consume(self, dimension: BudgetDimension, *, amount: float = 1.0) -> None:
-        """Check then record consumption. Raises if the budget is exhausted."""
+        """Check then record consumption. Raises if the budget is exhausted.
+
+        Used at boundaries Chassis owns, where the consumption is observable
+        directly and a configured limit is therefore a guarantee.
+        """
 
         self.check(dimension, amount=amount)
         self._usage.add(dimension, amount)
         if self._parent is not None:
             self._parent._record(dimension, amount)
+
+    def record(
+        self,
+        *,
+        model_calls: int = 0,
+        tokens: int = 0,
+        estimated_cost: float = 0.0,
+    ) -> None:
+        """Report cooperative usage from an integration, canonically.
+
+        Model calls, token usage, and cost happen inside the execution engine, not
+        at a Chassis boundary, so a configured limit on them only holds if the code
+        that owns the call reports it here. The report is checked exactly like any
+        other charge: a report that would cross the limit raises
+        :class:`BudgetExceeded` rather than being silently dropped, and propagation
+        to the parent allocation is identical to :meth:`consume`.
+
+        Example::
+
+            usage = response.usage_metadata or {}
+            run_context.budget.record(
+                model_calls=1,
+                tokens=usage.get("total_tokens", 0),
+            )
+        """
+
+        if model_calls:
+            self.consume(BudgetDimension.MODEL_CALLS, amount=model_calls)
+        if tokens:
+            self.consume(BudgetDimension.TOKENS, amount=tokens)
+        if estimated_cost:
+            self.consume(BudgetDimension.ESTIMATED_COST, amount=estimated_cost)
 
     def _record(self, dimension: BudgetDimension, amount: float) -> None:
         self._usage.add(dimension, amount)
@@ -167,6 +234,9 @@ class BudgetGovernor:
     def to_dict(self) -> dict[str, Any]:
         return {
             "limits": self._limits.to_dict(),
+            "enforcement": {
+                dimension.value: self.enforcement(dimension).value for dimension in BudgetDimension
+            },
             "usage": self._usage.to_dict(now=self._clock()),
             "remaining": {
                 dimension.value: self.remaining(dimension) for dimension in BudgetDimension

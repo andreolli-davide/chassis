@@ -293,6 +293,27 @@ class Diagnostics:
             for generation in self._harness.generation_manager.all_generations()
         ]
 
+    def budgets(self) -> dict[str, Any]:
+        """The harness's default run budget, with enforcement modes made explicit.
+
+        Per-run consumption lives on the run's own governor
+        (``HarnessRunContext.budget``, whose ``to_dict`` carries the same enforcement
+        facts); this reports the policy the harness applies by default.
+
+        ``enforced`` dimensions are hard guarantees at Chassis-owned boundaries.
+        ``accounted`` dimensions only hold when an integration reports usage through
+        :meth:`~chassis.budget.governor.BudgetGovernor.record`.
+        """
+
+        limits = self._harness.default_budget_limits
+        return {
+            "default_limits": limits.to_dict(),
+            "dimensions": limits.describe(),
+            "enforced": [dimension.value for dimension in limits.enforced_dimensions()],
+            "accounted": [dimension.value for dimension in limits.accounted_dimensions()],
+            "requires_accounting": limits.requires_accounting,
+        }
+
     def generation_pressure(self) -> GenerationPressureReport:
         """Liveness, leases, age, and retained work of every live generation.
 

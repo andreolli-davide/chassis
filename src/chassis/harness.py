@@ -403,6 +403,14 @@ class Harness:
 
         return self._last_failures
 
+    @property
+    def default_budget_limits(self) -> BudgetLimits:
+        """Default per-run limits, or an unlimited budget when none are configured."""
+
+        if self._default_budget_limits is None:
+            return BudgetLimits()
+        return self._default_budget_limits
+
     # ------------------------------------------------------------ desired state
 
     def install(

@@ -108,7 +108,14 @@ DOCUMENTED = {
         "HookResult",
         "HookSnapshot",
     ],
-    "chassis.budget": ["BudgetDimension", "BudgetGovernor", "BudgetLimits", "BudgetUsage"],
+    "chassis.budget": [
+        "BudgetDimension",
+        "BudgetEnforcement",
+        "BudgetGovernor",
+        "BudgetLimit",
+        "BudgetLimits",
+        "BudgetUsage",
+    ],
     "chassis.secrets": [
         "EnvSecretProvider",
         "RedactingSecretProvider",
