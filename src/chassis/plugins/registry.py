@@ -205,17 +205,26 @@ class PluginRegistry:
         self,
         entry: PluginEntry,
         resolved: Mapping[str, CapabilityRegistration],
+        *,
+        supersede: bool = False,
     ) -> PluginInstance:
         """Create the instance scope, run setup, and mark the instance active.
 
         If setup fails, every effect created during setup is reverted and the
         instance is marked ``FAILED``: no partially configured plugin survives a
         failed mount.
+
+        ``supersede`` states that the caller has decided the entry's current
+        instance is being replaced because its semantic identity changed, even
+        though its revision is unchanged. The outgoing instance is *not* disposed
+        here: it stays reachable until no live generation can reach it, exactly as
+        for a replaced revision.
         """
 
         current = self.instance(entry.entry_id)
         if (
-            current is not None
+            not supersede
+            and current is not None
             and current.state is not PluginState.DISPOSED
             and current.entry_revision == entry.revision
         ):

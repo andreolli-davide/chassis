@@ -917,7 +917,15 @@ class Harness:
         reused: list[str],
         failures: list[CleanupFailure],
     ) -> tuple[PluginInstance, ...]:
-        """Mount or reuse one instance per eligible entry, in activation order."""
+        """Mount or reuse one instance per eligible entry, in activation order.
+
+        Reuse is decided by semantic identity, not by revision alone: the exact
+        runtime instance is carried into the new generation only when its
+        implementation, contracts, configuration, scope, and resolved dependency
+        bindings are all unchanged. A changed provider therefore rebuilds its
+        consumers too, instead of leaving them bound to a registration that is on
+        its way out.
+        """
 
         ordered: list[PluginInstance] = []
         identities: dict[str, SemanticIdentity] = {}
@@ -926,15 +934,18 @@ class Harness:
             if entry is None:  # pragma: no cover - defensive
                 continue
             existing = self._plugin_registry.instance(entry_id)
+            identity = self._semantic_identity(entry, plan, identities)
             if (
                 existing is not None
                 and existing.state is PluginState.ACTIVE
                 and existing.entry_revision == entry.revision
+                and existing.semantic_identity == identity
             ):
+                # Safe reuse: every semantic input is unchanged, so the runtime
+                # instance may be shared with the new generation verbatim.
                 ordered.append(existing)
                 reused.append(entry_id)
-                if existing.semantic_identity is not None:
-                    identities[entry_id] = existing.semantic_identity
+                identities[entry_id] = identity
                 continue
             if existing is not None and existing.state is PluginState.FAILED:
                 # Retry: release the failed instance before mounting a new one.
@@ -955,10 +966,12 @@ class Harness:
                     )
                 )
                 instance = await self._plugin_registry.mount(
-                    entry, self._resolutions_for(plan, entry_id)
+                    entry,
+                    self._resolutions_for(plan, entry_id),
+                    supersede=existing is not None,
                 )
-                instance.semantic_identity = self._semantic_identity(entry, plan, identities)
-                identities[entry_id] = instance.semantic_identity
+                instance.semantic_identity = identity
+                identities[entry_id] = identity
                 span.set_attribute("instance_id", instance.instance_id)
                 self._record_lifecycle(
                     "plugin.mount",

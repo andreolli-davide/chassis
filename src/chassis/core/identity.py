@@ -198,7 +198,13 @@ class DependencyBinding:
     def display_key(self) -> tuple[object, ...]:
         """Non-secret key used for the displayable semantic id."""
 
-        return (self.capability, self.provider_entry_id, self.status, self.preference)
+        return (
+            self.capability,
+            self.provider_entry_id,
+            self.provider_identity,
+            self.status,
+            self.preference,
+        )
 
     def to_dict(self) -> dict[str, object]:
         return {

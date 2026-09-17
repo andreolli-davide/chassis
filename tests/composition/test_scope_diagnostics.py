@@ -290,8 +290,10 @@ async def test_diff_generations_reports_rewired_requirements_conservatively() ->
         assert len(rewired) == 1
         assert (rewired[0].kind, rewired[0].old, rewired[0].new) == ("rewired", "db-a", "db-b")
         assert "explicit provider preference" in rewired[0].reason
-        # Reuse is claimed only for identical instances, and only when asked for.
-        assert diff.providers == ()
+        # The consumer's selected provider changed, so it is rebuilt rather than
+        # reused with a registration pointing at the outgoing provider; the
+        # providers it no longer uses are reused and therefore not reported.
+        assert [(item.kind, item.subject) for item in diff.providers] == [("replaced", "agent")]
         with_unchanged = harness.diagnostics.diff_generations(
             first.generation_id, second.generation_id, include_unchanged=True
         )
