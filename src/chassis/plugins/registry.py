@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 
 from chassis.agents import AgentRegistry
 from chassis.capabilities.registry import CapabilityRegistration, CapabilityRegistry
+from chassis.core.collections import FrozenDict
 from chassis.core.errors import (
     EffectCleanupError,
     PluginLoadError,
@@ -122,7 +123,13 @@ class PluginRegistry:
             )
         revision = self._revisions.get(resolved_entry_id, 0) + 1
         self._revisions[resolved_entry_id] = revision
-        effective_config = dict(config if config is not None else plugin_instance.config)
+        # Desired configuration is hashed, compared, and observed by runs, and the
+        # published instance shares this mapping with its context. Freezing it here
+        # keeps a later control-plane mutation from changing what an already-running
+        # generation observes, exactly as the declarative config model is frozen.
+        effective_config: Mapping[str, object] = FrozenDict(
+            config if config is not None else plugin_instance.config
+        )
         entry = PluginEntry(
             entry_id=resolved_entry_id,
             plugin=plugin_instance,
