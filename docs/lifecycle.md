@@ -276,10 +276,14 @@ harness.diagnostics.explain_scope("/research")                # visibility and o
 harness.diagnostics.diff_generations("gen_0004", "gen_0005")  # semantic composition diff
 harness.diagnostics.analyze_impact("gen_0004", "gen_0005")    # reuse/rebuild analysis
 harness.diagnostics.explain_reuse("gen_0004", "gen_0005", "search")  # why one node was reused or rebuilt
+harness.diagnostics.explain_agent("finance", revision="17")  # composition of one agent revision
+harness.diagnostics.diff_agents("finance", "17", "18")       # what changed between revisions
 ```
 
 Scoped composition is described in [scopes.md](scopes.md): hierarchy, inheritance,
 capability narrowing, provenance, and the explain and diff APIs.
+Agent composition is described in [agent-composition.md](agent-composition.md):
+`AgentSpec`, immutable revisions, materialization, pinning, and retirement.
 
 Diagnostics are generated from authoritative state, never scraped from logs, and
 they describe configuration by key rather than by value. Effect descriptions are

@@ -206,6 +206,16 @@ explained.to_dict()           # structured, JSON-compatible
 ran, and `harness.diagnostics.analyze_impact` recomputes it from any two published
 generations.
 
+## Agent revisions
+
+An [agent revision](agent-composition.md) is a composition change like any other, so
+the same rules apply: a revision that leaves a contribution unchanged does not
+reinstall its entry, and the mounted instance is carried across the revision change.
+A revision that adds a contribution mounts only that node; a revision that changes a
+scope's capability or tool view narrows or widens visibility and rebuilds exactly the
+consumers whose resolved bindings moved. Unrelated agent scopes are reused, and a
+shared provider is retained.
+
 ## Rollback
 
 Candidate construction is still transactional. New nodes are mounted before

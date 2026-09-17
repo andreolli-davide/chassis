@@ -6,9 +6,61 @@ why it was made, and what to do instead. Lifecycle behaviour is unchanged across
 these releases: published generations are still immutable, publication is still
 transactional, and logical unload is still distinct from physical disposal.
 
+- [0.4 → 0.5](#04-05): agent composition, agent revisions, tool visibility
 - [0.3 → 0.4](#03-04): incremental composition, semantic identity, reuse diagnostics
 - [0.2 → 0.3](#02-03): composition scopes, explain and diff diagnostics
 - [0.1 → 0.2](#01-02): optional extras, tool protocol, lease identity, budgets
+
+## 0.4 → 0.5
+
+0.5 adds first-class, versioned agent composition on top of the existing kernel. It
+is additive: every 0.4 guarantee still holds, and a composition with no `AgentSpec`
+behaves exactly as before. Two snapshot and attribution details change.
+
+### `RuntimeSnapshot` gained `agent_revision`
+
+`RuntimeSnapshot` now carries the agent revision a run executed against, and
+`to_dict()` (and therefore `digest()`) includes it. A digest recorded with 0.4 will
+not equal the digest of the same composition in 0.5; re-baseline stored snapshots,
+as for 0.3 and 0.4. `semantic_digest()` and `physical_digest()` keep their meaning,
+and `public_composition_digest()` is an additive alias for `semantic_digest()`.
+
+### Run attribution stamps the logical agent
+
+`harness.agents.invoke`/`stream` stamp the logical agent name and revision on the
+result (and streamed events), so a runtime referenced by `AgentSpec.runtime_ref`
+reports the agent the caller selected rather than its own internal name. An agent
+registered only as a runtime is unchanged.
+
+### Additive APIs
+
+Nothing was removed and no existing signature changed otherwise. New in 0.5:
+
+- `chassis.agents.AgentSpec`, `AgentRevision`, `AgentRegistry` (spec registry
+  methods `install`/`replace`/`remove`/`spec`/`active_spec`/`revisions`/`specs`/
+  `history`), `AgentNotFound`, `AgentRetired`;
+- `HarnessRunContext.agent_revision` and `.agent_identity`; `AgentResult.agent_revision`
+  and `AgentEvent.agent_revision`;
+- `RuntimeSnapshot.agent_revision`, `.agent_identity`, `.public_composition_digest()`;
+- `PluginManifest.implementation_revision` (optional; absent keeps the previous
+  implementation fingerprint);
+- composition tool visibility: `CompositionScope.tools`/`select_tools`/
+  `expose_all_tools`, `CompositionTree.child(..., tools=...)`, `ResolvedScope.tools`/
+  `local_tools`/`inherited_tools`/`visible_tools`, `Harness.tool_snapshot(..., scope=)`,
+  `Harness.run_environment(..., scope=)`, and `ScopeExplanation.visible_tools`;
+- `harness.diagnostics.explain_agent(...)` and `.diff_agents(...)`, with
+  `AgentExplanation` and `AgentDiff`.
+
+### Agent composition checklist
+
+- Publish an agent with `harness.agents.install(AgentSpec(...))`; a revision that was
+  already published with different content is rejected, so bump the revision.
+- Hold `runtime_ref` stable if you do not want a revision change to change the
+  execution runtime.
+- If you registered an agent as a runtime and want revision attribution, add a spec
+  whose `runtime_ref` names that runtime.
+- Tool names remain process-global: two agent scopes cannot contribute the same tool
+  name; share a tool plugin at an ancestor scope instead.
 
 ## 0.3 → 0.4
 

@@ -150,6 +150,34 @@ assert explanation.candidates[0].rejection == "capability_not_exposed"
 
 Capability narrowing is not IAM, and Chassis does not claim it is.
 
+## 6a. Tool visibility
+
+Tools follow the same inheritance-plus-narrowing rule. A scope may declare a **tool
+view**; a child sees the tools its own entries and its ancestors contribute, filtered
+by the intersection of every tool view along its path, and siblings never see each
+other's tools:
+
+```python
+research = harness.composition.child("research", tools=["web-search"])
+research.install(search_plugin, entry_id="search")     # contributes `web-search`
+
+async with harness:
+    generation = harness.current_generation
+    scope = generation.scopes.get("/research")
+    scope.visible_tools         # ("web-search",)
+    harness.tool_snapshot(generation, scope="/research").names   # ("web-search",)
+    harness.run_environment(generation, scope="/research").tools
+```
+
+`None` (the default) exposes every tool visible from the lineage, so an ordinary
+scope behaves exactly as before. Tool visibility is composition visibility, not
+authorization: it decides which tools a run may *see*, not which actions a user is
+allowed to take. Tool names are process-global, so two scopes cannot contribute the
+same name — share a tool plugin at an ancestor scope instead.
+
+Agent scopes use this directly; see
+[agent-composition.md](agent-composition.md).
+
 ## 7. Ambiguity
 
 Chassis already refuses to resolve ambiguity arbitrarily, and scopes do not change

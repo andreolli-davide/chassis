@@ -50,6 +50,38 @@ class AgentRuntime(Protocol):
 It is deliberately small: Chassis does not pretend every backend shares identical
 durability semantics.
 
+## AgentSpec and AgentDefinition
+
+`AgentDefinition` is the LangGraph build contract: **how** this engine builds and
+runs a graph. [`AgentSpec`](agent-composition.md) is the Chassis composition
+contract: **what runtime composition the logical agent sees**. They are connected by
+a logical `runtime_ref`, and the core never imports LangGraph:
+
+```python
+harness.register_agent(
+    LangGraphAgent(AgentDefinition(name="finance-graph", version="7", state_schema=State, build=build))
+)
+harness.agents.install(
+    AgentSpec(
+        name="finance",
+        revision="17",
+        runtime_ref="finance-graph",       # resolved against registered runtimes
+        capabilities=["model", "database", "tools"],
+        tools=["spreadsheet"],
+        plugins={"ledger": {}},
+    )
+)
+
+result = await harness.agents.invoke("finance", {"messages": [...]})
+assert (result.agent, result.agent_revision) == ("finance", "17")
+```
+
+A run executes against the generation the spec materialized: the graph is compiled
+with the tools its agent scope exposes, and the run's revision is preserved through
+the result, streamed events, trace metadata, and snapshot. Changing the graph
+topology bumps `AgentDefinition.version`; changing composition publishes a new
+`AgentSpec` revision. Neither concept subsumes the other.
+
 ## The run context
 
 Graphs are compiled with `context_schema=HarnessRunContext`, and nodes read their

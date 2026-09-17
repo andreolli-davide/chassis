@@ -46,6 +46,7 @@ nav:
   - Guides:
       - Lifecycle and ownership: lifecycle.md
       - Scoped composition: scopes.md
+      - Agent composition: agent-composition.md
       - Incremental composition: incremental-composition.md
       - Writing a plugin: plugin-author-guide.md
       - LangGraph integration: langgraph.md

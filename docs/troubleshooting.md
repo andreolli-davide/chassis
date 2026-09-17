@@ -284,6 +284,45 @@ can see what the old run still observes. The instance is disposed when the last
 lease on that generation is released (see
 [lifecycle.md](lifecycle.md#logical-unload-is-not-physical-disposal)).
 
+## `AgentRetired` from `agents.invoke`
+
+An agent published through an `AgentSpec` was removed, so no new run selects it:
+
+```python
+harness.agents.is_retired("finance")     # True
+harness.agents.spec("finance", revision="17")   # historical revision still reachable
+```
+
+Re-publish with `harness.agents.install(AgentSpec(name="finance", revision="18", ...))`
+to make it selectable again. Runs already pinned to an old generation keep observing
+it until their lease ends (see [agent-composition.md](agent-composition.md)).
+
+## `ConfigurationError: a published agent revision is immutable`
+
+The same `(name, revision)` was published with different content. A revision, once
+published, is never mutated in place:
+
+```text
+finance@17  →  change composition  →  ConfigurationError
+finance@17  →  finance@18          →  harness.agents.replace(spec)
+```
+
+Declare a new revision and use `replace` to make it current.
+
+## An agent's tool is invisible, or `ToolNotFound`
+
+An agent scope exposes the tools its own entries and its ancestors contribute,
+filtered by its tool view. Check what the scope actually exposes:
+
+```python
+harness.diagnostics.explain_scope("/agents/finance").visible_tools
+harness.diagnostics.explain_agent("finance").to_dict()["visible_tools"]
+```
+
+Common causes: the tool's plugin is declared in a **sibling** scope (never visible),
+the scope's `tools` view does not list it, or another scope already registered a tool
+with the same process-global name. Share the tool plugin at an ancestor scope instead.
+
 ## `ConfigurationError: cannot install into an undeclared composition scope`
 
 `install(..., scope=...)` validates the path against the desired-state tree.

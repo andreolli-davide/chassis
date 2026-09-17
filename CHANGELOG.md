@@ -5,6 +5,65 @@ All notable changes to Chassis are recorded here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with the pre-1.0 caveat
 that a minor release may break the documented surface.
 
+## [0.5.0] - 2026-09-17
+
+Introduces **first-class, versioned agent composition** on top of the existing
+kernel without turning Chassis into an agent framework. `AgentSpec` describes what
+runtime composition a logical agent sees, materializes into the existing composition
+scopes, and is published as an immutable revision. It does not execute, plan,
+remember, or authorize; LangGraph's `AgentDefinition` remains the engine-specific
+graph-build contract. Every 0.4 guarantee still holds.
+
+### Added
+
+- **`AgentSpec` and `AgentRevision`.** `chassis.agents` (backed by
+  `chassis.agent_spec`) exposes an immutable, engine-neutral description of an
+  agent's composition — name, author-declared revision, scope path, runtime
+  reference, capability view, requirements, plugin contributions, tool view,
+  profile, and metadata. Every container is frozen recursively, so an authoring
+  object cannot alias mutable state into a published revision. `AgentRevision`
+  records a published revision and its materialization facts.
+- **Agent revision registry and materialization.** `AgentRegistry` gained
+  `install`/`replace`/`remove`/`spec`/`active_spec`/`revisions`/`specs`/`history`.
+  A spec materializes into a real `CompositionScope` (default `/agents/<name>`)
+  that owns its plugin contributions, capability and tool views, requirements, and
+  reserved metadata naming the agent and revision. A published `(name, revision)`
+  is immutable; changing the active revision requires `replace`; retirement
+  withdraws the active revision from desired state without touching published
+  generations, and historical revisions stay reachable.
+- **Run pinning and attribution.** `HarnessRunContext`, `AgentResult`, and
+  `AgentEvent` carry `agent_revision`; invocation reads the revision the acquired
+  generation actually materialized, so a run stays associated with the revision it
+  started under even when a newer revision is published concurrently.
+  `RuntimeSnapshot` gained `agent_revision`, `agent_identity`, and an additive
+  `public_composition_digest()` alias for `semantic_digest()`.
+- **Tool visibility in composition scopes.** Tools follow the same
+  inheritance-plus-narrowing rule as capabilities: a scope declares a tool view,
+  `build_scope_tree` binds it to the tools the mounted instances own, and
+  `Harness.tool_snapshot(..., scope=)`/`run_environment(..., scope=)` narrow a run's
+  tools to its scope. Sibling scopes no longer leak tools into each other.
+- **Agent diagnostics.** `harness.diagnostics.explain_agent(...)` reports a
+  revision's scope, views, contributions, requirement provenance, visible providers
+  and tools, composition digest, and the generations that published it;
+  `harness.diagnostics.diff_agents(...)` compares two revisions structurally and
+  delegates the runtime reuse/rebuild analysis to the existing generation impact
+  engine (`AgentExplanation`, `AgentDiff`).
+- **Optional `PluginManifest.implementation_revision`.** An author-declared identity
+  for two builds that share `name@version` and a module qualname; it participates in
+  the implementation fingerprint, and an absent value keeps the previous identity.
+- **Guarantees G21–G24** and a new [agent-composition.md](docs/agent-composition.md)
+  guide, plus `examples/agent_composition.py`.
+
+### Changed
+
+- `RuntimeSnapshot.to_dict()` (and therefore `digest()`) gained `agent_revision`;
+  stored 0.4 snapshots should be re-baselined.
+- `harness.agents.invoke`/`stream` stamp the logical agent name and revision on the
+  result and streamed events. An agent registered only as a runtime is unchanged.
+- `build_scope_tree` accepts the live tool registrations and records tool visibility
+  in the published scope tree, so scope topology and tool views both participate in
+  the generation digest as composition.
+
 ## [0.4.1] - 2026-09-17
 
 Hardening found by an architectural review of 0.4's incremental reuse model. No

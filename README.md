@@ -114,6 +114,43 @@ acquired a scope tree keeps observing exactly that tree.
 Full guide: [docs/scopes.md](docs/scopes.md). Runnable:
 `uv run python examples/scoped_composition.py`.
 
+## Versioned agent composition
+
+A logical agent is described once, versioned, and materialized into the same
+composition scopes — without Chassis becoming an agent framework:
+
+```python
+from chassis.agent_spec import AgentSpec
+
+harness.agents.install(AgentSpec(
+    name="finance",
+    revision="17",
+    runtime_ref="finance-graph",                      # a registered AgentRuntime
+    capabilities=["model", "database", "tools"],      # visibility, not authority
+    requires={"model": ">=1,<2", "database": ">=1,<2"},
+    tools=["spreadsheet"],
+    profile="reasoning",
+    plugins={"ledger": {}},                           # resolved via the catalog
+))
+
+result = await harness.agents.invoke("finance", {"messages": [...]})
+assert (result.agent, result.agent_revision) == ("finance", "17")
+
+harness.diagnostics.explain_agent("finance", revision="17").to_text()
+harness.diagnostics.diff_agents("finance", "17", "18").to_text()
+```
+
+A revision, once published, is immutable; a run keeps the revision (and generation)
+it started under even when a newer revision is published; retiring an agent stops new
+runs without destroying old executions; and unchanged contributions are reused across
+a revision change by the same semantic-identity machinery everything else uses.
+
+`AgentSpec` is what composition an agent sees; LangGraph's `AgentDefinition` stays how
+a specific engine builds and runs a graph. The core imports without LangGraph.
+
+Full guide: [docs/agent-composition.md](docs/agent-composition.md). Runnable:
+`uv run python examples/agent_composition.py`.
+
 ## The core proposition
 
 > Chassis allows agent runtime composition to change over time while active runs
@@ -136,10 +173,10 @@ what Chassis refuses to promise.
 
 ## Status
 
-Pre-1.0 (`0.4.1`). The surface covered by `tests/test_public_api.py` may break in a
+Pre-1.0 (`0.5.0`). The surface covered by `tests/test_public_api.py` may break in a
 minor release; every break is recorded in [CHANGELOG.md](CHANGELOG.md), and
-[migrations](docs/migration.md) lists the 0.1 → 0.2, 0.2 → 0.3, and 0.3 → 0.4
-changes.
+[migrations](docs/migration.md) lists the 0.1 → 0.2, 0.2 → 0.3, 0.3 → 0.4, and
+0.4 → 0.5 changes.
 
 ## Development
 

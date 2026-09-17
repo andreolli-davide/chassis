@@ -33,8 +33,22 @@ below is enforced by tests, and the tests are the specification of record.
 | G18 | A runtime node is shared across generations only when its semantic identity proves reuse cannot change observable behaviour | `core/identity.py`, `harness.py`, `tests/composition/test_semantic_identity.py` |
 | G19 | A shared runtime resource is not disposed while any live generation can reach it | `core/generations.py`, `harness.py`, `tests/composition/test_structural_sharing.py` |
 | G20 | Unaffected, semantically identical nodes are eligible for reuse, and Chassis reports reuse only for a node whose reuse safety it established | `core/identity.py`, `diagnostics.py`, `tests/composition/test_reuse_diagnostics.py` |
+| G21 | A published agent revision is immutable; any composition-affecting change creates a new revision | `agents.py`, `tests/agents/test_agent_registry.py` |
+| G22 | A run remains associated with the agent revision selected when it started, and with the generation it acquired | `agents.py`, `runtime.py`, `tests/agents/test_invocation.py` |
+| G23 | Agent composition is materialized through the same scoped resolver, ownership, semantic identity, and generation publication machinery as all other composition | `agents.py`, `composition.py`, `tests/agents/test_agent_lifecycle.py` |
+| G24 | Agent tool and capability visibility is composition, not authorization; it grants no user or organization authority | `docs/agent-composition.md`, `docs/security.md` |
 
 ## Decisions worth knowing
+
+- **Agent composition is a thin layer, not a framework.** `AgentSpec` describes what
+  composition an agent sees and materializes into the existing composition-scope
+  primitives; it never executes, plans, remembers, or authorizes. `AgentDefinition`
+  stays the engine-specific graph-build contract, reached only through a logical
+  `runtime_ref` (G23). See [agent-composition.md](agent-composition.md).
+- **A revision is an explicit author declaration.** Publishing a new revision does
+  not require — or imply — a semantic change, and two revisions that materialize to
+  an equivalent composition are not collapsed. Reuse still follows semantic identity,
+  so an unchanged contribution is not rebuilt across a revision change (G21, G20).
 
 - **Immutable generations instead of hot mutation.** Reconfiguration builds a new
   generation and publishes it atomically; old generations drain. In-place mutation of
@@ -124,7 +138,14 @@ below is enforced by tests, and the tests are the specification of record.
   0.4 shares nodes within a process by semantic identity across live generations,
   and lifetime still follows generation reachability rather than a global cache;
 - no configuration-file schema for scopes: the composition-scope primitive is stable,
-  the file format is not ([configuration.md](configuration.md#composition-scopes)).
+  the file format is not ([configuration.md](configuration.md#composition-scopes));
+- no agent loop, planner, memory framework, RAG, browser, workflow or graph DSL, MCP
+  framework, or autonomous revision publisher: `AgentSpec` describes composition and
+  nothing above it;
+- no user or organization authorization: agent capability and tool visibility is
+  composition, not IAM ([agent-composition.md](agent-composition.md));
+- no child-agent delegation framework: the run model does not assume one run equals
+  one agent forever, but `delegate`/`spawn_agent` are not part of this release.
 
 ## What is public API
 
@@ -134,4 +155,6 @@ which fails if documentation references an API that no longer exists. Pre-1.0, t
 minor version may break that surface; every break is recorded in
 [CHANGELOG.md](https://github.com/andreolli-davide/chassis/blob/main/CHANGELOG.md) and
 [migration.md](migration.md). `chassis_version` and the runtime snapshot digest
-identify exactly which version produced a run.
+identify exactly which version produced a run. Agent composition is reached through
+the `chassis.agents` namespace (`AgentSpec`, `AgentRevision`, `AgentRegistry`,
+`AgentNotFound`, `AgentRetired`) rather than `chassis.__all__`.
