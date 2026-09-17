@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import time
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
@@ -36,6 +37,7 @@ from chassis.capabilities.snapshot import CapabilitySnapshot
 from chassis.core.errors import GenerationConflictError, HarnessStateError
 from chassis.core.generation import (
     GenerationAccounting,
+    GenerationLease,
     GenerationState,
     RuntimeGeneration,
 )
@@ -52,14 +54,32 @@ class GenerationManager:
     Args:
         history_limit: How many *retired* generations to retain for diagnostics.
             Live generations (current and draining) are never evicted by it.
+        clock: Monotonic clock used to timestamp leases. Injectable so lease age
+            is deterministic in tests.
     """
 
-    def __init__(self, *, history_limit: int = _HISTORY_LIMIT) -> None:
+    def __init__(
+        self, *, history_limit: int = _HISTORY_LIMIT, clock: Callable[[], float] = time.monotonic
+    ) -> None:
         self._current: RuntimeGeneration | None = None
         self._draining: dict[str, RuntimeGeneration] = {}
         self._retired: list[RuntimeGeneration] = []
         self._history_limit = history_limit
+        self._evicted = 0
+        self._clock = clock
         self._counter = itertools.count(1)
+
+    @property
+    def history_limit(self) -> int:
+        """How many retired generations the diagnostics buffer retains."""
+
+        return self._history_limit
+
+    @property
+    def evicted(self) -> int:
+        """How many retired generations left the diagnostics buffer, all-time."""
+
+        return self._evicted
 
     # ------------------------------------------------------------------ reading
 
@@ -137,7 +157,7 @@ class GenerationManager:
             sequence=sequence,
             snapshot=snapshot_factory(generation_id),
             instances=tuple(instances),
-            accounting=GenerationAccounting(),
+            accounting=GenerationAccounting(clock=self._clock),
             metadata=dict(metadata or {}),
         )
 
@@ -180,7 +200,10 @@ class GenerationManager:
         generation.accounting.state = GenerationState.RETIRED
         self._draining.pop(generation.generation_id, None)
         self._retired.append(generation)
-        del self._retired[: max(0, len(self._retired) - self._history_limit)]
+        overflow = len(self._retired) - self._history_limit
+        if overflow > 0:
+            del self._retired[:overflow]
+            self._evicted += overflow
         if self._current is generation:  # pragma: no cover - guarded above
             self._current = None
         return True
@@ -211,29 +234,33 @@ class GenerationManager:
 
     # ------------------------------------------------------------- acquisition
 
-    def acquire(self) -> RuntimeGeneration:
+    def acquire_lease(self) -> GenerationLease:
         """Take a lease on the current generation.
 
-        The read and the increment happen without an intervening ``await``, so the
-        acquired generation is coherent and cannot be retired out from under the
-        caller.
+        The read, the timestamp, and the increment happen without an intervening
+        ``await``, so the acquired generation is coherent and cannot be retired out
+        from under the caller.
         """
 
         generation = self._current
         if generation is None or generation.state is not GenerationState.ACTIVE:
             raise HarnessStateError("no runtime generation is available")
-        generation.accounting.acquire()
-        return generation
+        lease_id = generation.accounting.acquire()
+        return GenerationLease(
+            generation=generation,
+            lease_id=lease_id,
+            started_at=generation.accounting.clock(),
+        )
 
-    def release(self, generation: RuntimeGeneration) -> bool:
-        """Release a lease.
+    def release_lease(self, lease: GenerationLease) -> bool:
+        """Release one lease.
 
         Returns whether this was the last lease of a draining generation, which is
         the signal that retirement and disposal may proceed.
         """
 
-        became_idle = generation.accounting.release()
-        return became_idle and generation.state is GenerationState.DRAINING
+        became_idle = lease.generation.accounting.release(lease.lease_id)
+        return became_idle and lease.generation.state is GenerationState.DRAINING
 
     async def drain(
         self,
@@ -286,4 +313,6 @@ class GenerationManager:
             "current": None if self._current is None else self._current.to_dict(),
             "draining": [generation.to_dict() for generation in self.draining()],
             "history": [generation.to_dict() for generation in self.history],
+            "history_limit": self._history_limit,
+            "evicted": self._evicted,
         }

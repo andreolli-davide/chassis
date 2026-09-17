@@ -54,10 +54,10 @@ from chassis.core.errors import (
     SecretResolutionError,
     ToolExecutionError,
 )
-from chassis.core.generation import GenerationState, RuntimeGeneration
+from chassis.core.generation import GenerationLease, GenerationState, RuntimeGeneration
 from chassis.core.generations import GenerationManager
 from chassis.core.scope import EffectRecord, Scope, ScopeState
-from chassis.diagnostics import Diagnostics
+from chassis.diagnostics import Diagnostics, GenerationPressureReport
 from chassis.harness import Harness, HarnessState, ReconcileResult
 from chassis.plugins import (
     DependencyResolver,
@@ -116,7 +116,9 @@ __all__ = [
     "EffectCleanupError",
     "EffectRecord",
     "GenerationConflictError",
+    "GenerationLease",
     "GenerationManager",
+    "GenerationPressureReport",
     "GenerationState",
     "GraphBuildError",
     "Harness",

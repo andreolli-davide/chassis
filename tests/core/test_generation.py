@@ -38,14 +38,14 @@ def manager() -> GenerationManager:
 def test_acquisition_requires_a_published_generation(manager: GenerationManager) -> None:
     assert manager.current is None
     with pytest.raises(HarnessStateError):
-        manager.acquire()
+        manager.acquire_lease()
 
     candidate = manager.build(snapshot_factory=empty_snapshot, instances=[])
     assert candidate.state is GenerationState.BUILDING
 
     # A candidate is invisible, so acquisition is still refused.
     with pytest.raises(HarnessStateError):
-        manager.acquire()
+        manager.acquire_lease()
 
 
 def test_publish_marks_the_previous_generation_draining(manager: GenerationManager) -> None:
@@ -65,15 +65,15 @@ def test_release_reports_only_the_last_lease_of_a_draining_generation(
 ) -> None:
     first = manager.build(snapshot_factory=empty_snapshot, instances=[])
     manager.publish(first)
-    manager.acquire()
-    manager.acquire()
+    first_lease = manager.acquire_lease()
+    second_lease = manager.acquire_lease()
     manager.publish(manager.build(snapshot_factory=empty_snapshot, instances=[]))
 
     assert first.state is GenerationState.DRAINING
     assert first.lease_count == 2
 
-    assert manager.release(first) is False
-    assert manager.release(first) is True
+    assert manager.release_lease(first_lease) is False
+    assert manager.release_lease(second_lease) is True
 
 
 def test_release_of_an_active_generation_is_not_a_reclaim_signal(
@@ -82,8 +82,8 @@ def test_release_of_an_active_generation_is_not_a_reclaim_signal(
     active = manager.build(snapshot_factory=empty_snapshot, instances=[])
     manager.publish(active)
 
-    manager.acquire()
-    assert manager.release(active) is False
+    lease = manager.acquire_lease()
+    assert manager.release_lease(lease) is False
 
 
 def test_retiring_an_active_generation_is_rejected(manager: GenerationManager) -> None:
@@ -157,20 +157,20 @@ def test_begin_shutdown_stops_new_acquisitions(manager: GenerationManager) -> No
     assert draining == (active,)
     assert manager.current is None
     with pytest.raises(HarnessStateError):
-        manager.acquire()
+        manager.acquire_lease()
 
 
 async def test_drain_waits_for_released_leases(manager: GenerationManager) -> None:
     active = manager.build(snapshot_factory=empty_snapshot, instances=[])
     manager.publish(active)
-    manager.acquire()
+    lease = manager.acquire_lease()
     draining = manager.begin_shutdown()
 
     waiter = asyncio.ensure_future(manager.drain(draining))
     await asyncio.sleep(0)
     assert not waiter.done()
 
-    manager.release(active)
+    manager.release_lease(lease)
 
     idle, busy = await waiter
     assert idle == (active,)
@@ -182,14 +182,14 @@ async def test_drain_reports_generations_that_outlive_the_timeout(
 ) -> None:
     active = manager.build(snapshot_factory=empty_snapshot, instances=[])
     manager.publish(active)
-    manager.acquire()
+    lease = manager.acquire_lease()
     draining = manager.begin_shutdown()
 
     idle, busy = await manager.drain(draining, timeout_seconds=0.01)
 
     assert idle == ()
     assert busy == (active,)
-    manager.release(active)
+    manager.release_lease(lease)
 
 
 def test_history_is_bounded_and_newest_first(manager: GenerationManager) -> None:
@@ -226,7 +226,8 @@ def test_history_limit_never_evicts_a_live_generation(manager: GenerationManager
     small = GenerationManager(history_limit=1)
     first = small.build(snapshot_factory=empty_snapshot, instances=[instance("a")])
     small.publish(first)
-    assert small.acquire() is first
+    lease = small.acquire_lease()
+    assert lease.generation is first
 
     for index in range(3):
         small.publish(
@@ -237,7 +238,7 @@ def test_history_limit_never_evicts_a_live_generation(manager: GenerationManager
     assert first in small.draining()
     assert "plugin_a" in small.reachable_instance_ids()
 
-    assert small.release(first) is True
+    assert small.release_lease(lease) is True
     small.retire(first)
 
     assert first not in small.live()

@@ -1,9 +1,9 @@
 """The Chassis control plane.
 
 ``Harness`` owns desired plugin state, resolves composition, mounts and disposes
-plugin instances, and publishes immutable runtime generations. It deliberately
-does **not** execute agents: execution lives behind the
-:class:`~chassis.langgraph.runtime.AgentRuntime` boundary so the lifecycle kernel
+plugin instances, and publishes immutable runtime generations. It deliberately does
+**not** execute agents: execution lives behind the
+:class:`~chassis.runtime.AgentRuntime` boundary so the lifecycle kernel
 stays independent of any graph engine.
 
 Control plane vs data plane
@@ -789,11 +789,11 @@ class Harness:
         desired-state changes may still be pending.
         """
 
-        generation = self._generations.acquire()
+        lease = self._generations.acquire_lease()
         try:
-            yield generation
+            yield lease.generation
         finally:
-            if self._generations.release(generation):
+            if self._generations.release_lease(lease):
                 await self._reclaim_after_drain()
 
     # -------------------------------------------------------------- internals

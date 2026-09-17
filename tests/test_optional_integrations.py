@@ -66,9 +66,10 @@ async def main() -> None:
     async with harness.acquire() as acquired:
         assert acquired is generation
         assert generation.lease_count == 1
-        assert harness.diagnostics.status()["state"] == "running"
+        pressure = harness.diagnostics.generation_pressure()
+        assert pressure.current_generation_id == generation.generation_id
+        assert pressure.live_generations == 1
     assert generation.lease_count == 0
-    assert harness.diagnostics.generations()
     await harness.stop()
     print("core lifecycle ok")
 

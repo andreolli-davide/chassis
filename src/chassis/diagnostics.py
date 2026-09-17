@@ -9,13 +9,153 @@ secrets.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Mapping
+from dataclasses import dataclass
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from chassis.harness import Harness
     from chassis.plugins.lifecycle import PluginInstance
 
-__all__ = ["Diagnostics"]
+__all__ = [
+    "Diagnostics",
+    "GenerationPressureEntry",
+    "GenerationPressureReport",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationPressureEntry:
+    """Authoritative state of one live generation."""
+
+    generation_id: str
+    sequence: int
+    state: str
+    is_current: bool
+    age_seconds: float
+    leases: int
+    oldest_lease_age_seconds: float | None
+    retained_plugins: tuple[dict[str, Any], ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "generation_id": self.generation_id,
+            "sequence": self.sequence,
+            "state": self.state,
+            "is_current": self.is_current,
+            "age_seconds": self.age_seconds,
+            "leases": self.leases,
+            "oldest_lease_age_seconds": self.oldest_lease_age_seconds,
+            "retained_plugins": [dict(plugin) for plugin in self.retained_plugins],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationPressureReport:
+    """How many generations are alive, why, and what they still retain.
+
+    Every value is read from authoritative runtime state: the generation manager's
+    live set, each generation's own lease accounting, and the plugin instances the
+    generation was published with. Nothing here is inferred from logs or the
+    bounded diagnostics history, and nothing here changes runtime behaviour -- this
+    is observability, not enforcement.
+
+    A generation stays live while a run holds a lease on it. That is correct: the
+    run must keep observing the composition it acquired. Pressure tells an operator
+    when that is happening for longer than expected.
+    """
+
+    current_generation_id: str | None
+    live_generations: int
+    draining_generations: int
+    total_leases: int
+    oldest_lease_age_seconds: float | None
+    generations: tuple[GenerationPressureEntry, ...]
+    instance_generations: Mapping[str, tuple[str, ...]]
+    history_limit: int
+    history_retained: int
+    history_evicted: int
+    generated_at: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.instance_generations, MappingProxyType):
+            object.__setattr__(
+                self, "instance_generations", MappingProxyType(dict(self.instance_generations))
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Structured, JSON-compatible form. Never contains configuration values."""
+
+        return {
+            "current_generation_id": self.current_generation_id,
+            "live_generations": self.live_generations,
+            "draining_generations": self.draining_generations,
+            "total_leases": self.total_leases,
+            "oldest_lease_age_seconds": self.oldest_lease_age_seconds,
+            "generations": [generation.to_dict() for generation in self.generations],
+            "instance_generations": {
+                instance_id: list(ids)
+                for instance_id, ids in sorted(self.instance_generations.items())
+            },
+            "history": {
+                "limit": self.history_limit,
+                "retained": self.history_retained,
+                "evicted": self.history_evicted,
+            },
+            "generated_at": self.generated_at,
+        }
+
+    def metrics(self) -> dict[str, float]:
+        """Vendor-neutral gauges a telemetry backend may export.
+
+        Names are Chassis-owned and dotted, so a backend can forward them without
+        the core depending on any metrics library.
+        """
+
+        return {
+            "chassis.generations.live": float(self.live_generations),
+            "chassis.generations.draining": float(self.draining_generations),
+            "chassis.generations.leases": float(self.total_leases),
+            "chassis.generations.oldest_lease_age_seconds": float(
+                self.oldest_lease_age_seconds or 0.0
+            ),
+        }
+
+    def to_text(self) -> str:
+        """Human-readable rendering of the report."""
+
+        oldest = self.oldest_lease_age_seconds
+        lines = [
+            f"current_generation: {self.current_generation_id or '(none)'}",
+            f"live_generations: {self.live_generations}",
+            f"draining_generations: {self.draining_generations}",
+            f"oldest_lease_age_seconds: {'-' if oldest is None else f'{oldest:.0f}'}",
+        ]
+        for generation in self.generations:
+            lines.append("")
+            label = " (current)" if generation.is_current else ""
+            lines.append(f"{generation.generation_id}{label}")
+            lines.append(f"  state: {generation.state}")
+            lines.append(f"  age_seconds: {generation.age_seconds:.0f}")
+            lines.append(f"  leases: {generation.leases}")
+            if generation.oldest_lease_age_seconds is not None:
+                lines.append(
+                    f"  oldest_lease_age_seconds: {generation.oldest_lease_age_seconds:.0f}"
+                )
+            lines.append("  retained_plugins:")
+            if not generation.retained_plugins:
+                lines.append("    (none)")
+            for plugin in generation.retained_plugins:
+                lines.append(f"    - {plugin['entry_id']} ({plugin['plugin']})")
+        if self.history_evicted:
+            lines.append("")
+            lines.append(
+                f"history: {self.history_retained}/{self.history_limit} retained, "
+                f"{self.history_evicted} evicted"
+            )
+        return "\n".join(lines)
 
 
 class Diagnostics:
@@ -152,6 +292,84 @@ class Diagnostics:
             generation.to_dict()
             for generation in self._harness.generation_manager.all_generations()
         ]
+
+    def generation_pressure(self) -> GenerationPressureReport:
+        """Liveness, leases, age, and retained work of every live generation.
+
+        Answers, without taking the control-plane lock: what is current, how many
+        generations are live or draining, how old each is, how old the oldest
+        outstanding lease is, and which plugin instances an old generation still
+        retains. It observes; it never enforces a limit.
+        """
+
+        manager = self._harness.generation_manager
+        now = time.time()
+        live = manager.live()
+        current = manager.current
+        entries: list[GenerationPressureEntry] = []
+        instance_generations: dict[str, list[tuple[int, str]]] = {}
+        oldest: float | None = None
+        total = 0
+        for generation in live:
+            retained: list[dict[str, Any]] = []
+            for instance in generation.instances:
+                retained.append(
+                    {
+                        "entry_id": instance.entry_id,
+                        "instance_id": instance.instance_id,
+                        "plugin": instance.manifest.name,
+                        "version": instance.manifest.version,
+                        "state": instance.state.value,
+                        "generation_refs": instance.generation_refs,
+                    }
+                )
+                instance_generations.setdefault(instance.instance_id, []).append(
+                    (generation.sequence, generation.generation_id)
+                )
+            lease_age = generation.oldest_lease_age_seconds
+            if lease_age is not None:
+                oldest = lease_age if oldest is None else max(oldest, lease_age)
+            total += generation.lease_count
+            entries.append(
+                GenerationPressureEntry(
+                    generation_id=generation.generation_id,
+                    sequence=generation.sequence,
+                    state=generation.state.value,
+                    is_current=generation is current,
+                    age_seconds=max(0.0, now - generation.created_at),
+                    leases=generation.lease_count,
+                    oldest_lease_age_seconds=lease_age,
+                    retained_plugins=tuple(retained),
+                )
+            )
+        entries.sort(key=lambda entry: entry.sequence, reverse=True)
+        return GenerationPressureReport(
+            current_generation_id=None if current is None else current.generation_id,
+            live_generations=len(live),
+            draining_generations=len(manager.draining()),
+            total_leases=total,
+            oldest_lease_age_seconds=oldest,
+            generations=tuple(entries),
+            instance_generations={
+                key: tuple(
+                    generation_id for _sequence, generation_id in sorted(value, reverse=True)
+                )
+                for key, value in instance_generations.items()
+            },
+            history_limit=manager.history_limit,
+            history_retained=len(manager.history),
+            history_evicted=manager.evicted,
+            generated_at=now,
+        )
+
+    def instance_generations(self, instance_id: str) -> tuple[str, ...]:
+        """Live generations that can currently reach a plugin instance, newest first.
+
+        Empty when the instance is not reachable from any live generation, which
+        is exactly the condition that makes it disposable.
+        """
+
+        return self.generation_pressure().instance_generations.get(instance_id, ())
 
     def explain(self, entry_id: str) -> str:
         """Why one plugin is active, pending, or excluded."""
