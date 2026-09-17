@@ -27,10 +27,13 @@ from chassis.core.identity import (
 from chassis.plugins.resolver import ProviderAssessment, RequirementResolution
 
 if TYPE_CHECKING:
+    from chassis.agent_spec import AgentSpec
     from chassis.harness import Harness
     from chassis.plugins.lifecycle import PluginInstance
 
 __all__ = [
+    "AgentDiff",
+    "AgentExplanation",
     "CompositionChange",
     "Diagnostics",
     "GenerationDiff",
@@ -582,6 +585,328 @@ class ReuseExplanation:
         return "\n".join(lines)
 
 
+@dataclass(frozen=True, slots=True)
+class AgentExplanation:
+    """Structured answer to "what composition does this agent revision have?".
+
+    Built from the published revision, the scope it materialized, and the
+    generation that published it. Configuration values are never reported: plugin
+    contributions and metadata are described by name or key.
+    """
+
+    agent: str
+    revision: str
+    identity: str
+    scope_path: str
+    runtime_ref: str | None
+    profile: str | None
+    description: str
+    capabilities: tuple[str, ...] | None
+    tools: tuple[str, ...] | None
+    plugins: tuple[str, ...]
+    plugin_entries: tuple[str, ...]
+    requirements: tuple[RequirementExplanation, ...]
+    unresolved: tuple[str, ...]
+    visible_providers: Mapping[str, tuple[str, ...]]
+    visible_tools: tuple[str, ...]
+    composition_digest: str
+    generations: tuple[str, ...]
+    metadata_keys: tuple[str, ...]
+    retired: bool
+    generation_id: str | None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "visible_providers", MappingProxyType(dict(self.visible_providers))
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "agent": self.agent,
+            "revision": self.revision,
+            "identity": self.identity,
+            "scope_path": self.scope_path,
+            "runtime_ref": self.runtime_ref,
+            "profile": self.profile,
+            "description": self.description,
+            "capabilities": None if self.capabilities is None else list(self.capabilities),
+            "tools": None if self.tools is None else list(self.tools),
+            "plugins": list(self.plugins),
+            "plugin_entries": list(self.plugin_entries),
+            "requirements": [item.to_dict() for item in self.requirements],
+            "unresolved": list(self.unresolved),
+            "visible_providers": {
+                name: list(ids) for name, ids in sorted(self.visible_providers.items())
+            },
+            "visible_tools": list(self.visible_tools),
+            "composition_digest": self.composition_digest,
+            "generations": list(self.generations),
+            "metadata_keys": list(self.metadata_keys),
+            "retired": self.retired,
+            "generation_id": self.generation_id,
+        }
+
+    def to_text(self) -> str:
+        lines = [f"agent: {self.identity}"]
+        if self.retired:
+            lines.append("  state: retired (no new run selects it)")
+        lines.append(f"  scope: {self.scope_path}")
+        if self.runtime_ref is not None:
+            lines.append(f"  runtime: {self.runtime_ref}")
+        if self.profile is not None:
+            lines.append(f"  profile: {self.profile}")
+        lines.append(
+            "  capabilities: "
+            + ("(unrestricted)" if self.capabilities is None else ", ".join(self.capabilities))
+        )
+        lines.append(
+            "  tools: " + ("(every visible tool)" if self.tools is None else ", ".join(self.tools))
+        )
+        lines.append(f"  plugins: {', '.join(self.plugins) or '(none)'}")
+        lines.append(f"  visible tools: {', '.join(self.visible_tools) or '(none)'}")
+        lines.append("  providers:")
+        if not self.visible_providers:
+            lines.append("    (none)")
+        for name, ids in sorted(self.visible_providers.items()):
+            lines.append(f"    {name}: {', '.join(ids)}")
+        lines.append("  requirements:")
+        if not self.requirements:
+            lines.append("    (none)")
+        for requirement in self.requirements:
+            marker = "ok" if requirement.status == "resolved" else requirement.status
+            lines.append(f"    {requirement.requirement}: {marker}")
+        if self.unresolved:
+            lines.append(f"  unresolved: {', '.join(self.unresolved)}")
+        lines.append(f"  composition digest: {self.composition_digest}")
+        if self.generations:
+            lines.append(f"  published in: {', '.join(self.generations)}")
+        return "\n".join(lines)
+
+
+@dataclass(frozen=True, slots=True)
+class AgentDiff:
+    """Semantic diff between two revisions of one agent.
+
+    The diff is composed from the specs, not from logs, and the composition impact
+    is delegated to the existing generation impact analysis when both revisions
+    were published: it never re-implements the reuse engine.
+    """
+
+    agent: str
+    old_revision: str
+    new_revision: str
+    changes: tuple[CompositionChange, ...]
+    old_generation_id: str | None = None
+    new_generation_id: str | None = None
+    impact: ImpactAnalysis | None = None
+
+    def by_category(self, category: str) -> tuple[CompositionChange, ...]:
+        return tuple(item for item in self.changes if item.category == category)
+
+    @property
+    def scope_changes(self) -> tuple[CompositionChange, ...]:
+        return self.by_category("scope")
+
+    @property
+    def runtime_changes(self) -> tuple[CompositionChange, ...]:
+        return self.by_category("runtime")
+
+    @property
+    def profile_changes(self) -> tuple[CompositionChange, ...]:
+        return self.by_category("profile")
+
+    @property
+    def capability_changes(self) -> tuple[CompositionChange, ...]:
+        return self.by_category("capability")
+
+    @property
+    def tool_changes(self) -> tuple[CompositionChange, ...]:
+        return self.by_category("tool")
+
+    @property
+    def plugin_changes(self) -> tuple[CompositionChange, ...]:
+        return self.by_category("plugin")
+
+    @property
+    def requirement_changes(self) -> tuple[CompositionChange, ...]:
+        return self.by_category("requirement")
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.changes
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "agent": self.agent,
+            "old_revision": self.old_revision,
+            "new_revision": self.new_revision,
+            "changes": [item.to_dict() for item in self.changes],
+            "old_generation_id": self.old_generation_id,
+            "new_generation_id": self.new_generation_id,
+            "impact": None if self.impact is None else self.impact.to_dict(),
+        }
+
+    def to_text(self) -> str:
+        lines = [f"{self.agent}:{self.old_revision} -> {self.agent}:{self.new_revision}", ""]
+        for category, title in (
+            ("scope", "SCOPE"),
+            ("runtime", "RUNTIME"),
+            ("profile", "PROFILE"),
+            ("capability", "CAPABILITIES"),
+            ("tool", "TOOLS"),
+            ("plugin", "PLUGIN CONTRIBUTIONS"),
+            ("requirement", "REQUIREMENTS"),
+        ):
+            items = self.by_category(category)
+            if not items:
+                continue
+            lines.append(title)
+            for kind in ("added", "removed", "changed", "unchanged"):
+                group = [item for item in items if item.kind == kind]
+                if not group:
+                    continue
+                lines.append(f"  {kind.upper()}")
+                for item in group:
+                    if item.kind == "changed" and item.old is not None:
+                        lines.append(f"    {item.subject}: {item.old} -> {item.new}")
+                    else:
+                        lines.append(f"    {item.subject}")
+            lines.append("")
+        if self.impact is not None:
+            lines.append("COMPOSITION IMPACT")
+            lines.append(f"  {self.old_generation_id} -> {self.new_generation_id}")
+            for node in self.impact.nodes:
+                lines.append(f"  {node.entry_id}: {node.decision}")
+            lines.append("")
+        if len(lines) == 2:
+            lines.append("(no changes)")
+        return "\n".join(lines).rstrip()
+
+
+def _agent_spec_changes(
+    old: AgentSpec, new: AgentSpec, *, include_unchanged: bool
+) -> list[CompositionChange]:
+    """Structural changes between two authored revisions.
+
+    Reports names and specifiers only: a plugin contribution that changed is
+    reported as changed, never with its configuration values.
+    """
+
+    changes: list[CompositionChange] = []
+
+    def scalar(category: str, subject: str, before: Any, after: Any) -> None:
+        if before == after:
+            if include_unchanged:
+                changes.append(CompositionChange(category, "unchanged", subject))
+            return
+        changes.append(
+            CompositionChange(
+                category,
+                "changed",
+                subject,
+                old=str(before),
+                new=str(after),
+                reason=f"{category} changed",
+            )
+        )
+
+    scalar("scope", "scope", old.scope_path, new.scope_path)
+    scalar("runtime", "runtime_ref", old.runtime_ref, new.runtime_ref)
+    scalar("profile", "profile", old.profile, new.profile)
+    _membership(
+        changes,
+        "capability",
+        "capability view",
+        old.capabilities,
+        new.capabilities,
+        include_unchanged=include_unchanged,
+    )
+    _membership(
+        changes, "tool", "tool view", old.tools, new.tools, include_unchanged=include_unchanged
+    )
+    for name in sorted(set(old.plugins) | set(new.plugins)):
+        if name not in old.plugins:
+            changes.append(CompositionChange("plugin", "added", name))
+        elif name not in new.plugins:
+            changes.append(CompositionChange("plugin", "removed", name))
+        elif old.plugins[name] != new.plugins[name]:
+            changes.append(
+                CompositionChange("plugin", "changed", name, reason="contribution changed")
+            )
+        elif include_unchanged:
+            changes.append(CompositionChange("plugin", "unchanged", name))
+    for kind, before_map, after_map in (
+        ("requires", old.requires, new.requires),
+        ("optional", old.optional, new.optional),
+    ):
+        for name in sorted(set(before_map) | set(after_map)):
+            before = before_map.get(name)
+            after = after_map.get(name)
+            subject = f"{kind}:{name}"
+            if before is None:
+                changes.append(CompositionChange("requirement", "added", subject, new=after))
+            elif after is None:
+                changes.append(CompositionChange("requirement", "removed", subject, old=before))
+            elif before != after:
+                changes.append(
+                    CompositionChange(
+                        "requirement",
+                        "changed",
+                        subject,
+                        old=before,
+                        new=after,
+                        reason="requirement changed",
+                    )
+                )
+            elif include_unchanged:
+                changes.append(CompositionChange("requirement", "unchanged", subject))
+    return changes
+
+
+def _membership(
+    changes: list[CompositionChange],
+    category: str,
+    subject: str,
+    before: Any,
+    after: Any,
+    *,
+    include_unchanged: bool,
+) -> None:
+    """Diff two optional name-set views (``None`` means unrestricted)."""
+
+    if before is None or after is None:
+        if before is None and after is None:
+            if include_unchanged:
+                changes.append(CompositionChange(category, "unchanged", subject))
+            return
+        changes.append(
+            CompositionChange(
+                category,
+                "changed",
+                subject,
+                old=_render_view(before),
+                new=_render_view(after),
+                reason=f"{category} view changed",
+            )
+        )
+        return
+    before_names = set(before)
+    after_names = set(after)
+    for name in sorted(after_names - before_names):
+        changes.append(CompositionChange(category, "added", name))
+    for name in sorted(before_names - after_names):
+        changes.append(CompositionChange(category, "removed", name))
+    if include_unchanged:
+        for name in sorted(before_names & after_names):
+            changes.append(CompositionChange(category, "unchanged", name))
+
+
+def _render_view(value: Any) -> str:
+    if value is None:
+        return "(all)"
+    return ",".join(sorted(value))
+
+
 class Diagnostics:
     """Read-only views over the harness control plane."""
 
@@ -1077,6 +1402,166 @@ class Diagnostics:
             semantically_unchanged=impact.semantically_unchanged,
             physically_reused=impact.physically_reused,
         )
+
+    # -------------------------------------------------------- agent composition
+
+    def explain_agent(
+        self,
+        agent: str,
+        *,
+        revision: str | None = None,
+        generation_id: str | None = None,
+    ) -> AgentExplanation:
+        """Why one agent revision has this composition.
+
+        Reports the revision's scope, views, plugin contributions, requirements
+        with their provenance, visible providers and tools, its composition digest,
+        and the generations that published it. Everything is read from the
+        authoritative revision record and the published generation; nothing is
+        reconstructed from logs, and configuration and metadata are reported by key.
+
+        Args:
+            agent: Logical agent name.
+            revision: Revision to explain. Defaults to the active revision.
+            generation_id: Explain a published generation's materialization instead
+                of the newest one. The generation must have published this revision.
+
+        Raises:
+            AgentNotFound: the agent or revision is unknown.
+            AgentRetired: the agent was retired and no revision was named.
+        """
+
+        published = self._harness.agents.spec(agent, revision)
+        generations = self._revision_generations(published.identity)
+        if generation_id is not None:
+            generation = self._lookup_generation(generation_id)
+        elif generations:
+            generation = generations[0]
+        else:
+            generation = self._harness.current_generation
+
+        resolved = None if generation is None else generation.scopes.get(published.scope)
+        published_here = (
+            resolved is not None and self._scope_revision(resolved) == published.identity
+        )
+        if published_here:
+            assert resolved is not None
+            provenance = resolved.provenance
+            resolved_id: str | None = None if generation is None else generation.generation_id
+            visible = self._display_providers(
+                dict(resolved.visible), self._entry_by_instance(generation)
+            )
+            visible_tools = tuple(resolved.visible_tools)
+            metadata_keys = tuple(sorted(str(key) for key in resolved.metadata))
+        else:
+            plan_scope = self._harness.plan().scope_for(published.scope)
+            provenance = () if plan_scope is None else plan_scope.provenance
+            resolved_id = None
+            visible = {} if plan_scope is None else dict(plan_scope.visible)
+            visible_tools = ()
+            metadata_keys = ()
+
+        explanations = tuple(
+            self._explain_resolution(item, published.scope, resolved_id) for item in provenance
+        )
+        unresolved = tuple(
+            f"{item.consumer} {item.requirement}"
+            for item in provenance
+            if not item.satisfied and not item.requirement.optional
+        )
+        return AgentExplanation(
+            agent=published.name,
+            revision=published.revision,
+            identity=published.identity,
+            scope_path=published.scope,
+            runtime_ref=published.runtime_ref,
+            profile=published.spec.profile,
+            description=published.spec.description,
+            capabilities=(
+                None
+                if published.spec.capabilities is None
+                else tuple(sorted(published.spec.capabilities))
+            ),
+            tools=None if published.spec.tools is None else tuple(sorted(published.spec.tools)),
+            plugins=tuple(sorted(published.spec.plugins)),
+            plugin_entries=tuple(sorted(published.entries)),
+            requirements=explanations,
+            unresolved=unresolved,
+            visible_providers=visible,
+            visible_tools=visible_tools,
+            composition_digest=published.composition_digest,
+            generations=tuple(item.generation_id for item in generations),
+            metadata_keys=metadata_keys,
+            retired=self._harness.agents.is_retired(agent),
+            generation_id=resolved_id,
+        )
+
+    def diff_agents(
+        self,
+        agent: str,
+        old_revision: str,
+        new_revision: str,
+        *,
+        include_unchanged: bool = False,
+    ) -> AgentDiff:
+        """Semantic diff between two revisions of one agent.
+
+        Reports composition intent (scope, runtime, profile, capabilities, tools,
+        plugin contributions, requirements) from the specs, and delegates the
+        runtime reuse/rebuild analysis to the existing generation impact engine when
+        both revisions were published. It never re-implements either engine.
+        """
+
+        old = self._harness.agents.spec(agent, old_revision)
+        new = self._harness.agents.spec(agent, new_revision)
+        changes = _agent_spec_changes(old.spec, new.spec, include_unchanged=include_unchanged)
+        old_generations = self._revision_generations(old.identity)
+        new_generations = self._revision_generations(new.identity)
+        old_generation = old_generations[0] if old_generations else None
+        new_generation = new_generations[0] if new_generations else None
+        impact = None
+        if old_generation is not None and new_generation is not None:
+            impact = analyse_impact(
+                self._observations(old_generation),
+                self._observations(new_generation),
+                old_generation_id=old_generation.generation_id,
+                new_generation_id=new_generation.generation_id,
+                include_unchanged=include_unchanged,
+            )
+        return AgentDiff(
+            agent=agent,
+            old_revision=old_revision,
+            new_revision=new_revision,
+            changes=tuple(changes),
+            old_generation_id=None if old_generation is None else old_generation.generation_id,
+            new_generation_id=None if new_generation is None else new_generation.generation_id,
+            impact=impact,
+        )
+
+    def _revision_generations(self, identity: str) -> tuple[Any, ...]:
+        """Generations whose agent scope published ``identity``, newest first."""
+
+        found: list[Any] = []
+        for generation in self._harness.generation_manager.all_generations():
+            for scope in generation.scopes:
+                if self._scope_revision(scope) == identity:
+                    found.append(generation)
+                    break
+        return tuple(found)
+
+    @staticmethod
+    def _scope_revision(scope: ResolvedScope) -> str | None:
+        agent = scope.metadata.get("chassis.agent")
+        revision = scope.metadata.get("chassis.agent_revision")
+        if isinstance(agent, str) and isinstance(revision, str):
+            return f"{agent}@{revision}"
+        return None
+
+    @staticmethod
+    def _entry_by_instance(generation: Any | None) -> dict[str, str]:
+        if generation is None:
+            return {}
+        return {instance.instance_id: instance.entry_id for instance in generation.instances}
 
     # ---------------------------------------------------- semantic impact helpers
 

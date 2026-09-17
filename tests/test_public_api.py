@@ -188,6 +188,8 @@ DOCUMENTED = {
         "build_scope_tree",
     ],
     "chassis.diagnostics": [
+        "AgentDiff",
+        "AgentExplanation",
         "CompositionChange",
         "Diagnostics",
         "GenerationDiff",
