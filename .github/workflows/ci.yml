@@ -58,22 +58,46 @@ jobs:
         run: uv build
 
       # The wheel must work on its own, in an environment that has never seen the
-      # source tree: `import chassis`, the version resolving from the distribution
-      # name, and a real LangGraph run.
-      - name: Install the wheel into a clean environment
+      # source tree: the core imports without the optional integrations, then the
+      # LangGraph extra installs and a real agent runs.
+      - name: Install the core wheel into a clean environment
         run: |
           uv venv .smoke
           uv pip install --python .smoke/bin/python dist/*.whl
 
-      - name: Import the installed package
+      - name: The core imports without the optional integrations
         run: |
           .smoke/bin/python - <<'PY'
+          import sys
+
           import chassis
+          import chassis.replay
+          import chassis.telemetry
+          import chassis.testing
+          import chassis.tools
+
+          assert chassis.__version__ != "0.0.0", "version did not resolve from the distribution"
+          loaded = sorted(
+              name
+              for name in sys.modules
+              if name.split(".")[0] in {"langgraph", "langchain_core", "langsmith"}
+          )
+          assert loaded == [], f"the core imported optional integrations: {loaded}"
+          print("core chassis", chassis.__version__, "imports without the extras")
+          PY
+
+      - name: Install the LangGraph extra
+        run: |
+          wheel=$(ls dist/*.whl)
+          uv pip install --python .smoke/bin/python "${wheel}[langgraph]"
+
+      - name: Import the installed integrations
+        run: |
+          .smoke/bin/python - <<'PY'
           import chassis.langgraph
           import chassis.testing
 
-          assert chassis.__version__ != "0.0.0", "version did not resolve from the distribution"
-          print("chassis", chassis.__version__)
+          print("the langgraph extra provides the adapter and the test doubles")
           PY
 
       - name: Run the quickstart against the installed package

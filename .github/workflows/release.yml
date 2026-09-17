@@ -69,19 +69,33 @@ jobs:
       - name: Build
         run: uv build
 
-      # The artifact, not the source tree: install the wheel into an environment
-      # that has never seen this checkout and run a real agent with it.
+      # The artifact, not the source tree: install the core wheel into an
+      # environment that has never seen this checkout, prove it works without the
+      # optional integrations, then add the LangGraph extra and run a real agent.
       - name: Verify the built wheel
         run: |
           uv venv .smoke
           uv pip install --python .smoke/bin/python dist/*.whl
           .smoke/bin/python - <<'PY'
+          import sys
+
           import chassis
+          import chassis.replay
+          import chassis.telemetry
+          import chassis.testing
 
           expected = "${{ steps.version.outputs.version }}"
           assert chassis.__version__ == expected, f"{chassis.__version__} != {expected}"
-          print("installed chassis-harness", chassis.__version__)
+          loaded = sorted(
+              name
+              for name in sys.modules
+              if name.split(".")[0] in {"langgraph", "langchain_core", "langsmith"}
+          )
+          assert loaded == [], f"the core imported optional integrations: {loaded}"
+          print("installed chassis-harness", chassis.__version__, "without the extras")
           PY
+          wheel=$(ls dist/*.whl)
+          uv pip install --python .smoke/bin/python "${wheel}[langgraph]"
           .smoke/bin/python examples/quickstart.py
 
       - name: Upload the distribution
