@@ -67,6 +67,7 @@ from chassis.plugins.resolver import (
     ResolutionPlan,
     ScopePlan,
 )
+from chassis.tools.registry import RegisteredTool
 
 __all__ = [
     "ROOT_NAME",
@@ -117,6 +118,12 @@ def _view_from(capabilities: Iterable[str | CapabilityKey] | None) -> frozenset[
     )
 
 
+def _tool_view_from(tools: Iterable[str] | None) -> frozenset[str] | None:
+    if tools is None:
+        return None
+    return frozenset(tools)
+
+
 @dataclass(frozen=True, slots=True)
 class ScopeSpec:
     """Structural description of one composition scope.
@@ -129,6 +136,7 @@ class ScopeSpec:
     name: str
     parent: str | None
     capabilities: frozenset[str] | None = None
+    tools: frozenset[str] | None = None
     requirements: tuple[CapabilityRequirement, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
 
@@ -144,6 +152,7 @@ class ScopeSpec:
             "name": self.name,
             "parent": self.parent,
             "capabilities": None if self.capabilities is None else sorted(self.capabilities),
+            "tools": None if self.tools is None else sorted(self.tools),
             "requirements": [str(item) for item in self.requirements],
         }
 
@@ -184,6 +193,7 @@ class CompositionScope:
         "_name",
         "_parent",
         "_requirements",
+        "_tools",
         "_tree",
     )
 
@@ -194,12 +204,14 @@ class CompositionScope:
         *,
         parent: CompositionScope | None = None,
         capabilities: Iterable[str | CapabilityKey] | None = None,
+        tools: Iterable[str] | None = None,
         metadata: Mapping[str, Any] | None = None,
     ) -> None:
         self._tree = tree
         self._name = _validate_name(name)
         self._parent = parent
         self._capabilities = _view_from(capabilities)
+        self._tools = _tool_view_from(tools)
         self._metadata: dict[str, Any] = dict(metadata or {})
         self._children: list[CompositionScope] = []
         self._requirements: dict[str, CapabilityRequirement] = {}
@@ -267,6 +279,16 @@ class CompositionScope:
 
         return self._capabilities
 
+    @property
+    def tools(self) -> frozenset[str] | None:
+        """The tool view this scope exposes, or ``None`` for every visible tool.
+
+        Tool visibility is composition visibility, not authorization: a tool this
+        scope exposes is not thereby authorized for a user or an action.
+        """
+
+        return self._tools
+
     # --------------------------------------------------------------- structure
 
     def child(
@@ -274,6 +296,7 @@ class CompositionScope:
         name: str,
         *,
         capabilities: Iterable[str | CapabilityKey] | None = None,
+        tools: Iterable[str] | None = None,
         metadata: Mapping[str, Any] | None = None,
     ) -> CompositionScope:
         """Create a nested composition scope."""
@@ -284,6 +307,7 @@ class CompositionScope:
                 name,
                 parent=self,
                 capabilities=capabilities,
+                tools=tools,
                 metadata=metadata,
             )
         )
@@ -385,6 +409,32 @@ class CompositionScope:
         name = capability.name if isinstance(capability, CapabilityKey) else capability
         return name in self._capabilities
 
+    # ----------------------------------------------------------------- tool view
+
+    def select_tools(self, *tools: str) -> None:
+        """Narrow the tools this scope exposes (and its descendants inherit).
+
+        The set is a ceiling, applied to the scope's own tool-contributing entries
+        and to every tool inherited from its ancestors. ``None`` (the default)
+        exposes every tool visible from the lineage. This is composition
+        visibility: external authorization still decides whether a concrete action
+        is allowed.
+        """
+
+        self._tools = frozenset(tools)
+        self._tree.invalidate()
+
+    def expose_all_tools(self) -> None:
+        """Remove the tool view, exposing every tool visible from the lineage."""
+
+        self._tools = None
+        self._tree.invalidate()
+
+    def exposes_tool(self, name: str) -> bool:
+        """Whether this scope's own view permits a tool (ignoring ancestors)."""
+
+        return self._tools is None or name in self._tools
+
     # ------------------------------------------------------------------ output
 
     def to_spec(self) -> ScopeSpec:
@@ -393,6 +443,7 @@ class CompositionScope:
             name=self._name,
             parent=None if self._parent is None else self._parent.path,
             capabilities=self._capabilities,
+            tools=self._tools,
             requirements=self.requirements,
             metadata=dict(self._metadata),
         )
@@ -406,6 +457,7 @@ class CompositionScope:
             "parent": None if self._parent is None else self._parent.path,
             "children": [child.path for child in self._children],
             "capabilities": None if self._capabilities is None else sorted(self._capabilities),
+            "tools": None if self._tools is None else sorted(self._tools),
             "requirements": [str(item) for item in self.requirements],
             "entries": list(self.entries),
             "metadata_keys": sorted(self._metadata),
@@ -465,6 +517,7 @@ class CompositionTree:
         *,
         parent: CompositionScope | str | None = None,
         capabilities: Iterable[str | CapabilityKey] | None = None,
+        tools: Iterable[str] | None = None,
         metadata: Mapping[str, Any] | None = None,
         create_parents: bool = False,
     ) -> CompositionScope:
@@ -482,7 +535,7 @@ class CompositionTree:
                 parent_scope = existing
         else:
             parent_scope = parent
-        return parent_scope.child(name, capabilities=capabilities, metadata=metadata)
+        return parent_scope.child(name, capabilities=capabilities, tools=tools, metadata=metadata)
 
     def ensure(self, path: str) -> CompositionScope:
         """Return the scope at ``path``, creating it (and ancestors) when absent."""
@@ -595,6 +648,10 @@ class ResolvedScope:
     requirements: tuple[RequirementResolution, ...]
     provenance: tuple[RequirementResolution, ...]
     metadata: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
+    tools: tuple[str, ...] | None = None
+    local_tools: tuple[str, ...] = ()
+    inherited_tools: tuple[str, ...] = ()
+    visible_tools: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for name in ("providers", "inherited", "visible", "metadata"):
@@ -607,6 +664,11 @@ class ResolvedScope:
 
         return provider_entry_id in self.entries
 
+    def exposes_tool(self, name: str) -> bool:
+        """Whether this scope's tool view permits a tool (ignoring ancestors)."""
+
+        return self.tools is None or name in self.tools
+
     def to_dict(self) -> dict[str, Any]:
         """Structured form without metadata values, safe for snapshots."""
 
@@ -616,11 +678,15 @@ class ResolvedScope:
             "parent": self.parent,
             "children": list(self.children),
             "capabilities": None if self.capabilities is None else list(self.capabilities),
+            "tools": None if self.tools is None else list(self.tools),
             "entries": list(self.entries),
             "instances": list(self.instances),
             "providers": {name: list(ids) for name, ids in sorted(self.providers.items())},
             "inherited": {name: list(ids) for name, ids in sorted(self.inherited.items())},
             "visible": {name: list(ids) for name, ids in sorted(self.visible.items())},
+            "local_tools": list(self.local_tools),
+            "inherited_tools": list(self.inherited_tools),
+            "visible_tools": list(self.visible_tools),
             "requirements": [item.to_dict() for item in self.requirements],
             "provenance": [item.to_dict() for item in self.provenance],
         }
@@ -697,8 +763,10 @@ class ScopeTree:
                     "capabilities": (
                         None if scope.capabilities is None else list(scope.capabilities)
                     ),
+                    "tools": None if scope.tools is None else list(scope.tools),
                     "entries": list(scope.entries),
                     "providers": {name: list(ids) for name, ids in sorted(scope.providers.items())},
+                    "visible_tools": list(scope.visible_tools),
                     "selections": [
                         {
                             "consumer": item.consumer,
@@ -743,13 +811,16 @@ def build_scope_tree(
     plan: ResolutionPlan,
     instances: Sequence[PluginInstance],
     registrations: Sequence[CapabilityRegistration],
+    tools: Sequence[RegisteredTool] = (),
 ) -> ScopeTree:
     """Materialise the resolver's scope plan into an immutable, published tree.
 
     The resolver decides *what* is visible and why; this function binds that
     decision to the instances and registrations actually mounted, so the published
     tree is authoritative about ownership and never depends on live registry state
-    to explain itself.
+    to explain itself. ``tools`` are the live tool registrations; each is owned by
+    the instance whose scope declared it, so tool visibility follows the same
+    inheritance-plus-narrowing rule as capability visibility.
     """
 
     if not plan.scopes:
@@ -763,6 +834,20 @@ def build_scope_tree(
         registrations_by_instance.setdefault(registration.provider_id, []).append(registration)
 
     plans: dict[str, ScopePlan] = {scope.path: scope for scope in plan.scopes}
+
+    #: Instance id -> declaring scope path, for attributing an owned tool.
+    tool_scope_by_instance: dict[str, str] = {}
+    for scope_plan in plan.scopes:
+        for entry in scope_plan.entries:
+            instance = instance_by_entry.get(entry)
+            if instance is not None:
+                tool_scope_by_instance[instance.instance_id] = scope_plan.path
+    tool_names_by_scope: dict[str, set[str]] = {}
+    for tool in tools:
+        owner_scope = tool_scope_by_instance.get(tool.owner_id)
+        if owner_scope is None:
+            continue
+        tool_names_by_scope.setdefault(owner_scope, set()).add(tool.name)
 
     def bind_instance(entry_id: str | None, instance_id: str | None) -> str | None:
         """Resolve a plan's cached provider instance id against what was mounted.
@@ -846,6 +931,25 @@ def build_scope_tree(
             current = plans[current].parent
         return tuple(chain)
 
+    def effective_tool_view(path: str) -> frozenset[str] | None:
+        """Tool view after intersecting every ancestor's view."""
+
+        result: frozenset[str] | None = None
+        current: str | None = path
+        while current is not None:
+            scope_plan = plans.get(current)
+            if scope_plan is None:
+                break
+            view = scope_plan.tools
+            if view is not None:
+                names = frozenset(view)
+                result = names if result is None else result & names
+            current = scope_plan.parent
+        return result
+
+    def local_tools(path: str) -> frozenset[str]:
+        return frozenset(tool_names_by_scope.get(path, ()))
+
     resolved: list[ResolvedScope] = []
     for scope_plan in plan.scopes:
         view = effective_view(scope_plan.path)
@@ -862,6 +966,15 @@ def build_scope_tree(
             name: tuple(sorted({*local.get(name, ()), *inherited.get(name, ())}))
             for name in sorted({*local, *inherited})
         }
+        tool_view = effective_tool_view(scope_plan.path)
+        owned_tools = local_tools(scope_plan.path)
+        inherited_tool_names: set[str] = set()
+        for ancestor in ancestors_of(scope_plan.path):
+            inherited_tool_names.update(local_tools(ancestor))
+        inherited_tools = frozenset(inherited_tool_names)
+        if tool_view is not None:
+            owned_tools = frozenset(name for name in owned_tools if name in tool_view)
+            inherited_tools = frozenset(name for name in inherited_tools if name in tool_view)
         resolved.append(
             ResolvedScope(
                 path=scope_plan.path,
@@ -877,6 +990,10 @@ def build_scope_tree(
                 requirements=scope_plan.requirements,
                 provenance=bound_provenance(scope_plan.provenance),
                 metadata=dict(scope_plan.metadata),
+                tools=scope_plan.tools,
+                local_tools=tuple(sorted(owned_tools)),
+                inherited_tools=tuple(sorted(inherited_tools)),
+                visible_tools=tuple(sorted({*owned_tools, *inherited_tools})),
             )
         )
 

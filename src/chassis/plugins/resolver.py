@@ -104,6 +104,9 @@ class ScopeSpecLike(Protocol):
     def capabilities(self) -> frozenset[str] | None: ...
 
     @property
+    def tools(self) -> frozenset[str] | None: ...
+
+    @property
     def requirements(self) -> tuple[CapabilityRequirement, ...]: ...
 
     @property
@@ -280,6 +283,7 @@ class ScopePlan:
     requirements: tuple[RequirementResolution, ...]
     provenance: tuple[RequirementResolution, ...]
     metadata: Mapping[str, Any] = MappingProxyType({})
+    tools: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         for field in ("providers", "inherited", "visible", "metadata"):
@@ -296,6 +300,7 @@ class ScopePlan:
             "parent": self.parent,
             "children": list(self.children),
             "capabilities": None if self.capabilities is None else list(self.capabilities),
+            "tools": None if self.tools is None else list(self.tools),
             "entries": list(self.entries),
             "order": list(self.order),
             "pending": list(self.pending),
@@ -386,7 +391,7 @@ class ResolutionPlan:
 class _RootSpec:
     """Fallback root scope used when no hierarchy is supplied."""
 
-    __slots__ = ("capabilities", "metadata", "name", "parent", "path", "requirements")
+    __slots__ = ("capabilities", "metadata", "name", "parent", "path", "requirements", "tools")
 
     def __init__(
         self, path: str = ROOT_SCOPE, name: str = "root", parent: str | None = None
@@ -395,6 +400,7 @@ class _RootSpec:
         self.name = name
         self.parent = parent
         self.capabilities: frozenset[str] | None = None
+        self.tools: frozenset[str] | None = None
         self.requirements: tuple[CapabilityRequirement, ...] = ()
         self.metadata: Mapping[str, Any] = MappingProxyType({})
 
@@ -869,6 +875,7 @@ class DependencyResolver:
                     parent=spec.parent,
                     children=index.children(spec.path),
                     capabilities=None if allowed is None else tuple(sorted(allowed)),
+                    tools=None if spec.tools is None else tuple(sorted(spec.tools)),
                     entries=entries,
                     order=order,
                     pending=pending,

@@ -345,6 +345,7 @@ class ScopeExplanation:
     unresolved: tuple[str, ...]
     owned_registrations: tuple[Mapping[str, Any], ...]
     tools: tuple[str, ...]
+    visible_tools: tuple[str, ...]
     hooks: tuple[Mapping[str, Any], ...]
     metadata: Mapping[str, Any]
     generation_id: str | None
@@ -381,6 +382,7 @@ class ScopeExplanation:
             "unresolved": list(self.unresolved),
             "owned_registrations": [dict(item) for item in self.owned_registrations],
             "tools": list(self.tools),
+            "visible_tools": list(self.visible_tools),
             "hooks": [dict(item) for item in self.hooks],
             "metadata": dict(sorted(self.metadata.items(), key=lambda item: str(item[0]))),
             "generation_id": self.generation_id,
@@ -415,6 +417,7 @@ class ScopeExplanation:
             lines.append(f"  unresolved: {', '.join(self.unresolved)}")
         lines.append(f"  owned registrations: {len(self.owned_registrations)}")
         lines.append(f"  tools: {', '.join(self.tools) or '(none)'}")
+        lines.append(f"  visible tools: {', '.join(self.visible_tools) or '(none)'}")
         return "\n".join(lines)
 
 
@@ -930,6 +933,7 @@ class Diagnostics:
             )
             metadata = dict(resolved.metadata)
             owned, tools, hooks = self._owned_effects(generation, resolved)
+            visible_tools = resolved.visible_tools
             child_paths = resolved.children
             capabilities = resolved.capabilities
             entries = resolved.entries
@@ -940,6 +944,7 @@ class Diagnostics:
             instances = ()
             metadata = dict(plan_scope.metadata)
             owned, tools, hooks = (), (), ()
+            visible_tools = ()
             child_paths = plan_scope.children
             capabilities = plan_scope.capabilities
             entries = plan_scope.entries
@@ -971,6 +976,7 @@ class Diagnostics:
             unresolved=unresolved,
             owned_registrations=owned,
             tools=tools,
+            visible_tools=visible_tools,
             hooks=hooks,
             metadata=self._harness.redactor.redact_value(metadata),
             generation_id=None if generation is None else generation.generation_id,

@@ -789,6 +789,7 @@ class Harness:
                 plan=plan,
                 instances=instances,
                 registrations=self._capability_registry.registrations(),
+                tools=self._tool_registry.entries(),
             )
             snapshot_factory = self._snapshot_factory(instances)
             current = self._generations.current
@@ -1312,19 +1313,26 @@ class Harness:
         return self._agents.register(runtime, scope=scope, replace=replace)
 
     def run_environment(
-        self, generation: RuntimeGeneration, *, limits: BudgetLimits | None = None
+        self,
+        generation: RuntimeGeneration,
+        *,
+        limits: BudgetLimits | None = None,
+        scope: CompositionScope | str | None = None,
     ) -> RunEnvironment:
         """Assemble the generation-scoped services a run executes against.
 
         Everything is derived from ``generation``, so a run can never observe a
-        service belonging to a different composition than its capabilities.
+        service belonging to a different composition than its capabilities. When
+        ``scope`` is given, the tool view is filtered to what that composition
+        scope exposes, which is how an agent sees its own tools and not a
+        sibling's.
         """
 
         effective_limits = limits if limits is not None else self._default_budget_limits
         return RunEnvironment(
             generation=generation,
             capabilities=generation.snapshot,
-            tools=self.tool_snapshot(generation),
+            tools=self.tool_snapshot(generation, scope=scope),
             hooks=self.hook_snapshot(generation),
             executor=self._tool_executor,
             # A provider registered for these capabilities belongs to the
@@ -1379,16 +1387,32 @@ class Harness:
             generation_id=run_context.generation_id,
         )
 
-    def tool_snapshot(self, generation: RuntimeGeneration) -> ToolSnapshot:
+    def tool_snapshot(
+        self,
+        generation: RuntimeGeneration,
+        *,
+        scope: CompositionScope | str | None = None,
+    ) -> ToolSnapshot:
         """Tools reachable from ``generation``, as an immutable view.
 
         A run executes against the tools of the generation it acquired: a plugin
         that left the composition stops contributing tools to new runs without
-        disturbing runs already in flight.
+        disturbing runs already in flight. When ``scope`` is given, the view is
+        narrowed to the tools that scope exposes, so sibling scopes never leak
+        tools into each other.
         """
 
-        return self._tool_registry.snapshot(
+        snapshot = self._tool_registry.snapshot(
             generation.generation_id, owner_ids=generation.instance_ids
+        )
+        if scope is None:
+            return snapshot
+        path = scope.path if isinstance(scope, CompositionScope) else scope
+        resolved = generation.scopes.get(path)
+        visible = frozenset() if resolved is None else frozenset(resolved.visible_tools)
+        return ToolSnapshot(
+            generation.generation_id,
+            (entry for entry in snapshot.entries if entry.name in visible),
         )
 
     def hook_snapshot(self, generation: RuntimeGeneration) -> HookSnapshot:

@@ -205,10 +205,12 @@ def _semantic_scopes(generation: RuntimeGeneration) -> dict[str, Any]:
                 "parent": scope.parent,
                 "children": list(scope.children),
                 "capabilities": (None if scope.capabilities is None else list(scope.capabilities)),
+                "tools": (None if scope.tools is None else list(scope.tools)),
                 "entries": list(scope.entries),
                 "providers": {
                     name: entry_ids(ids) for name, ids in sorted(scope.providers.items())
                 },
+                "visible_tools": list(scope.visible_tools),
                 "selections": [
                     {
                         "consumer": item.consumer,
