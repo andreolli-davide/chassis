@@ -11,6 +11,7 @@ below for task-oriented detail.
 | [why-generations.md](why-generations.md) | the problem immutable generations solve, and what it costs |
 | [lifecycle.md](lifecycle.md) | ownership, scopes, plugin lifecycle, generations, safe unload, shutdown |
 | [scopes.md](scopes.md) | composition scopes: hierarchy, inheritance, narrow views, provenance, explain and diff |
+| [incremental-composition.md](incremental-composition.md) | semantic identity, impact analysis, structural sharing, reachability, reuse diagnostics |
 | [plugin-author-guide.md](plugin-author-guide.md) | writing, testing, and shipping a plugin |
 | [langgraph.md](langgraph.md) | agent definitions, the run context, graph caching, tools, streaming, interrupts |
 | [recipes.md](recipes.md) | behind a web service, per-tenant composition, hot provider swap, budgets, durability |
@@ -20,7 +21,7 @@ below for task-oriented detail.
 | [replay.md](replay.md) | record/replay boundaries and their explicit limitations |
 | [configuration.md](configuration.md) | declarative configuration, the catalog, reconciliation, drift |
 | [design.md](design.md) | guarantees, decisions, and deliberate absences |
-| [migration.md](migration.md) | the 0.2 → 0.3 and 0.1 → 0.2 changes and how to migrate |
+| [migration.md](migration.md) | the 0.3 → 0.4, 0.2 → 0.3, and 0.1 → 0.2 changes and how to migrate |
 
 ## Examples
 

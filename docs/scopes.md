@@ -224,6 +224,8 @@ harness.diagnostics.scopes(generation_id="gen_0042")  # a specific generation
 harness.diagnostics.explain_requirement("agent", "database", scope="/research")
 harness.diagnostics.explain_scope("/research")
 harness.diagnostics.diff_generations("gen_0042", "gen_0043")
+harness.diagnostics.analyze_impact("gen_0042", "gen_0043")
+harness.diagnostics.explain_reuse("gen_0042", "gen_0043", "search")
 ```
 
 `explain_scope` answers "what can this scope observe and what does it own?":
@@ -251,10 +253,16 @@ REQUIREMENTS
       reason: provided by db-b (postgres 1) inherited from / (explicit provider preference)
 ```
 
-The diff is conservative: two resources are reported as reused only when entry id,
-instance id, and implementation identity all match, so Chassis never claims a
+The structural sections are conservative: a provider is reported as `replaced` only
+when its instance or implementation actually changed, so Chassis never claims a
 semantic equivalence it cannot prove. Pass `include_unchanged=True` to also list
 unchanged providers, scopes, and requirements.
+
+`diff_generations` also reports a semantic `NODES` section that answers what was
+*reused*, *rebuilt*, or *rewired*, and `analyze_impact`/`explain_reuse` expose that
+analysis as structured data. A node whose selected provider changed is rebuilt, so
+in the example above `researcher` would be reported as `REWIRED`. See
+[incremental-composition.md](incremental-composition.md).
 
 ## Snapshots
 
@@ -276,7 +284,9 @@ snapshot.to_dict()["scopes"]
 **Scope structure influences the snapshot digest, deliberately.** If topology or
 provider resolution changes, a run observes different composition, so the digest
 must change; a no-op reconcile produces the identical digest
-([observability.md](observability.md#runtime-snapshots)).
+([observability.md](observability.md#runtime-snapshots)). `semantic_digest()` is the
+semantic-composition hash — two separately materialised but equivalent generations
+share it — while `physical_digest()` covers the runtime instance ids.
 
 ## Troubleshooting
 

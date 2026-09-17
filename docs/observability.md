@@ -75,6 +75,7 @@ report.metrics()
 #   "chassis.generations.draining": 3.0,
 #   "chassis.generations.leases": 3.0,
 #   "chassis.generations.oldest_lease_age_seconds": 862.0,
+#   "chassis.resources.shared": 1.0,
 # }
 
 report.to_dict()   # full structured form, including per-generation retained plugins
@@ -128,12 +129,14 @@ Every run is attributable to an immutable snapshot:
 ```python
 snapshot = harness.snapshot_for(harness.current_generation, agent="research")
 snapshot.to_dict()
-snapshot.digest()
+snapshot.digest()            # the whole record
+snapshot.semantic_digest()   # semantic composition only
+snapshot.physical_digest()   # runtime instance ids
 ```
 
 ```json
 {
-  "chassis_version": "0.3.0",
+  "chassis_version": "0.4.0",
   "generation_id": "gen_0004",
   "sequence": 4,
   "agent_runtime": "langgraph",
@@ -144,6 +147,7 @@ snapshot.digest()
   "tool_schema_hash": "...",
   "graph_definition_hash": "...",
   "prompt_hash": null,
+  "runtime_instance_ids": ["plugin_8f3a…", "plugin_c21b…"],
   "scopes": {
     "root": "/",
     "scopes": [
@@ -163,12 +167,26 @@ capability view in effect, and the resolved selection of every requirement, usin
 identities and instance ids only. Scope *metadata* is never included, and
 configuration values never appear anywhere in a snapshot.
 
+The `scopes` field names the runtime instance ids that provide a capability;
+`semantic_scopes` (used by `semantic_digest()`, not emitted in `to_dict`) names the
+provider *entry* ids instead, so it survives a separate materialisation of the same
+composition.
+
 **Scope structure is part of the digest, on purpose.** Topology and per-requirement
 selection are observable through the generation a run acquires: two generations
 whose scope trees differ would behave differently for a run that reads
 `generation.scopes`, so their digests must differ. Republishing an unchanged
 composition reuses the current generation and therefore reproduces the identical
 digest.
+
+**Semantic identity and physical identity are separate.** `digest()` covers the
+whole record, including `runtime_instance_ids`; `semantic_digest()` covers only the
+semantic composition, so two generations that describe the same composition but were
+materialised separately share it; `physical_digest()` covers the runtime instance
+ids. A secret-only configuration change is invisible in `semantic_digest()` but
+still rebuilds the node, because the private identity fingerprint is computed from
+the effective configuration
+([incremental-composition.md](incremental-composition.md#semantic-sameness-is-not-physical-reuse)).
 
 Snapshots contain **no configuration values**. Configuration is represented by a
 hash computed over the redacted payload, so a snapshot explains composition
@@ -204,6 +222,8 @@ semantics cannot be explained is useless for debugging:
 | `tool_schema_hash` | tool names, descriptions, argument schemas |
 | `prompt_hash` | a prompt body, when supplied |
 | `scopes` (in `to_dict`) | scope topology, capability views, local providers, and requirement selections |
+| `semantic_digest()` | semantic composition only: plugins, capabilities, redacted config, dependency edges, tool contracts, semantic scope tree |
+| `physical_digest()` | the runtime instance ids a generation was published with |
 
 Composition decisions are also explainable without reading a snapshot:
 `harness.diagnostics.explain_requirement(...)`, `explain_scope(...)`, and

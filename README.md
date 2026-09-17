@@ -136,9 +136,10 @@ what Chassis refuses to promise.
 
 ## Status
 
-Pre-1.0 (`0.3.0`). The surface covered by `tests/test_public_api.py` may break in a
+Pre-1.0 (`0.4.0`). The surface covered by `tests/test_public_api.py` may break in a
 minor release; every break is recorded in [CHANGELOG.md](CHANGELOG.md), and
-[migrations](docs/migration.md) lists the 0.1 → 0.2 and 0.2 → 0.3 changes.
+[migrations](docs/migration.md) lists the 0.1 → 0.2, 0.2 → 0.3, and 0.3 → 0.4
+changes.
 
 ## Development
 
@@ -190,7 +191,9 @@ suite runs all of them.
   hot provider swaps, budgets, durable runs.
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) — symptom, cause, and the exact
   diagnostics output for each.
-- [`docs/migration.md`](docs/migration.md) — the 0.2 → 0.3 and 0.1 → 0.2 changes and how to migrate.
+- [`docs/migration.md`](docs/migration.md) — the 0.3 → 0.4, 0.2 → 0.3, and 0.1 → 0.2 changes and how to migrate.
+- [`docs/incremental-composition.md`](docs/incremental-composition.md) — how composition
+  changes incrementally: semantic identity, impact analysis, structural sharing, reuse diagnostics.
 - [`docs/`](docs/README.md) — lifecycle, scoped composition, plugin authoring, LangGraph, observability,
   security assumptions, replay limitations, configuration, and design guarantees.
 

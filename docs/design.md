@@ -30,6 +30,9 @@ below is enforced by tests, and the tests are the specification of record.
 | G15 | A scope observes only its own local composition, composition inherited from its ancestors, and composition its capability view permits; sibling-local composition is not implicitly visible | `plugins/resolver.py`, `composition.py`, `tests/composition/test_scopes.py` |
 | G16 | The scope tree and every composition-affecting field of a published generation are immutable; scope-affecting changes become visible only through a new generation | `composition.py`, `core/generation.py`, `tests/composition/test_scopes.py` |
 | G17 | Every resolved requirement has an authoritative provenance record (selected provider, origin scope, selection reason) and every unresolved requirement has an authoritative reason | `plugins/resolver.py`, `diagnostics.py`, `tests/composition/test_scope_diagnostics.py` |
+| G18 | A runtime node is shared across generations only when its semantic identity proves reuse cannot change observable behaviour | `core/identity.py`, `harness.py`, `tests/composition/test_semantic_identity.py` |
+| G19 | A shared runtime resource is not disposed while any live generation can reach it | `core/generations.py`, `harness.py`, `tests/composition/test_structural_sharing.py` |
+| G20 | Unaffected, semantically identical nodes are eligible for reuse, and Chassis reports reuse only for a node whose reuse safety it established | `core/identity.py`, `diagnostics.py`, `tests/composition/test_reuse_diagnostics.py` |
 
 ## Decisions worth knowing
 
@@ -84,6 +87,24 @@ below is enforced by tests, and the tests are the specification of record.
   resolution records its candidates, their origin scopes, visibility, eligibility,
   rejection reasons, the selected provider, and the selection reason. Explain and
   diff APIs read that structure (G17).
+- **Reuse is a semantic proof, not a heuristic.** A node is carried across
+  generations only when its implementation, capability contracts, effective
+  configuration, scope path, and resolved dependency bindings are all unchanged.
+  The proof is conservative: anything Chassis cannot establish is rebuilt
+  (G18). See [incremental-composition.md](incremental-composition.md).
+- **Sharing is not shared mutability.** A reused instance is never reconfigured in
+  place; a change that would require it rebuilds the node instead, so a published
+  generation still never observes a composition change after publication.
+- **Lifetime follows reachability, not ownership transfer.** A shared resource is
+  disposed only when no live generation can reach it, using the same lease and
+  reachability machinery as before; incremental reuse added no second lifetime
+  system (G19).
+- **Semantic sameness and physical reuse are separate facts.** The diff and the
+  snapshot report them separately, and `REUSED` is only claimed when the exact
+  runtime instance was retained (G20).
+- **Impact follows dependency bindings, not scope membership.** A scope narrows the
+  search for affected nodes; it never replaces the dependency analysis. A provider
+  change rebuilds exactly the consumers that reach it, including across scopes.
 
 ## Deliberate absences
 
@@ -99,8 +120,9 @@ below is enforced by tests, and the tests are the specification of record.
 - no provider interception or generic middleware chains: scope resolution decides
   *which* provider a consumer gets, and wrapping or transforming a provider is left
   to a future release;
-- no content-addressed composition DAG or structural-sharing rewrite: 0.3 adds the
-  scope tree, provenance, and diagnostic metadata to the existing generation model;
+- no content-addressed composition DAG or persistent cross-process build cache:
+  0.4 shares nodes within a process by semantic identity across live generations,
+  and lifetime still follows generation reachability rather than a global cache;
 - no configuration-file schema for scopes: the composition-scope primitive is stable,
   the file format is not ([configuration.md](configuration.md#composition-scopes)).
 

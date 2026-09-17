@@ -5,6 +5,100 @@ All notable changes to Chassis are recorded here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with the pre-1.0 caveat
 that a minor release may break the documented surface.
 
+## [0.4.0] - 2026-09-17
+
+Makes composition **incremental**: pending and published composition now carry a
+semantic identity, so a change rebuilds only the nodes it actually affects and
+everything else is the exact runtime instance it already was. No agent-framework
+abstraction is introduced, and Chassis still never executes an agent. Every 0.3
+guarantee still holds, and a composition with no changes reconciles exactly as
+before.
+
+### Added
+
+- **Semantic identity.** `chassis.core.identity` (re-exported from
+  `chassis.composition`) introduces `SemanticIdentity` and `DependencyBinding`.
+  Identity covers the inputs that can affect observable behaviour — implementation,
+  capability contracts, effective configuration, scope path, and resolved dependency
+  bindings — and keeps separate fingerprints for implementation, contracts,
+  configuration, and dependencies, so a rebuild can be explained as
+  *"config changed"* rather than *"hash mismatch"*. `PluginInstance.semantic_identity`
+  records the identity a node was mounted with; `RuntimeGeneration.identities` and
+  `identity_for(entry_id)` expose it as a view of the published composition.
+- **Incremental impact analysis.** `ImpactAnalysis` and `NodeImpact` report
+  `UNCHANGED`/`REUSED`/`REBUILT`/`REWIRED`/`ADDED`/`REMOVED` with a small, explicit
+  reason vocabulary (`config_changed`, `implementation_changed`,
+  `dependency_changed`, `scope_visibility_changed`, `provider_selection_changed`,
+  `capability_contract_changed`, `preference_changed`). `ReconcileResult.impact`
+  carries the analysis for the reconciliation that just ran; it follows real
+  dependency bindings, not scope membership.
+- **Safe structural sharing.** A node is carried into the new generation only when
+  its recomputed semantic identity equals the one it was mounted with, so multiple
+  live generations reference the same runtime instance without any generation
+  observing a mutation. A consumer whose selected provider changed is rebuilt
+  (reported as `REWIRED`) instead of being reused with a stale registration.
+- **Reuse diagnostics.** `harness.diagnostics.analyze_impact(old, new)` returns the
+  full analysis; `harness.diagnostics.explain_reuse(old, new, node)` returns a
+  structured `ReuseExplanation` (decision, reasons, changed inputs, dependency
+  changes, shared instance id). `GenerationDiff` gained a semantic `NODES` section
+  and `by_decision(...)`.
+- **Shared reachability in generation pressure.**
+  `GenerationPressureReport.resources` (`ResourceReachability`) lists, per live
+  resource, the generations that reach it and why it is retained (`lease` when a run
+  holds a reaching generation, `sharing` when more than one live generation reaches
+  it). Adds the `chassis.resources.shared` gauge.
+- **Snapshot semantic identity.** `RuntimeSnapshot.semantic_digest()` hashes only the
+  semantic composition; `physical_digest()` hashes the runtime instance ids;
+  `runtime_instance_ids` and `semantic_scopes` are new fields.
+
+### Changed
+
+- Reconciliation reuses by semantic identity rather than by entry revision alone.
+  A consumer whose selected provider changed is rebuilt and re-resolves; unrelated
+  nodes are reused. See [migration.md](docs/migration.md#03-04).
+- `PluginRegistry.mount(..., supersede=True)` lets a rebuild mount a fresh instance
+  for an unchanged revision without disposing a still-reachable predecessor.
+- `RuntimeSnapshot.to_dict()` (and therefore `digest()`) gained
+  `runtime_instance_ids`; stored 0.3 snapshots should be re-baselined.
+- `harness.diagnostics.diff_generations` now reports a semantic NODES section in
+  addition to the structural scopes/providers/requirements changes.
+
+### Guarantees
+
+- **G18 — safe semantic reuse.** A runtime node is shared across generations only
+  when its semantic identity proves reuse cannot change observable behaviour.
+- **G19 — reachability lifetime.** A shared runtime resource is not disposed while
+  any live generation can reach it.
+- **G20 — explainable incremental publication.** Unaffected, semantically identical
+  nodes are eligible for reuse, and Chassis reports reuse only for a node whose
+  reuse safety it established.
+
+### Design decisions
+
+- Identity is a conservative proof, not a heuristic: anything Chassis cannot prove
+  safe is rebuilt. A changed revision rebuilds even when the new node is
+  semantically identical.
+- The configuration fingerprint is computed from the effective configuration so a
+  credential change forces a rebuild, and is never emitted; `semantic_digest()`
+  therefore stays redacted and a secret-only change is invisible in it.
+- Sharing is never shared mutability: a reused instance is never reconfigured in
+  place, so a published generation still never observes a composition change after
+  publication.
+- Disposal keeps following reachability through the existing lease machinery;
+  incremental reuse added no second lifetime system.
+
+### Known limitations
+
+- Reuse is per process and follows generation reachability; there is no
+  content-addressed build cache, no cross-process sharing, and no persistent
+  composition graph.
+- Impact is conservative. A scope narrows the search for affected nodes but never
+  replaces dependency analysis.
+- The semantic digest reflects redacted configuration, so a secret-only change is
+  invisible in it while still forcing a rebuild.
+- Unchanged from 0.3: in-process Python plugins are trusted code; replay does not
+  virtualize clocks, randomness, networks, databases, or the filesystem.
+
 ## [0.3.0] - 2026-09-17
 
 Adds **hierarchical scoped composition** and **explainable composition provenance**.

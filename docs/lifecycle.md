@@ -144,6 +144,20 @@ many newer generations are published.
 Disposal order is derived from the providers each instance actually resolved, so
 consumers are disposed before the providers they still reach.
 
+## Incremental reuse
+
+A reconcile does not rebuild the whole composition. Each eligible entry's *semantic
+identity* is recomputed and compared with the identity its instance was mounted
+with; when they are equal, the exact same instance is carried into the new
+generation. A change rebuilds only the nodes whose semantic inputs changed, plus the
+consumers that reach them. See
+[incremental-composition.md](incremental-composition.md) for the model and
+`harness.diagnostics.analyze_impact(old, new)` for the analysis.
+
+Reuse is sharing, never shared mutability: a reused instance is never reconfigured
+in place, so a published generation still never observes a composition change after
+publication. A change that would require in-place mutation rebuilds the node.
+
 ## Generation pressure
 
 Draining for a long time is correct but not free: while a run holds a lease, the
@@ -179,9 +193,25 @@ report.draining_generations       # how many are waiting for their last lease
 report.oldest_lease_age_seconds   # age of the oldest outstanding lease, if any
 report.generations                # per-generation age, state, leases, retained plugins
 report.instance_generations       # instance id -> live generations that reach it
+report.resources                  # per-resource reachability and why it is retained
 
 harness.diagnostics.instance_generations(instance.instance_id)  # newest first
 ```
+
+`report.resources` answers "who keeps this resource alive?" for each reachable
+instance, including resources shared by several generations after an incremental
+reconcile:
+
+```python
+resource = next(item for item in report.resources if item.entry_id == "postgres")
+resource.generations     # ("gen_0044", "gen_0043") — newest first
+resource.retained_by     # ("lease", "sharing")
+```
+
+`lease` means a run still holds a generation that reaches the resource; `sharing`
+means more than one live generation reaches it, so no single generation's
+retirement would release it. A resource with no reaching generation is absent
+because it is about to be disposed, not because its reachability is unknown.
 
 Four different things are easy to conflate, and the report keeps them apart:
 
@@ -244,6 +274,8 @@ harness.diagnostics.scopes()        # the resolved scope tree of the current gen
 harness.diagnostics.explain_requirement("agent", "database")  # provenance of one requirement
 harness.diagnostics.explain_scope("/research")                # visibility and ownership of one scope
 harness.diagnostics.diff_generations("gen_0004", "gen_0005")  # semantic composition diff
+harness.diagnostics.analyze_impact("gen_0004", "gen_0005")    # reuse/rebuild analysis
+harness.diagnostics.explain_reuse("gen_0004", "gen_0005", "search")  # why one node was reused or rebuilt
 ```
 
 Scoped composition is described in [scopes.md](scopes.md): hierarchy, inheritance,

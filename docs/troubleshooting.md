@@ -310,6 +310,66 @@ harness.diagnostics.diff_generations(old_id, new_id).to_text()   # SCOPES / PROV
 harness.diagnostics.diff_generations(old_id, new_id, include_unchanged=True)
 ```
 
+## A plugin was rebuilt even though I changed nothing
+
+Reuse requires the recomputed semantic identity to equal the identity the instance
+was mounted with, and a replacement bumps the entry revision even when the new
+implementation is byte-for-byte the same. Ask why instead of guessing:
+
+```python
+harness.diagnostics.explain_reuse(old_id, new_id, "search")
+# decision: rebuilt
+# reasons: config_changed
+# changed inputs: config
+```
+
+The reasons are a small, explicit vocabulary (`config_changed`,
+`implementation_changed`, `dependency_changed`, `scope_visibility_changed`,
+`provider_selection_changed`, `capability_contract_changed`, `preference_changed`).
+A semantically identical replacement is reported as `unchanged` (semantically
+identical, not physically reused) rather than `reused`
+([incremental-composition.md](incremental-composition.md)).
+
+## A consumer is rebuilt whenever its provider is replaced
+
+Expected. A consumer captures its capability objects during `setup`, so if its
+selected provider changes it must re-resolve against the provider the new generation
+publishes; otherwise it would keep using an instance that is about to be disposed.
+The diff reports it as `REWIRED` with `dependency_changed`. Keep the provider's
+entry id stable so only the nodes that actually depend on its behaviour are rebuilt,
+and read `harness.diagnostics.analyze_impact(old, new)` to see the exact set
+([migration.md](migration.md#03-04)).
+
+## A shared resource is still alive though the current generation does not contain it
+
+That is structural sharing working as intended: the resource is the same instance an
+older, still-leased generation reaches. `generation_pressure()` now says which
+generations reach it and why it is retained:
+
+```python
+report = harness.diagnostics.generation_pressure()
+next(item for item in report.resources if item.entry_id == "postgres").to_dict()
+# {"generations": ["gen_0044", "gen_0043"], "retained_by": ["lease", "sharing"], ...}
+```
+
+`lease` means a run is still holding a generation that reaches it; `sharing` means
+more than one live generation reaches it. It is disposed once no live generation
+reaches it ([lifecycle.md](lifecycle.md#generation-pressure)).
+
+## Two generations look identical but have different snapshot digests
+
+They probably describe the same composition built from different runtime instances.
+`digest()` is the digest of the whole snapshot record, including
+`runtime_instance_ids` and the generation id. Use the semantic digest when you mean
+"the same composition":
+
+```python
+old.snapshot_for(old_generation).semantic_digest() == new.snapshot_for(new_generation).semantic_digest()
+```
+
+A secret-only configuration change is deliberately invisible in `semantic_digest()`
+while still forcing a rebuild ([observability.md](observability.md#runtime-snapshots)).
+
 ## An example or a snippet from the docs fails
 
 The examples assert what they print, and the test suite runs all of them

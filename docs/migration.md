@@ -6,8 +6,91 @@ why it was made, and what to do instead. Lifecycle behaviour is unchanged across
 these releases: published generations are still immutable, publication is still
 transactional, and logical unload is still distinct from physical disposal.
 
+- [0.3 → 0.4](#03-04): incremental composition, semantic identity, reuse diagnostics
 - [0.2 → 0.3](#02-03): composition scopes, explain and diff diagnostics
 - [0.1 → 0.2](#01-02): optional extras, tool protocol, lease identity, budgets
+
+## 0.3 → 0.4
+
+0.4 makes composition incremental: unchanged runtime nodes are reused across
+generations, and a change rebuilds only the nodes whose semantic inputs changed.
+The lifecycle is unchanged — generations are still immutable, publication is still
+transactional, and disposal still follows reachability — but one behaviour changed
+on purpose, and the runtime snapshot gained fields.
+
+### A consumer is rebuilt when its selected provider changes
+
+In 0.3, `_materialize` reused an instance whenever its entry revision was
+unchanged. A consumer whose *selected provider* changed was therefore carried into
+the new generation with the capability objects it captured during `setup`,
+pointing at a provider that was on its way out. 0.4 decides reuse from **semantic
+identity**, which includes the resolved dependency binding, so such a consumer is
+rebuilt and re-resolves against the provider the new generation publishes. The diff
+reports it as `REWIRED` (only its bindings changed), and its `setup` runs again.
+
+What this means in practice:
+
+- a consumer that reaches a provider no longer survives that provider's replacement
+  as a live instance; its teardown and setup run once more, and the resource is
+  re-created. If your plugin's `setup` is expensive, that cost is now paid exactly
+  when the provider it uses changes;
+- unrelated nodes are still reused, so a localized change does not remount the whole
+  composition (see `diagnostics.analyze_impact`);
+- a consumer whose provider is replaced by a *semantically identical* one is rebuilt
+  as a new instance and reported as `UNCHANGED` (semantically identical), not
+  `REUSED`.
+
+This is the change required by the new guarantee G18 and is covered by
+`tests/composition/test_impact_analysis.py`.
+
+### `RuntimeSnapshot` separates semantic and physical identity
+
+`RuntimeSnapshot` gained two fields and two digests:
+
+- `runtime_instance_ids` — the runtime instances the generation was published with,
+  included in `to_dict()` and therefore in `digest()`;
+- `semantic_scopes` — the scope topology with provider *entry* ids instead of
+  runtime instance ids, used by `semantic_composition()`/`semantic_digest()`;
+- `semantic_digest()` hashes only the semantic composition (plugins, capabilities,
+  redacted config, dependency edges, tool contracts, semantic scope tree), so two
+  semantically equivalent generations that were materialised separately share it;
+- `physical_digest()` hashes the runtime instance ids.
+
+A digest recorded with 0.3 will not equal the digest of the same composition in
+0.4, because `to_dict()` gained `runtime_instance_ids`. Re-baseline stored
+snapshots. `config_hash` is unchanged and still redacted; a secret-only
+configuration change is invisible in `semantic_digest()` but still forces a
+rebuild.
+
+### Additive APIs
+
+Nothing was removed and no existing signature changed otherwise. New in 0.4:
+
+- `chassis.composition` re-exports `SemanticIdentity`, `DependencyBinding`,
+  `ReuseDecision`, `ReuseReason`, `NodeImpact`, `ImpactAnalysis`;
+- `PluginInstance.semantic_identity` and `RuntimeGeneration.identities`
+  (`identity_for(entry_id)`);
+- `ReconcileResult.impact`;
+- `harness.diagnostics.analyze_impact(old, new)` and
+  `.explain_reuse(old, new, node)`; `GenerationDiff.nodes` and
+  `GenerationDiff.by_decision(decision)`; `ReuseExplanation`;
+- `GenerationPressureReport.resources` (`ResourceReachability`) and the
+  `chassis.resources.shared` gauge;
+- `PluginRegistry.mount(..., supersede=True)`, used by reconciliation to mount a
+  fresh instance for an unchanged revision without disposing a still-reachable
+  predecessor. Callers other than the harness do not need it.
+
+### Incremental composition checklist
+
+- If you replace a provider, expect its consumers to be rebuilt; prefer a stable
+  entry id for the provider so only the provider's own nodes are rebuilt when
+  behaviour changes.
+- If a plugin's `setup` performs an expensive side effect, it now runs again when
+  that plugin's configured behaviour changes — including a configuration change.
+- If you store snapshots, re-baseline `digest()` and start using `semantic_digest()`
+  when you mean "the same composition" rather than "the same record".
+- Unchanged metadata, scope metadata values, and preferences that select the same
+  provider do not force a rebuild.
 
 ## 0.2 → 0.3
 
