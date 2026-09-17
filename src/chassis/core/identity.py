@@ -47,6 +47,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from chassis.persistence.hashing import stable_hash
+from chassis.secrets.redaction import SecretRedactor, redact_config
 
 if TYPE_CHECKING:
     from chassis.plugins.lifecycle import PluginInstance
@@ -229,6 +230,7 @@ class SemanticIdentity:
     contract_fingerprint: str
     config_fingerprint: str = field(repr=False)
     dependency_fingerprint: str = field(repr=False)
+    config_display_fingerprint: str = field(default="", repr=False)
     bindings: tuple[DependencyBinding, ...] = ()
 
     # ------------------------------------------------------------------ digests
@@ -261,6 +263,7 @@ class SemanticIdentity:
                 "scope_path": self.scope_path,
                 "implementation": self.implementation_fingerprint,
                 "contracts": self.contract_fingerprint,
+                "config": self.config_display_fingerprint,
                 "bindings": [list(binding.display_key()) for binding in self.bindings],
             }
         )
@@ -340,6 +343,7 @@ def build_semantic_identity(
     preference: Callable[[str, str, str], str | None],
     implementation_hint: str | None = None,
     kind: str = "plugin",
+    redactor: SecretRedactor | None = None,
 ) -> SemanticIdentity:
     """Build the semantic identity of one node from authoritative runtime state.
 
@@ -368,6 +372,7 @@ def build_semantic_identity(
             )
         )
     bindings.sort(key=lambda binding: binding.capability)
+    effective_redactor = redactor if redactor is not None else SecretRedactor()
     return SemanticIdentity(
         entry_id=entry_id,
         kind=kind,
@@ -375,6 +380,7 @@ def build_semantic_identity(
         implementation_fingerprint=implementation_fingerprint(manifest, implementation_hint),
         contract_fingerprint=contract_fingerprint(manifest),
         config_fingerprint=config_fingerprint(plugin=manifest.name, config=config),
+        config_display_fingerprint=stable_hash(redact_config(dict(config), effective_redactor)),
         dependency_fingerprint=stable_hash([list(binding.semantic_key()) for binding in bindings]),
         bindings=tuple(bindings),
     )

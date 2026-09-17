@@ -67,7 +67,14 @@ from chassis.core.errors import (
 )
 from chassis.core.generation import RuntimeGeneration
 from chassis.core.generations import GenerationManager
-from chassis.core.identity import SemanticIdentity, build_semantic_identity
+from chassis.core.identity import (
+    ImpactAnalysis,
+    NodeObservation,
+    SemanticIdentity,
+    analyse_impact,
+    build_semantic_identity,
+    observations_from,
+)
 from chassis.core.scope import Scope
 from chassis.diagnostics import Diagnostics
 from chassis.hooks.registry import HookRegistry, HookSnapshot
@@ -159,6 +166,7 @@ class ReconcileResult:
     reused: tuple[str, ...]
     disposed: tuple[str, ...]
     failures: tuple[CleanupFailure, ...] = ()
+    impact: ImpactAnalysis | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -168,6 +176,7 @@ class ReconcileResult:
             "disposed": list(self.disposed),
             "failures": [failure.to_dict() for failure in self.failures],
             "plan": self.plan.to_dict(),
+            "impact": None if self.impact is None else self.impact.to_dict(),
         }
 
 
@@ -853,6 +862,8 @@ class Harness:
                     },
                 )
             disposed = await self._reclaim(failures)
+            impact = self._build_impact(current, scope_tree, instances, generation.generation_id)
+            self._telemetry.event("generation.impact", dict(impact.counts()))
             span.set_attributes(
                 {
                     "generation_id": generation.generation_id,
@@ -860,6 +871,7 @@ class Harness:
                     "reused": len(reused),
                     "disposed": len(disposed),
                     "failures": len(failures),
+                    "rebuilt": len(impact.rebuilt) + len(impact.rewired),
                 }
             )
 
@@ -873,6 +885,7 @@ class Harness:
                 reused=tuple(reused),
                 disposed=tuple(disposed),
                 failures=tuple(failures),
+                impact=impact,
             )
 
     @asynccontextmanager
@@ -1054,6 +1067,37 @@ class Harness:
             provider_identity=provider_identity,
             preference=preference,
             implementation_hint=f"{plugin_type.__module__}.{plugin_type.__qualname__}",
+            redactor=self._redactor,
+        )
+
+    @staticmethod
+    def _build_impact(
+        current: RuntimeGeneration | None,
+        scope_tree: ScopeTree,
+        instances: tuple[PluginInstance, ...],
+        new_generation_id: str,
+    ) -> ImpactAnalysis:
+        """Compare the candidate composition against the one being replaced."""
+
+        def view(scopes: ScopeTree) -> Any:
+            def lookup(path: str) -> tuple[str, ...] | None:
+                resolved = scopes.get(path)
+                return None if resolved is None else resolved.capabilities
+
+            return lookup
+
+        candidate = observations_from(instances, scope_view=view(scope_tree))
+        if current is None:
+            previous: dict[str, NodeObservation] = {}
+            old_id: str | None = None
+        else:
+            previous = observations_from(current.instances, scope_view=view(current.scopes))
+            old_id = current.generation_id
+        return analyse_impact(
+            previous,
+            candidate,
+            old_generation_id=old_id,
+            new_generation_id=new_generation_id,
         )
 
     @staticmethod
