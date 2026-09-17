@@ -45,7 +45,7 @@ keep working exactly as they do for a flat composition.
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import Any, Protocol, runtime_checkable
 
@@ -764,6 +764,45 @@ def build_scope_tree(
 
     plans: dict[str, ScopePlan] = {scope.path: scope for scope in plan.scopes}
 
+    def bind_instance(entry_id: str | None, instance_id: str | None) -> str | None:
+        """Resolve a plan's cached provider instance id against what was mounted.
+
+        The resolver computes the plan before anything is mounted, so a provider
+        that becomes active in this reconcile still carries ``None`` there. The
+        published tree must name the instance that actually backs the entry, or an
+        otherwise-identical later reconcile would compare unequal and churn a
+        generation for a physical id that is not part of composition identity.
+        """
+
+        if entry_id is None:
+            return instance_id
+        instance = instance_by_entry.get(entry_id)
+        return instance_id if instance is None else instance.instance_id
+
+    def bound_provenance(
+        items: Sequence[RequirementResolution],
+    ) -> tuple[RequirementResolution, ...]:
+        bound: list[RequirementResolution] = []
+        for item in items:
+            bound.append(
+                replace(
+                    item,
+                    provider_instance_id=bind_instance(
+                        item.provider_entry_id, item.provider_instance_id
+                    ),
+                    assessments=tuple(
+                        replace(
+                            assessment,
+                            provider_instance_id=bind_instance(
+                                assessment.provider_entry_id, assessment.provider_instance_id
+                            ),
+                        )
+                        for assessment in item.assessments
+                    ),
+                )
+            )
+        return tuple(bound)
+
     def local_instance_ids(path: str) -> tuple[str, ...]:
         scope_plan = plans.get(path)
         if scope_plan is None:
@@ -836,7 +875,7 @@ def build_scope_tree(
                 inherited=inherited,
                 visible=visible,
                 requirements=scope_plan.requirements,
-                provenance=scope_plan.provenance,
+                provenance=bound_provenance(scope_plan.provenance),
                 metadata=dict(scope_plan.metadata),
             )
         )
