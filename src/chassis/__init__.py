@@ -54,6 +54,7 @@ from chassis.core.errors import (
     ScopeClosedError,
     SecretResolutionError,
     ToolExecutionError,
+    UnknownLeaseError,
 )
 from chassis.core.generation import GenerationLease, GenerationState, RuntimeGeneration
 from chassis.core.generations import GenerationManager
@@ -150,6 +151,7 @@ __all__ = [
     "ScopedCapabilities",
     "SecretResolutionError",
     "ToolExecutionError",
+    "UnknownLeaseError",
     "__version__",
     "plugin",
 ]

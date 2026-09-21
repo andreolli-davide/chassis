@@ -61,6 +61,7 @@ DOCUMENTED = {
         "ScopeState",
         "ScopedCapabilities",
         "ToolExecutionError",
+        "UnknownLeaseError",
         "plugin",
     ],
     "chassis.langgraph": [

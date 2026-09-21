@@ -35,7 +35,11 @@ from typing import Any
 
 from chassis.capabilities.snapshot import CapabilitySnapshot
 from chassis.composition import ScopeTree
-from chassis.core.errors import GenerationConflictError, HarnessStateError
+from chassis.core.errors import (
+    ConfigurationError,
+    GenerationConflictError,
+    HarnessStateError,
+)
 from chassis.core.generation import (
     GenerationAccounting,
     GenerationLease,
@@ -62,11 +66,17 @@ class GenerationManager:
     def __init__(
         self, *, history_limit: int = _HISTORY_LIMIT, clock: Callable[[], float] = time.monotonic
     ) -> None:
+        if history_limit < 0:
+            raise ConfigurationError(
+                "generation history limit must be non-negative",
+                history_limit=history_limit,
+            )
         self._current: RuntimeGeneration | None = None
         self._draining: dict[str, RuntimeGeneration] = {}
         self._retired: list[RuntimeGeneration] = []
         self._history_limit = history_limit
         self._evicted = 0
+        self._shutting_down = False
         self._clock = clock
         self._counter = itertools.count(1)
 
@@ -192,7 +202,14 @@ class GenerationManager:
         return previous
 
     def retire(self, generation: RuntimeGeneration) -> bool:
-        """Retire a draining generation. Returns whether the state changed."""
+        """Retire a draining generation. Returns whether the state changed.
+
+        Retirement is refused while any lease remains: a run must never lose the
+        generation it holds. The only exception is the terminal state entered by
+        :meth:`begin_shutdown`, where resources are torn down under still-running
+        work by design; remaining leases keep accounting against the retired
+        generation there, so late releases stay exact.
+        """
 
         state = generation.state
         if state is GenerationState.RETIRED:
@@ -201,6 +218,12 @@ class GenerationManager:
             raise GenerationConflictError(
                 "cannot retire the current generation while it is active",
                 generation_id=generation.generation_id,
+            )
+        if generation.lease_count > 0 and not self._shutting_down:
+            raise GenerationConflictError(
+                "cannot retire a generation with outstanding leases",
+                generation_id=generation.generation_id,
+                leases=generation.lease_count,
             )
         generation.accounting.state = GenerationState.RETIRED
         self._draining.pop(generation.generation_id, None)
@@ -227,9 +250,14 @@ class GenerationManager:
     def begin_shutdown(self) -> tuple[RuntimeGeneration, ...]:
         """Stop accepting new runs and mark the current generation draining.
 
+        This is the explicit terminal transition: the only context in which a
+        generation may retire while leases remain, because shutdown tears
+        resources down under still-running work rather than leaking them.
+
         Returns the generations that must still be waited for.
         """
 
+        self._shutting_down = True
         current = self._current
         if current is not None:
             current.accounting.state = GenerationState.DRAINING

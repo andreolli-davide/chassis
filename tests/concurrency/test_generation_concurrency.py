@@ -14,8 +14,13 @@ import pytest
 
 from chassis import Harness, PluginContext, plugin
 from chassis.capabilities import CapabilityKey
-from chassis.core.errors import EffectCleanupError
+from chassis.capabilities.snapshot import CapabilitySnapshot
+from chassis.core.errors import EffectCleanupError, UnknownLeaseError
+from chassis.core.generation import GenerationLease, GenerationState
+from chassis.core.generations import GenerationManager
+from chassis.core.scope import Scope
 from chassis.plugins.lifecycle import PluginInstance, PluginState
+from chassis.plugins.manifest import PluginManifest
 
 DATABASE = CapabilityKey("database", "1")
 
@@ -259,3 +264,172 @@ async def test_shutdown_waits_for_runs_that_finish_within_the_grace_period() -> 
 
     assert finished == [True]
     assert instance.state is PluginState.DISPOSED
+
+
+# --------------------------------------------------------------------------
+# Lease-accounting regressions (R001): real tasks and event barriers only.
+# --------------------------------------------------------------------------
+
+
+def accounting_instance(name: str) -> PluginInstance:
+    """A minimal instance used only for reachability accounting."""
+
+    return PluginInstance(
+        instance_id=f"plugin_{name}",
+        entry_id=name,
+        manifest=PluginManifest(name=name, version="1.0.0"),
+        plugin=None,  # type: ignore[arg-type]
+        scope=Scope(name),
+        state=PluginState.ACTIVE,
+    )
+
+
+def empty_snapshot(generation_id: str) -> CapabilitySnapshot:
+    return CapabilitySnapshot(generation_id=generation_id)
+
+
+async def test_reacquisition_after_idle_does_not_wake_a_new_waiter() -> None:
+    """A waiter must join the *current* lease cycle, not the previous idle one."""
+
+    manager = GenerationManager()
+    active = manager.build(snapshot_factory=empty_snapshot, instances=[])
+    manager.publish(active)
+
+    first = manager.acquire_lease()
+    manager.release_lease(first)  # the generation is idle again
+
+    acquired = asyncio.Event()
+    release = asyncio.Event()
+
+    async def holder_run() -> GenerationLease:
+        lease = manager.acquire_lease()
+        acquired.set()
+        await release.wait()
+        return lease
+
+    hold_task = asyncio.create_task(holder_run())
+    await acquired.wait()
+
+    waiter = asyncio.create_task(active.accounting.wait_idle())
+    await asyncio.sleep(0)
+    assert not waiter.done()
+
+    release.set()
+    second = await hold_task
+    manager.release_lease(second)
+    await waiter
+
+
+async def test_concurrent_duplicate_releases_count_exactly_once() -> None:
+    manager = GenerationManager()
+    active = manager.build(snapshot_factory=empty_snapshot, instances=[])
+    manager.publish(active)
+    lease = manager.acquire_lease()
+
+    start = asyncio.Event()
+    rejected: list[BaseException] = []
+
+    async def release_attempt() -> None:
+        await start.wait()
+        try:
+            manager.release_lease(lease)
+        except UnknownLeaseError as error:
+            rejected.append(error)
+
+    attempts = [asyncio.create_task(release_attempt()) for _ in range(2)]
+    await asyncio.sleep(0)
+    start.set()
+    await asyncio.gather(*attempts)
+
+    # Exactly one release counts; the duplicate is rejected without effect.
+    assert len(rejected) == 1
+    assert active.lease_count == 0
+
+
+async def test_shutdown_during_a_live_second_lease_is_reported_and_still_disposes() -> None:
+    disposals: list[str] = []
+    harness = Harness(name="two-leases", shutdown_grace_seconds=0.05)
+    harness.install(tracked_plugin("provider-a", disposals), entry_id="db")
+    await harness.start()
+
+    generation = harness.current_generation
+    assert generation is not None
+
+    # One run completes first, so the generation has been idle: a reacquired
+    # lease must rearm the idle wait rather than inherit the stale idle signal.
+    async with harness.acquire():
+        await asyncio.sleep(0)
+
+    entered = [asyncio.Event(), asyncio.Event()]
+    release = asyncio.Event()
+
+    async def stuck(index: int) -> None:
+        async with harness.acquire():
+            entered[index].set()
+            await release.wait()
+
+    runs = [asyncio.create_task(stuck(index)) for index in range(2)]
+    await asyncio.gather(*(event.wait() for event in entered))
+    assert generation.lease_count == 2
+
+    # Shutdown must observe the two live leases, report the timeout, and still
+    # dispose at the terminal boundary.
+    with pytest.raises(EffectCleanupError) as excinfo:
+        await harness.stop()
+
+    assert len(excinfo.value.failures) == 1
+    assert isinstance(excinfo.value.failures[0].error, TimeoutError)
+    assert generation.state is GenerationState.RETIRED
+    assert generation.lease_count == 2
+    assert disposals == ["provider-a"]
+
+    # The late releases of both runs stay exact.
+    release.set()
+    await asyncio.gather(*runs)
+    assert generation.lease_count == 0
+
+
+async def test_a_duplicate_release_cannot_reclaim_a_shared_instance_under_a_live_run() -> None:
+    manager = GenerationManager()
+    shared = accounting_instance("shared")
+    old = manager.build(snapshot_factory=empty_snapshot, instances=[shared])
+    manager.publish(old)
+
+    stale = manager.acquire_lease()
+
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def holder_run() -> GenerationLease:
+        lease = manager.acquire_lease()
+        entered.set()
+        await release.wait()
+        # The run is still holding the old generation and its shared provider.
+        assert "plugin_shared" in manager.reachable_instance_ids()
+        return lease
+
+    hold_task = asyncio.create_task(holder_run())
+    await entered.wait()
+
+    manager.publish(manager.build(snapshot_factory=empty_snapshot, instances=[shared]))
+    assert old.state is GenerationState.DRAINING
+
+    # A buggy caller double-releases; only the first release counts.
+    assert manager.release_lease(stale) is False
+    with pytest.raises(UnknownLeaseError):
+        manager.release_lease(stale)
+
+    # The duplicate must not fire the reclaim signal while the holder's run is
+    # still live through the old generation.
+    assert old.lease_count == 1
+
+    manager.refresh_references([shared])
+    assert shared.generation_refs == 2
+
+    release.set()
+    holder = await hold_task
+    assert manager.release_lease(holder) is True
+
+    manager.retire(old)
+    manager.refresh_references([shared])
+    assert shared.generation_refs == 1

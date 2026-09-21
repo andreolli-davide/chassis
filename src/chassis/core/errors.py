@@ -37,6 +37,7 @@ __all__ = [
     "ScopeClosedError",
     "SecretResolutionError",
     "ToolExecutionError",
+    "UnknownLeaseError",
 ]
 
 
@@ -169,7 +170,10 @@ class HarnessStateError(ChassisError):
 
 
 class ConfigurationError(ChassisError):
-    """Raised when declarative configuration is invalid or inconsistent."""
+    """Raised when configuration is invalid or inconsistent.
+
+    Covers declarative configuration and validated constructor options.
+    """
 
     code = "configuration"
 
@@ -214,6 +218,16 @@ class GenerationConflictError(ChassisError):
     """Raised on an illegal concurrent mutation of runtime generations."""
 
     code = "generation_conflict"
+
+
+class UnknownLeaseError(ChassisError):
+    """Raised when releasing a lease that is not outstanding.
+
+    Covers an unknown lease id and a duplicate release of an already released
+    lease. Accounting is never altered by such a release.
+    """
+
+    code = "unknown_lease"
 
 
 class GraphBuildError(ChassisError):

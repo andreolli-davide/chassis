@@ -5,8 +5,13 @@ import asyncio
 import pytest
 
 from chassis.capabilities.snapshot import CapabilitySnapshot
-from chassis.core.errors import GenerationConflictError, HarnessStateError
-from chassis.core.generation import GenerationState
+from chassis.core.errors import (
+    ConfigurationError,
+    GenerationConflictError,
+    HarnessStateError,
+    UnknownLeaseError,
+)
+from chassis.core.generation import GenerationLease, GenerationState
 from chassis.core.generations import GenerationManager
 from chassis.core.scope import Scope
 from chassis.plugins.lifecycle import PluginInstance, PluginState
@@ -286,3 +291,107 @@ def test_generation_ids_are_sequential() -> None:
     ]
 
     assert ids == ["gen_0001", "gen_0002", "gen_0003"]
+
+
+def test_history_limit_must_be_non_negative() -> None:
+    with pytest.raises(ConfigurationError):
+        GenerationManager(history_limit=-1)
+
+    assert GenerationManager(history_limit=0).history_limit == 0
+
+
+async def test_reacquisition_after_idle_rearms_the_idle_waiter() -> None:
+    """The idle signal must be cleared on the ``0 -> 1`` lease transition.
+
+    Otherwise a waiter that joins after a reacquisition observes the stale idle
+    event from the previous cycle and concludes that a leased generation is idle.
+    """
+
+    manager = GenerationManager()
+    active = manager.build(snapshot_factory=empty_snapshot, instances=[])
+    manager.publish(active)
+
+    first = manager.acquire_lease()
+    assert manager.release_lease(first) is False  # idle again while still current
+
+    second = manager.acquire_lease()
+    waiter = asyncio.ensure_future(active.accounting.wait_idle())
+    await asyncio.sleep(0)
+    assert not waiter.done()
+
+    manager.release_lease(second)
+    await waiter
+
+
+def test_releasing_an_unknown_lease_is_rejected_without_changing_accounting(
+    manager: GenerationManager,
+) -> None:
+    active = manager.build(snapshot_factory=empty_snapshot, instances=[])
+    manager.publish(active)
+    lease = manager.acquire_lease()
+
+    forged = GenerationLease(generation=active, lease_id=lease.lease_id + 1000, started_at=0.0)
+
+    with pytest.raises(UnknownLeaseError):
+        manager.release_lease(forged)
+
+    assert active.lease_count == 1
+    assert manager.release_lease(lease) is False
+
+
+def test_duplicate_release_is_rejected_and_accounting_stays_exact(
+    manager: GenerationManager,
+) -> None:
+    active = manager.build(snapshot_factory=empty_snapshot, instances=[])
+    manager.publish(active)
+    first = manager.acquire_lease()
+    second = manager.acquire_lease()
+
+    assert manager.release_lease(first) is False
+
+    with pytest.raises(UnknownLeaseError):
+        manager.release_lease(first)
+
+    assert active.lease_count == 1
+    assert manager.release_lease(second) is False
+
+
+def test_retirement_is_rejected_while_leases_remain(manager: GenerationManager) -> None:
+    first = manager.build(snapshot_factory=empty_snapshot, instances=[])
+    manager.publish(first)
+    lease = manager.acquire_lease()
+    manager.publish(manager.build(snapshot_factory=empty_snapshot, instances=[]))
+
+    assert first.state is GenerationState.DRAINING
+    with pytest.raises(GenerationConflictError):
+        manager.retire(first)
+
+    assert first.state is GenerationState.DRAINING
+    manager.release_lease(lease)
+    assert manager.retire(first) is True
+    assert first.state is GenerationState.RETIRED
+
+
+def test_force_retirement_is_reserved_for_terminal_shutdown(manager: GenerationManager) -> None:
+    first = manager.build(snapshot_factory=empty_snapshot, instances=[])
+    manager.publish(first)
+    held = [manager.acquire_lease() for _ in range(2)]
+    manager.publish(manager.build(snapshot_factory=empty_snapshot, instances=[]))
+
+    with pytest.raises(GenerationConflictError):
+        manager.retire(first)
+
+    # Terminal shutdown is the explicit transition that allows teardown under
+    # still-running work.
+    manager.begin_shutdown()
+    assert manager.retire(first) is True
+    assert first.state is GenerationState.RETIRED
+
+    # Remaining leases stay exact, so late releases cannot corrupt accounting.
+    assert first.lease_count == 2
+    assert manager.release_lease(held[0]) is False
+    assert first.lease_count == 1
+    with pytest.raises(UnknownLeaseError):
+        manager.release_lease(held[0])
+    assert manager.release_lease(held[1]) is False
+    assert first.lease_count == 0

@@ -28,6 +28,7 @@ from typing import Any
 
 from chassis.capabilities.snapshot import CapabilitySnapshot
 from chassis.composition import ScopeTree
+from chassis.core.errors import UnknownLeaseError
 from chassis.core.identity import SemanticIdentity
 from chassis.plugins.lifecycle import PluginInstance
 
@@ -69,8 +70,15 @@ class GenerationAccounting:
     _next_lease: int = field(default=0, repr=False)
 
     def acquire(self) -> int:
-        """Record one lease and return its id."""
+        """Record one lease and return its id.
 
+        The idle event is cleared on the ``0 -> 1`` transition, so a waiter that
+        joins after a reacquisition waits for the *current* cycle to go idle
+        instead of observing the stale signal from the previous one.
+        """
+
+        if self.leases == 0:
+            self.zero.clear()
         lease_id = self._next_lease
         self._next_lease += 1
         self._starts[lease_id] = self.clock()
@@ -78,12 +86,21 @@ class GenerationAccounting:
         return lease_id
 
     def release(self, lease_id: int) -> bool:
-        """Release one lease; returns whether the generation just became idle."""
+        """Release one lease; returns whether the generation just became idle.
 
-        self._starts.pop(lease_id, None)
+        The lease id must be outstanding. An unknown id and a duplicate release
+        are both rejected with :class:`UnknownLeaseError`, and accounting is never
+        altered by such a release.
+        """
+
+        if lease_id not in self._starts:
+            raise UnknownLeaseError(
+                "lease is not outstanding",
+                lease_id=lease_id,
+            )
+        del self._starts[lease_id]
         self.leases -= 1
-        if self.leases <= 0:
-            self.leases = 0
+        if self.leases == 0:
             self.zero.set()
             return True
         return False

@@ -7,6 +7,23 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Generation lease accounting is authoritative** (roadmap R001). The idle event
+  is now cleared on the `0 -> 1` lease transition, so a `wait_idle()` that joins
+  after a reacquisition waits for the current cycle instead of observing a stale
+  idle signal. Releasing a lease id that is not outstanding — a forged id or a
+  duplicate release — raises the new `UnknownLeaseError` and never alters the
+  accounting. `GenerationManager.retire()` refuses a generation with outstanding
+  leases outside terminal shutdown; the explicit `begin_shutdown()` transition is
+  the only context where a still-leased generation may retire, and late releases
+  against it stay exact. `GenerationManager(history_limit=...)` now rejects a
+  negative value with `ConfigurationError`.
+- **Migration note:** callers that released a lease twice or released an unknown
+  lease id previously corrupted the lease count silently; they now receive
+  `UnknownLeaseError`. Catch it only if you intentionally tolerate buggy release
+  paths; correct callers are unaffected.
+
 ### Documentation
 
 - Added the [release roadmap](docs/roadmap.md), mapping every finding from the 0.5.0
