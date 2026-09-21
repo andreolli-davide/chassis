@@ -163,10 +163,12 @@ def _services_plugin(
     withdrawn when their scope closes.
     """
 
-    provides = {
-        key.name: version if version is not None else key.api_version
-        for key, _value, version in provisions
-    }
+    provides: dict[str, tuple[str, ...]] = {}
+    for key, _value, version in provisions:
+        promised = version if version is not None else key.api_version
+        versions = provides.get(key.name, ())
+        if promised not in versions:
+            provides[key.name] = (*versions, promised)
 
     @plugin(name="chassis-services", version="1.0.0", provides=provides)
     async def services(ctx: PluginContext) -> None:
@@ -281,7 +283,7 @@ class Harness:
         )
         self._catalog = PluginCatalog()
         self._replay = replay
-        self._provisions: dict[str, tuple[CapabilityKey, object, str | None]] = {}
+        self._provisions: dict[CapabilityKey, tuple[CapabilityKey, object, str | None]] = {}
         self._composition = CompositionTree(self)
         self._config: HarnessConfig | None = None
         self._dirty = False
@@ -549,15 +551,21 @@ class Harness:
         next :meth:`reconcile`.
         """
 
-        self._provisions[capability.name] = (capability, value, version)
+        self._provisions[capability] = (capability, value, version)
         self._sync_services_entry()
         self._dirty = True
 
     def withdraw(self, capability: CapabilityKey | str) -> bool:
         """Undo :meth:`provide` for a capability."""
 
-        name = capability.name if isinstance(capability, CapabilityKey) else capability
-        if self._provisions.pop(name, None) is None:
+        if isinstance(capability, CapabilityKey):
+            removed = self._provisions.pop(capability, None) is not None
+        else:
+            keys = [key for key in self._provisions if key.name == capability]
+            for key in keys:
+                del self._provisions[key]
+            removed = bool(keys)
+        if not removed:
             return False
         self._sync_services_entry()
         self._dirty = True
@@ -1064,7 +1072,7 @@ class Harness:
         for instance in instances:
             actual = by_provider.get(instance.instance_id, [])
             actual_keys = {registration.key for registration in actual}
-            for name, promised in sorted(instance.manifest.provides.items()):
+            for name, promised in instance.manifest.provided_contracts():
                 key = CapabilityKey.from_version(name, promised)
                 if key in actual_keys:
                     continue
@@ -1153,16 +1161,21 @@ class Harness:
             provider = self._plugin_registry.instance(resolution.provider_entry_id)
             if provider is None:
                 continue
-            registration = next(
-                (
-                    candidate
-                    for candidate in self._capability_registry.by_name(resolution.requirement.name)
-                    if candidate.provider_id == provider.instance_id
-                ),
-                None,
-            )
-            if registration is not None:
-                resolved[resolution.requirement.name] = registration
+            matching = [
+                candidate
+                for candidate in self._capability_registry.by_name(resolution.requirement.name)
+                if candidate.provider_id == provider.instance_id
+                and resolution.requirement.accepts(candidate.key, candidate.version)
+            ]
+            if not matching:
+                continue
+            exact = [
+                candidate
+                for candidate in matching
+                if str(candidate.key) == resolution.provider_key
+                and str(candidate.version) == resolution.provider_version
+            ]
+            resolved[resolution.requirement.name] = (exact or matching)[0]
         return resolved
 
     def _semantic_identity(

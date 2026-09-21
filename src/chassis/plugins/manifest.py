@@ -29,7 +29,9 @@ class PluginManifest(BaseModel):
     Args:
         name: Plugin implementation name, stable across versions.
         version: Implementation version (PEP 440).
-        provides: Capability name to provided implementation version.
+        provides: Capability name to provided implementation version(s). A
+            sequence declares one version per contract generation for
+            multi-contract providers.
         requires: Capability name to required version specifier.
         optional: Capability name to optional version specifier. An unsatisfied
             optional requirement does not prevent activation.
@@ -50,7 +52,7 @@ class PluginManifest(BaseModel):
 
     name: str = Field(min_length=1)
     version: str
-    provides: Mapping[str, str] = Field(default_factory=dict)
+    provides: Mapping[str, str | tuple[str, ...]] = Field(default_factory=dict)
     requires: Mapping[str, str] = Field(default_factory=dict)
     optional: Mapping[str, str] = Field(default_factory=dict)
     permissions: Sequence[str] = ()
@@ -87,7 +89,13 @@ class PluginManifest(BaseModel):
 
         try:
             for name, provided in self.provides.items():
-                CapabilityKey.from_version(name, provided)
+                versions = (provided,) if isinstance(provided, str) else tuple(provided)
+                if not versions:
+                    raise ConfigurationError(
+                        "provides must list at least one version", capability=name
+                    )
+                for version in versions:
+                    CapabilityKey.from_version(name, version)
             for name, requirement in {**self.requires, **self.optional}.items():
                 CapabilityRequirement.parse(name, requirement)
         except ConfigurationError as error:
@@ -106,12 +114,20 @@ class PluginManifest(BaseModel):
 
         return f"{self.name}@{self.version}"
 
+    def provided_contracts(self) -> tuple[tuple[str, str], ...]:
+        """``(capability name, implementation version)`` pairs, deterministic order."""
+
+        return tuple(
+            (name, version)
+            for name, provided in sorted(self.provides.items())
+            for version in ((provided,) if isinstance(provided, str) else tuple(provided))
+        )
+
     def provided_keys(self) -> tuple[CapabilityKey, ...]:
         """Capability contracts this plugin implements."""
 
         return tuple(
-            CapabilityKey.from_version(name, version)
-            for name, version in sorted(self.provides.items())
+            CapabilityKey.from_version(name, version) for name, version in self.provided_contracts()
         )
 
     def required_capabilities(self) -> tuple[CapabilityRequirement, ...]:
@@ -136,7 +152,13 @@ class PluginManifest(BaseModel):
         return {
             "name": self.name,
             "version": self.version,
-            "provides": dict(sorted(self.provides.items())),
+            "provides": {
+                name: (versions[0] if len(versions) == 1 else list(versions))
+                for name, versions in sorted(
+                    (name, ((provided,) if isinstance(provided, str) else tuple(provided)))
+                    for name, provided in self.provides.items()
+                )
+            },
             "requires": dict(sorted(self.requires.items())),
             "optional": dict(sorted(self.optional.items())),
             "permissions": sorted(self.permissions),

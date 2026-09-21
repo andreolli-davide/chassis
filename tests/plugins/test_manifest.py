@@ -26,7 +26,10 @@ def test_manifest_parses_capabilities_deterministically() -> None:
     assert requirement.optional is False
 
     (optional,) = manifest.optional_capabilities()
-    assert optional.key == CapabilityKey("vector", "2")
+    # ">=2" spans every major from 2 up, so it stays generation-neutral instead
+    # of being pinned to the lower-bound major.
+    assert optional.key == CapabilityKey("vector", "")
+    assert optional.is_generation_agnostic is True
     assert optional.optional is True
 
     assert manifest.to_dict()["permissions"] == ["database.query", "network.fetch"]

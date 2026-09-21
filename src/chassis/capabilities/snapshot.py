@@ -27,14 +27,14 @@ from chassis.core.errors import (
 __all__ = ["CapabilitySnapshot"]
 
 
-def _registration_order(registration: CapabilityRegistration) -> tuple[str, str, str]:
-    """Deterministic ordering for snapshot entries."""
+def _registration_order(registration: CapabilityRegistration) -> tuple[str, str]:
+    """Deterministic ordering for snapshot entries.
 
-    return (
-        registration.provider_name,
-        registration.provider_id,
-        registration.registration_id,
-    )
+    Registration ids are random; the sort is stable, so registrations of one
+    provider keep their insertion order and snapshots never depend on uuids.
+    """
+
+    return (registration.provider_name, registration.provider_id)
 
 
 @dataclass(frozen=True, slots=True)

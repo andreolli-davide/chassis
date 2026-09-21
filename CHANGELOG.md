@@ -24,6 +24,24 @@ that a minor release may break the documented surface.
   `ToolRegistry.unregister`/`AgentRegistry.unregister` gained keyword-only
   `owner_id`/`scope_id` filters so a plugin's early unregister touches only its
   own registration.
+- **Requirements bind the exact selected capability contract** (roadmap R007).
+  `RequirementResolution` now carries the selected contract key
+  (`provider_key`) alongside the provider identity and version, and
+  materialization filters registrations with the original requirement
+  predicate instead of selecting by capability name and provider instance —
+  registration order and random ids no longer decide which registration a
+  consumer gets (snapshot and registry ordering are insertion-stable).
+  Application provisions are keyed by the full `CapabilityKey`, so `database@1`
+  and `database@2` provisions coexist. Contract-generation inference from a
+  specifier now proves a single major before pinning: `>1.9,<3`, `>=1`, and
+  similar open or multi-major ranges stay generation-neutral instead of being
+  pinned to the lower-bound major. `PluginManifest.provides` accepts a sequence
+  of versions for multi-contract providers.
+- **Migration note:** a requirement like `>=2` no longer pins `@2`; pass an
+  explicit `api_version` when a specific contract generation is required.
+  `Harness.provide`/`withdraw` are keyed by `CapabilityKey`; `withdraw` with a
+  name removes every contract generation of that name. `PluginManifest.provides`
+  values may now be `str | tuple[str, ...]`.
 
 ## [0.5.1] - 2026-09-22
 

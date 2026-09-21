@@ -81,6 +81,13 @@ contract, its actual registrations, the affected consumers, and the rollback
 result — when a promised capability is missing, registered on another contract
 generation, or registered in a version no consumer's requirement accepts.
 
+A multi-contract provider lists one version per contract generation:
+`provides={"database": ("1.0.0", "2.0.0")}` declares `database@1` and `database@2`,
+and every requirement binds the exact contract it resolved to. A requirement
+specifier pins a contract generation only when its accepted range proves a single
+major (`>=1,<2`, `==2.1.*`, `~=1.4`); open or multi-major ranges such as `>1.9,<3`
+stay generation-neutral instead of being pinned to the lower bound.
+
 Versions and specifiers use `packaging`; a bare version is normalized to an exact
 match. Manifests validate when they are constructed, so an unparseable requirement
 fails immediately rather than at resolution time.

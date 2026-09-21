@@ -176,27 +176,47 @@ def parse_specifier(value: str | SpecifierSet, *, capability: str) -> SpecifierS
 
 
 def specifier_major(specifier: SpecifierSet) -> str | None:
-    """Return the lowest lower-bound major version of ``specifier``.
+    """Return the contract generation the specifier proves, if it proves one.
 
-    ``">=2,<3"`` yields ``"2"`` and ``"==2.1.*"`` yields ``"2"``. Ranges without
-    a lower bound (``"<3"``, ``"!=2"``, the empty specifier) yield ``None``: such
-    requirements do not pin a contract generation.
+    A range pins a single API major only when its accepted versions cannot cross
+    a major boundary: an exact or wildcard version, a compatible release, or
+    bounds that agree on the major (``>=1.4,<2``). Open and multi-major ranges
+    such as ``>1.9,<3`` yield ``None`` — pinning them to the lower bound would
+    silently reject providers the range accepts. Exclusions never widen a range
+    and are ignored.
     """
 
-    bounded: list[Version] = []
+    pinned: list[Version] = []
+    lower: list[Version] = []
+    upper: list[tuple[str, Version]] = []
     for spec in specifier:
-        if not spec.operator.startswith(_LOWER_BOUND_OPERATORS):
+        if spec.operator == "!=":
             continue
-        raw = spec.version
-        if raw.endswith(".*"):
-            raw = raw[:-2]
+        raw = spec.version[:-2] if spec.version.endswith(".*") else spec.version
         try:
-            bounded.append(Version(raw))
+            version = Version(raw)
         except InvalidVersion:
             continue
-    if not bounded:
+        if spec.operator in ("==", "==="):
+            pinned.append(version)
+        elif spec.operator == "~=":
+            # A compatible release never crosses a major boundary.
+            pinned.append(version)
+        elif spec.operator in _LOWER_BOUND_OPERATORS:
+            lower.append(version)
+        elif spec.operator in ("<", "<="):
+            upper.append((spec.operator, version))
+    if pinned:
+        return str(min(pinned).major)
+    if not lower or not upper:
         return None
-    return str(min(bounded).major)
+    floor = max(lower)
+    operator, ceiling = min(upper, key=lambda item: item[1])
+    if operator == "<" and (ceiling.minor, ceiling.micro) == (0, 0):
+        ceiling_major = ceiling.major - 1
+    else:
+        ceiling_major = ceiling.major
+    return str(floor.major) if floor.major == ceiling_major else None
 
 
 #: Built-in capability contracts used by Chassis and its examples.

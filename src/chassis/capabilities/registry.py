@@ -325,9 +325,7 @@ def _apply_preference(
     return None
 
 
-def _ordering_key(registration: CapabilityRegistration) -> tuple[str, str, str]:
-    return (
-        registration.provider_name,
-        registration.provider_id,
-        registration.registration_id,
-    )
+def _ordering_key(registration: CapabilityRegistration) -> tuple[str, str]:
+    # Registration ids are random; ordering must never depend on them. The sort
+    # is stable, so registrations of one provider keep their insertion order.
+    return (registration.provider_name, registration.provider_id)

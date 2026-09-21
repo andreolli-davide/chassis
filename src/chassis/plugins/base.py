@@ -287,7 +287,7 @@ def plugin(
     *,
     name: str,
     version: str,
-    provides: Mapping[str, str] | None = None,
+    provides: Mapping[str, str | tuple[str, ...]] | None = None,
     requires: Mapping[str, str] | None = None,
     optional: Mapping[str, str] | None = None,
     permissions: tuple[str, ...] | list[str] = (),

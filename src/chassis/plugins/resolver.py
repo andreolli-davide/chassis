@@ -195,6 +195,7 @@ class RequirementResolution:
     provider_instance_id: str | None = None
     provider_name: str | None = None
     provider_version: str | None = None
+    provider_key: str | None = None
     explain: str = ""
     consumer: str = ""
     consumer_kind: str = "plugin"
@@ -217,6 +218,7 @@ class RequirementResolution:
             "consumer_kind": self.consumer_kind,
             "provider_entry_id": self.provider_entry_id,
             "provider_name": self.provider_name,
+            "provider_key": self.provider_key,
             "provider_version": self.provider_version,
             "provider_scope": self.provider_scope,
             "provider_origin": self.provider_origin,
@@ -794,6 +796,7 @@ class DependencyResolver:
             provider_instance_id=None if selected is None else selected.instance_id,
             provider_name=None if selected is None else selected.provider_name,
             provider_version=None if selected is None else str(selected.version),
+            provider_key=None if selected is None else str(selected.key),
             explain=explain,
             consumer=consumer,
             consumer_kind=consumer_kind,
@@ -924,7 +927,7 @@ def _declared_options(
     by_name: dict[str, list[ProviderOption]] = {}
     by_entry: dict[str, list[ProviderOption]] = {}
     for candidate in candidates:
-        for name, version in sorted(candidate.manifest.provides.items()):
+        for name, version in candidate.manifest.provided_contracts():
             option = ProviderOption(
                 entry_id=candidate.entry_id,
                 instance_id=candidate.instance_id,
