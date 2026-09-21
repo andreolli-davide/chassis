@@ -13,6 +13,7 @@ import pytest
 DOCUMENTED = {
     "chassis": [
         "ARTIFACTS",
+        "AgentExecutionError",
         "DATABASE",
         "MEMORY",
         "MODEL",

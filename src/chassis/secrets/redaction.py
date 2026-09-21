@@ -20,7 +20,6 @@ REDACTED = "<redacted>"
 
 #: Values shorter than this are not tracked: replacing one- or two-character
 #: strings would corrupt unrelated text, and such values carry no secret entropy.
-_MIN_SECRET_LENGTH = 4
 
 
 class SecretRedactor:
@@ -37,9 +36,14 @@ class SecretRedactor:
             self.add(value)
 
     def add(self, value: str) -> bool:
-        """Track ``value`` for redaction. Returns whether it was accepted."""
+        """Track ``value`` for redaction. Returns whether it was accepted.
 
-        if not isinstance(value, str) or len(value) < _MIN_SECRET_LENGTH:
+        Every non-empty value is protected, however short: a secret of one
+        character is still a secret. The empty string is refused because it
+        carries no material and matches everywhere.
+        """
+
+        if not isinstance(value, str) or not value:
             return False
         self._values.add(value)
         return True
@@ -77,15 +81,24 @@ class SecretRedactor:
         redacted = self.redact(text)
         return redacted, redacted != text
 
-    def redact_value(self, value: Any) -> Any:
-        """Recursively redact strings inside mappings, sequences, and tuples."""
+    def redact_value(self, value: Any, *, key: str | None = None) -> Any:
+        """Recursively redact a payload: tracked values and sensitive keys.
 
+        Sensitive-key redaction applies at every depth of mappings and
+        sequences, so one call covers a request, a response, or a metadata blob
+        on any path.
+        """
+
+        if isinstance(key, str) and SECRET_KEY_PATTERN.search(key):
+            return REDACTED
         if isinstance(value, str):
             return self.redact(value)
         if isinstance(value, Mapping):
             return {
-                self.redact(key) if isinstance(key, str) else key: self.redact_value(item)
-                for key, item in value.items()
+                self.redact(item_key) if isinstance(item_key, str) else item_key: self.redact_value(
+                    item, key=str(item_key)
+                )
+                for item_key, item in value.items()
             }
         if isinstance(value, (list, tuple, set, frozenset)):
             redacted = [self.redact_value(item) for item in value]
@@ -108,8 +121,8 @@ def redact(payload: Any, values: Iterable[str]) -> Any:
 #: stop the obvious cases -- an API key sitting in a plugin config -- from being
 #: hashed or traced.
 SECRET_KEY_PATTERN = re.compile(
-    r"(?:^|_)(?:api_?key|apikey|secret|token|password|passwd|credential|private_key|"
-    r"access_key|client_secret)(?:$|_)",
+    r"(?:^|[^a-z0-9])(?:api_?key|apikey|secret|token|password|passwd|credential|private_key|"
+    r"access_key|client_secret|authorization|auth)(?=$|[^a-z0-9])",
     re.IGNORECASE,
 )
 

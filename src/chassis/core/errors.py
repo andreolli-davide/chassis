@@ -12,10 +12,12 @@ Telemetry and diagnostics redact the context again before emitting it.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 __all__ = [
+    "AgentExecutionError",
     "BudgetExceeded",
     "CapabilityAmbiguous",
     "CapabilityNotFound",
@@ -79,9 +81,12 @@ class CleanupFailure:
     description: str
     error: BaseException
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self, *, sanitize: Callable[[str], str] | None = None) -> dict[str, str]:
+        """Structured rendering. ``sanitize`` scrubs author-written text."""
+
+        scrub: Callable[[str], str] = sanitize if sanitize is not None else (lambda text: text)
         error = f"{type(self.error).__name__}: {self.error}"
-        return {"description": self.description, "error": error}
+        return {"description": scrub(self.description), "error": scrub(error)}
 
 
 class ScopeClosedError(ChassisError):
@@ -94,12 +99,20 @@ class EffectCleanupError(ChassisError):
     """Raised after scope teardown when one or more disposers failed.
 
     Cleanup always runs to completion; failures are aggregated rather than
-    aborting the unwind at the first error.
+    aborting the unwind at the first error. Rendered text is sanitized through
+    the optional ``sanitize`` callable (the harness passes its redactor), while
+    ``failures`` keeps the original exceptions as structured detail.
     """
 
     code = "effect_cleanup"
 
-    def __init__(self, scope_name: str, failures: tuple[CleanupFailure, ...]) -> None:
+    def __init__(
+        self,
+        scope_name: str,
+        failures: tuple[CleanupFailure, ...],
+        *,
+        sanitize: Callable[[str], str] | None = None,
+    ) -> None:
         super().__init__(
             f"{len(failures)} cleanup failure(s) while closing scope {scope_name!r}",
             scope=scope_name,
@@ -107,10 +120,13 @@ class EffectCleanupError(ChassisError):
         )
         self.scope_name = scope_name
         self.failures = failures
+        self._sanitize = sanitize
 
     def __str__(self) -> str:
+        scrub: Callable[[str], str] = self._sanitize or (lambda text: text)
         details = "; ".join(
-            f"{failure.description} -> {type(failure.error).__name__}: {failure.error}"
+            f"{scrub(failure.description)} -> {type(failure.error).__name__}: "
+            f"{scrub(str(failure.error))}"
             for failure in self.failures
         )
         base = super().__str__()
@@ -228,6 +244,16 @@ class UnknownLeaseError(ChassisError):
     """
 
     code = "unknown_lease"
+
+
+class AgentExecutionError(ChassisError):
+    """Raised when an agent runtime fails across the public boundary.
+
+    The runtime's own exception is preserved as the internal cause; the public
+    message and context carry only sanitized text.
+    """
+
+    code = "agent_execution"
 
 
 class GraphBuildError(ChassisError):

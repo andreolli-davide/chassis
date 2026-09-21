@@ -94,7 +94,7 @@ from chassis.runtime import AgentRuntime, RunEnvironment
 from chassis.secrets.base import SecretProvider, SecretValue
 from chassis.secrets.env import EnvSecretProvider, RedactingSecretProvider
 from chassis.secrets.redaction import SecretRedactor
-from chassis.telemetry.base import NoopTelemetry, Telemetry
+from chassis.telemetry.base import NoopTelemetry, RedactingTelemetry, Telemetry
 from chassis.tools.executor import ApprovalGate, ToolExecutor
 from chassis.tools.registry import ToolRegistry, ToolSnapshot
 
@@ -245,13 +245,22 @@ class Harness:
         self._agents = AgentRegistry(harness=self)
         self._generations = GenerationManager(history_limit=generation_history_limit)
         self._policy: PolicyEngine = policy if policy is not None else AllowAllPolicy()
-        self._telemetry: Telemetry = telemetry if telemetry is not None else NoopTelemetry()
         self._redactor = redactor if redactor is not None else SecretRedactor()
+        # One redaction boundary for every emitted signal: backends receive
+        # scrubbed payloads and are never trusted to remove secrets themselves.
+        self._telemetry: Telemetry = RedactingTelemetry(
+            telemetry if telemetry is not None else NoopTelemetry(), self._redactor
+        )
         # Secrets resolved through the harness become redactable at the moment
         # they are read, which is what keeps them out of traces and snapshots.
         self._secrets: SecretProvider = RedactingSecretProvider(
             secrets if secrets is not None else EnvSecretProvider(), self._redactor
         )
+        # A recording attached to this harness adopts the harness redactor and
+        # is re-scrubbed, so an externally supplied session cannot smuggle
+        # secrets past the redaction boundary.
+        if replay is not None:
+            replay.bind_redactor(self._redactor)
         self._plugin_registry = PluginRegistry(
             capabilities=self._capability_registry,
             tools=self._tool_registry,
@@ -657,7 +666,7 @@ class Harness:
             self._state = HarnessState.STOPPED
             self._last_failures = tuple(failures)
         if failures:
-            raise EffectCleanupError(self._name, tuple(failures))
+            raise EffectCleanupError(self._name, tuple(failures), sanitize=self._redactor.redact)
 
     async def _shutdown(self, failures: list[CleanupFailure]) -> None:
         current = self._generations.current

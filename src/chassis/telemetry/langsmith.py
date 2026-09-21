@@ -34,19 +34,25 @@ _TRACING_ENV_VARS = ("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2")
 
 
 class LangSmithSpan:
-    """Span backed by a LangSmith run."""
+    """Span backed by a LangSmith run.
 
-    __slots__ = ("_run",)
+    Attribute updates and errors are scrubbed with the span's redactor before
+    they reach the run, so the update path cannot smuggle material that span
+    creation would have caught.
+    """
 
-    def __init__(self, run: Any) -> None:
+    __slots__ = ("_redactor", "_run")
+
+    def __init__(self, run: Any, redactor: SecretRedactor | None = None) -> None:
         self._run = run
+        self._redactor = redactor if redactor is not None else SecretRedactor()
 
     def set_attribute(self, key: str, value: Any) -> None:
         self.set_attributes({key: value})
 
     def set_attributes(self, attributes: Mapping[str, Any]) -> None:
         try:
-            self._run.add_metadata(dict(attributes))
+            self._run.add_metadata(self._redactor.redact_value(dict(attributes)))
         except Exception:
             _LOGGER.debug("failed to attach metadata to a LangSmith run", exc_info=True)
 
@@ -131,7 +137,7 @@ class LangSmithTelemetry:
             return
 
         try:
-            yield LangSmithSpan(run)
+            yield LangSmithSpan(run, self._redactor)
         finally:
             try:
                 context.__exit__(None, None, None)

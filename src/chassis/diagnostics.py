@@ -971,10 +971,10 @@ class Diagnostics:
         ]
 
     def capabilities(self) -> list[dict[str, Any]]:
-        """Registered providers of capability contracts."""
+        """Registered providers of capability contracts, with metadata scrubbed."""
 
         return [
-            registration.to_dict()
+            self._harness.redactor.redact_value(registration.to_dict())
             for registration in self._harness.capability_registry.registrations()
         ]
 
@@ -1027,9 +1027,9 @@ class Diagnostics:
         return self._harness.agents.to_dict()
 
     def tools(self) -> dict[str, Any]:
-        """Registered tools with their owner and policy."""
+        """Registered tools with their owner and policy, metadata scrubbed."""
 
-        return self._harness.tools.to_dict()
+        return self._harness.redactor.redact_value(self._harness.tools.to_dict())
 
     def hooks(self) -> dict[str, Any]:
         """Registered hooks with their owner, mode, and ordering."""
@@ -1826,7 +1826,10 @@ class Diagnostics:
                 else None,
                 "draining": len(self._harness.generation_manager.draining()),
             },
-            "failures": [failure.to_dict() for failure in self._harness.last_cleanup_failures],
+            "failures": [
+                failure.to_dict(sanitize=self._harness.redactor.redact)
+                for failure in self._harness.last_cleanup_failures
+            ],
         }
 
     def plugin(self, entry_id: str) -> dict[str, Any] | None:

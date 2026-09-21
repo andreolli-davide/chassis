@@ -12,11 +12,20 @@ implementations must not be trusted to remove secrets themselves.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import AsyncGenerator, Mapping
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from typing import Any, Protocol, runtime_checkable
 
-__all__ = ["NoopSpan", "NoopTelemetry", "Span", "TeeTelemetry", "Telemetry"]
+from chassis.secrets.redaction import SecretRedactor
+
+__all__ = [
+    "NoopSpan",
+    "NoopTelemetry",
+    "RedactingTelemetry",
+    "Span",
+    "TeeTelemetry",
+    "Telemetry",
+]
 
 
 @runtime_checkable
@@ -129,6 +138,56 @@ class _FanOutSpan:
                 span.record_error(error)
             except Exception:
                 continue
+
+
+class RedactingTelemetry:
+    """Wraps a backend so everything emitted is scrubbed first.
+
+    The single redaction boundary for telemetry: attributes, span updates,
+    events, and recorded errors pass through the harness redactor on the way in,
+    so no backend is trusted to remove secrets itself.
+    """
+
+    def __init__(self, inner: Telemetry, redactor: SecretRedactor) -> None:
+        self._inner = inner
+        self._redactor = redactor
+
+    @property
+    def inner(self) -> Telemetry:
+        return self._inner
+
+    @asynccontextmanager
+    async def span(
+        self, name: str, attributes: Mapping[str, Any] | None = None
+    ) -> AsyncGenerator[Span]:
+        scrubbed = self._redactor.redact_value(dict(attributes or {}))
+        async with self._inner.span(name, scrubbed) as span:
+            yield _RedactingSpan(span, self._redactor)
+
+    def event(self, name: str, attributes: Mapping[str, Any] | None = None) -> None:
+        self._inner.event(name, self._redactor.redact_value(dict(attributes or {})))
+
+
+class _RedactingSpan:
+    """Span that scrubs attributes and errors before forwarding."""
+
+    __slots__ = ("_inner", "_redactor")
+
+    def __init__(self, inner: Span, redactor: SecretRedactor) -> None:
+        self._inner = inner
+        self._redactor = redactor
+
+    def set_attribute(self, key: str, value: Any) -> None:
+        self.set_attributes({key: value})
+
+    def set_attributes(self, attributes: Mapping[str, Any]) -> None:
+        self._inner.set_attributes(self._redactor.redact_value(dict(attributes)))
+
+    def record_error(self, error: BaseException) -> None:
+        # The backend renders the exception it is given, so it receives a
+        # sanitized copy; the original never crosses the boundary.
+        message = self._redactor.redact(str(error))
+        self._inner.record_error(RuntimeError(f"{type(error).__name__}: {message}"))
 
 
 class NoopTelemetry:

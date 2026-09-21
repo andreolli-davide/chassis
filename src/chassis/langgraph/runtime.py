@@ -248,7 +248,10 @@ class LangGraphAgent:
             configurable["thread_id"] = request.thread_id
         if request.checkpoint_id:
             configurable["checkpoint_id"] = request.checkpoint_id
-        metadata = self._redactor.redact_value(
+        redactor = (
+            self._redactor if run_context.environment is None else run_context.environment.redactor
+        )
+        metadata = redactor.redact_value(
             {
                 "chassis_agent": self._definition.name,
                 "chassis_agent_version": self._definition.version,

@@ -87,14 +87,14 @@ def test_redactor_scrubs_text_and_structured_payloads() -> None:
     }
 
 
-def test_redactor_ignores_values_without_secret_entropy() -> None:
+def test_redactor_protects_short_secret_values() -> None:
     redactor = SecretRedactor()
 
-    assert redactor.add("ab") is False
-    assert redactor.add("") is False
+    assert redactor.add("ab") is True
+    assert redactor.add("") is False  # no material to protect
     assert redactor.add("long-enough") is True
-    assert len(redactor) == 1
-    assert redactor.redact("ab") == "ab"
+    assert len(redactor) == 2
+    assert redactor.redact("zab") == f"z{REDACTED}"
 
 
 def test_redactor_replaces_longer_values_first() -> None:

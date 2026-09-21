@@ -15,7 +15,7 @@ import pytest
 from langchain_core.tools import tool
 
 from chassis import DATABASE, Harness, PluginContext, plugin
-from chassis.core.errors import PolicyDenied
+from chassis.core.errors import AgentExecutionError, PolicyDenied
 from chassis.hooks import HookEvent, HookMode
 from chassis.policy import GrantPolicy
 from chassis.runtime import AgentEvent, AgentRequest, AgentResult, HarnessRunContext
@@ -199,9 +199,12 @@ async def test_agent_error_hook_fires_when_the_engine_fails() -> None:
     try:
         harness.register_agent(StubRuntime(error=RuntimeError("engine exploded")))
 
-        with pytest.raises(RuntimeError):
+        with pytest.raises(AgentExecutionError) as excinfo:
             await harness.agents.invoke("stub", {"messages": []})
 
+        # The original runtime exception stays an internal cause; the public
+        # error and the hook payload carry only sanitized text.
+        assert isinstance(excinfo.value.__cause__, RuntimeError)
         assert events(seen) == [HookEvent.BEFORE_AGENT_RUN, HookEvent.AGENT_ERROR]
         assert seen[1][1]["error_type"] == "RuntimeError"
         assert "engine exploded" in seen[1][1]["error"]

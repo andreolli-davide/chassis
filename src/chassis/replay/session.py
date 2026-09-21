@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -31,9 +31,6 @@ from chassis.secrets.redaction import SecretRedactor
 __all__ = ["ReplaySession", "boundary_key"]
 
 T = TypeVar("T")
-
-#: Key fragments that are treated as secret when a boundary is recorded.
-_SENSITIVE_REQUEST_KEYS = ("api_key", "authorization", "token", "password", "secret")
 
 
 def boundary_key(*parts: Any) -> str:
@@ -89,13 +86,31 @@ class ReplaySession:
             kind=kind,
             sequence=len(self.records),
             key=key,
-            request=self.redactor.redact_value(_redact_sensitive(dict(request or {}))),
+            request=self.redactor.redact_value(dict(request or {})),
             response=self.redactor.redact_value(response),
             generation_id=generation_id,
             run_id=run_id,
         )
         self.records.append(record)
         return record
+
+    def bind_redactor(self, redactor: SecretRedactor) -> None:
+        """Adopt ``redactor`` and re-scrub everything already held.
+
+        Called when a session is attached to a harness: an externally supplied
+        recording must not carry secrets past the harness redaction boundary.
+        """
+
+        self.redactor = redactor
+        self.metadata = redactor.redact_value(dict(self.metadata))
+        self.records = [
+            replace(
+                record,
+                request=redactor.redact_value(dict(record.request)),
+                response=redactor.redact_value(record.response),
+            )
+            for record in self.records
+        ]
 
     def record_lifecycle(self, event: str, payload: Mapping[str, Any] | None = None) -> None:
         """Record a selected lifecycle event."""
@@ -154,11 +169,13 @@ class ReplaySession:
     # ------------------------------------------------------------------ storage
 
     def to_dict(self) -> dict[str, Any]:
+        # Export is a boundary: secrets learned after a record was written are
+        # scrubbed here too.
         return {
             "mode": self.mode.value,
             "fallback": self.fallback.value,
-            "metadata": dict(self.metadata),
-            "records": [record.to_dict() for record in self.records],
+            "metadata": self.redactor.redact_value(dict(self.metadata)),
+            "records": [self.redactor.redact_value(record.to_dict()) for record in self.records],
         }
 
     @classmethod
@@ -188,15 +205,3 @@ class ReplaySession:
 
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
         return cls.from_dict(payload, **overrides)
-
-
-def _redact_sensitive(payload: Mapping[str, Any]) -> dict[str, Any]:
-    """Drop obviously sensitive request fields before a payload is recorded."""
-
-    redacted: dict[str, Any] = {}
-    for key, value in payload.items():
-        if any(fragment in str(key).lower() for fragment in _SENSITIVE_REQUEST_KEYS):
-            redacted[str(key)] = "<redacted>"
-        else:
-            redacted[str(key)] = value
-    return redacted

@@ -33,6 +33,7 @@ from chassis.capabilities import (
 )
 from chassis.composition import CompositionScope
 from chassis.core.errors import (
+    AgentExecutionError,
     BudgetExceeded,
     CapabilityAmbiguous,
     CapabilityNotFound,
@@ -98,6 +99,7 @@ __all__ = [
     "SECRETS",
     "TOOLS",
     "AgentEvent",
+    "AgentExecutionError",
     "AgentRequest",
     "AgentResult",
     "AgentRuntime",

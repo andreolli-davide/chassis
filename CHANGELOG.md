@@ -33,6 +33,27 @@ that a minor release may break the documented surface.
   environment-backed default, and a policy provider that raises while deciding
   denies the call with `PolicyDenied`, preserving the original exception only as
   an internal cause.
+- **One end-to-end redaction boundary** (roadmap R003). A single harness-owned
+  `SecretRedactor` now covers replay, diagnostics, tool execution, agent
+  execution, LangGraph run configuration, recording telemetry, and LangSmith.
+  Telemetry backends receive pre-scrubbed attributes, updates, events, and errors
+  through the new `RedactingTelemetry` wrapper, and `LangSmithSpan` scrubs
+  attribute updates on its own path. Redaction is recursive over nested mappings
+  and sequences and replaces whole values under sensitive key names on request
+  and response paths. Policy-denial reasons and agent runtime exceptions are
+  sanitized before crossing a public, hook, diagnostic, replay, or telemetry
+  boundary, with the original exception preserved only as an internal cause.
+  `EffectCleanupError` and cleanup reports render sanitized text while keeping
+  the original exceptions as structured detail. Tool, capability, and
+  replay-session metadata are scrubbed, and a `ReplaySession` attached to a
+  harness adopts the harness redactor and is re-scrubbed (`bind_redactor`).
+- **Migration note:** an agent runtime failure other than a `ChassisError` now
+  surfaces as `AgentExecutionError` (cause preserved) instead of the raw runtime
+  exception. New: `AgentExecutionError`, `RedactingTelemetry`,
+  `ReplaySession.bind_redactor`, `LangSmithSpan(run, redactor=...)`.
+- **Secret values shorter than four characters are now protected** like any
+  other; only the empty string is untrackable. Callers relying on `add()`
+  refusing short values must stop doing so.
 
 ### Documentation
 

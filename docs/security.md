@@ -81,10 +81,10 @@ diagnostics so an operator can audit what a plugin asks for.
 !!! warning "Version 0.5.0 redaction gaps"
     The 0.5.0 audit found paths where nested replay values, metadata, backend
     updates, and raw exception text can bypass the intended redaction boundary. It
-    also found that independently constructed components can use different
-    redactors. Until the R003 remediation in the [release roadmap](roadmap.md) is
-    released, do not rely on 0.5.0 to process production secret material without
-    an additional external sanitization boundary.
+    also found that independently constructed components could use different
+    redactors. These gaps are remediated by R003 in 0.5.1; until you upgrade, do
+    not rely on 0.5.0 to process production secret material without an additional
+    external sanitization boundary.
 
 Plugins read secrets through a provider rather than the process environment, so a
 future Vault/AWS/1Password provider does not change plugin code:
@@ -103,17 +103,31 @@ records, or exception strings. That is enforced by construction, not by conventi
 
 - `SecretValue` refuses to render itself; `repr`, `str`, and diagnostics show
   `<redacted>`, and material leaves only through an explicit `reveal()`.
+- One harness-owned `SecretRedactor` is injected into every boundary — replay,
+  diagnostics, tool execution, agent execution, LangGraph run configuration,
+  recording telemetry, and LangSmith. Telemetry backends receive pre-scrubbed
+  payloads through `RedactingTelemetry`, so no backend is trusted to remove
+  secrets itself.
 - `RedactingSecretProvider` wraps the configured provider, registering each value
   with the redactor the moment it is resolved. Redaction can only scrub what it
-  knows about, so this is where that knowledge comes from.
-- Errors carry the secret *name* and provider, never the material.
+  knows about, so this is where that knowledge comes from. Every non-empty value
+  is protected, however short; only the empty string carries no material.
+- Errors carry the secret *name* and provider, never the material. Policy-denial
+  reasons and agent runtime exceptions are sanitized before they cross a public,
+  hook, diagnostic, replay, or telemetry boundary; the original exception is
+  preserved only as an internal cause.
 - Configuration snapshots contain no configuration values at all: configuration is
   represented by a hash over the redacted payload, and configuration is redacted by
   key name as well as by value.
 - Dataclass reprs of control-plane objects (`PluginInstance`, `PluginEntry`) exclude
   the effective configuration and error text, so a log line, assertion diff, or
   debugger view does not render secret material.
-- Recorded boundaries redact request fields whose names look sensitive.
+- Every recorded payload — requests, responses, metadata, span attributes and
+  updates, events, cleanup reports — is scrubbed recursively: tracked values at any
+  depth, and whole values under sensitive key names at every depth of nested
+  mappings and sequences. Replay sessions are scrubbed at record time and again at
+  export, and a session attached to a harness adopts the harness redactor and is
+  re-scrubbed, so an externally supplied recording cannot smuggle secrets in.
 
 Explicit tests assert each of these, including that a tool failure whose text
 contains a secret does not reach telemetry or a snapshot unredacted.

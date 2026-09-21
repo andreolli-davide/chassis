@@ -533,11 +533,12 @@ class ToolExecutor:
                     },
                 )
                 if not result.allowed:
+                    reason = self._redactor.redact(result.reason)
                     raise PolicyDenied(
-                        f"tool {entry.name!r} requires {permission}: {result.reason}",
+                        f"tool {entry.name!r} requires {permission}: {reason}",
                         tool=entry.name,
                         permission=str(permission),
-                        reason=result.reason,
+                        reason=reason,
                     )
                 approval_required = approval_required or result.approval_required
             await self._dispatch(

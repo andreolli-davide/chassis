@@ -22,6 +22,7 @@ from chassis.agent_spec import AgentRevision, AgentSpec, composition_payload
 from chassis.budget.governor import BudgetGovernor, budget_scope, current_budget
 from chassis.budget.models import BudgetLimits
 from chassis.core.errors import (
+    AgentExecutionError,
     ChassisError,
     ConfigurationError,
     HarnessStateError,
@@ -569,7 +570,14 @@ class AgentRegistry:
                             },
                             hooks,
                         )
-                        raise
+                        if isinstance(error, ChassisError):
+                            raise
+                        message, _ = harness.redactor.redact_and_report(
+                            f"agent {agent!r} failed: {error}"
+                        )
+                        raise AgentExecutionError(
+                            message, agent=agent, error_type=type(error).__name__
+                        ) from error
                     if result.interrupted:
                         _record_interrupts(harness, agent, agent_request.thread_id, result)
                     await self._dispatch_agent(
@@ -664,7 +672,12 @@ class AgentRegistry:
                     },
                     hooks,
                 )
-                raise
+                if isinstance(error, ChassisError):
+                    raise
+                message, _ = harness.redactor.redact_and_report(f"agent {agent!r} failed: {error}")
+                raise AgentExecutionError(
+                    message, agent=agent, error_type=type(error).__name__
+                ) from error
             await self._dispatch_agent(
                 harness, HookEvent.AFTER_AGENT_RUN, {**run_payload, "status": "ok"}, hooks
             )
