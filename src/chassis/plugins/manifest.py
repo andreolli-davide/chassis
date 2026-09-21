@@ -17,7 +17,7 @@ from chassis.capabilities.keys import (
     CapabilityRequirement,
     parse_version,
 )
-from chassis.core.collections import FrozenDict
+from chassis.core.collections import freeze
 from chassis.core.errors import ConfigurationError
 
 __all__ = ["PluginManifest"]
@@ -101,7 +101,7 @@ class PluginManifest(BaseModel):
         except ConfigurationError as error:
             raise ValueError(str(error)) from error
         for field in ("provides", "requires", "optional", "metadata"):
-            object.__setattr__(self, field, FrozenDict(getattr(self, field)))
+            object.__setattr__(self, field, freeze(getattr(self, field)))
         return self
 
     @property

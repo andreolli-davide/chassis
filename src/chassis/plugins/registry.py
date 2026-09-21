@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 from chassis.agents import AgentRegistry
 from chassis.capabilities.registry import CapabilityRegistration, CapabilityRegistry
-from chassis.core.collections import FrozenDict
+from chassis.core.collections import freeze
 from chassis.core.errors import (
     CleanupFailure,
     EffectCleanupError,
@@ -129,7 +129,7 @@ class PluginRegistry:
         # published instance shares this mapping with its context. Freezing it here
         # keeps a later control-plane mutation from changing what an already-running
         # generation observes, exactly as the declarative config model is frozen.
-        effective_config: Mapping[str, object] = FrozenDict(
+        effective_config: Mapping[str, object] = freeze(
             config if config is not None else plugin_instance.config
         )
         entry = PluginEntry(

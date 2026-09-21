@@ -26,6 +26,7 @@ from chassis.capabilities.keys import (
     CapabilityRequirement,
     parse_version,
 )
+from chassis.core.collections import frozen_mapping
 from chassis.core.errors import ConfigurationError
 from chassis.core.scope import Scope
 
@@ -60,7 +61,7 @@ class CapabilityRegistration:
 
     def __post_init__(self) -> None:
         if not isinstance(self.metadata, MappingProxyType):
-            object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
+            object.__setattr__(self, "metadata", frozen_mapping(self.metadata))
 
     def to_dict(self) -> dict[str, Any]:
         """Diagnostic view. Provider payloads are deliberately excluded."""

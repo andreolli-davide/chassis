@@ -18,6 +18,7 @@ from importlib.metadata import PackageNotFoundError, version
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from chassis.core.collections import frozen_mapping
 from chassis.persistence.hashing import stable_hash, tool_schema_hash
 from chassis.secrets.redaction import SecretRedactor, redact_config
 from chassis.tools.registry import ToolSnapshot
@@ -38,6 +39,22 @@ def chassis_version() -> str:
         return version("chassis-harness")
     except PackageNotFoundError:  # pragma: no cover - only outside an install
         return "0.0.0"
+
+
+def _jsonable(value: Any) -> Any:
+    """Render deeply frozen containers back as JSON-compatible dicts and lists.
+
+    Storage is frozen against mutation; the canonical rendering stays the
+    JSON shape callers and hashes expect.
+    """
+
+    if isinstance(value, Mapping):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        return sorted(_jsonable(item) for item in value)
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,41 +81,41 @@ class RuntimeSnapshot:
     semantic_scopes: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "plugins", MappingProxyType(dict(self.plugins)))
-        object.__setattr__(self, "capabilities", MappingProxyType(dict(self.capabilities)))
+        object.__setattr__(self, "plugins", frozen_mapping(self.plugins))
+        object.__setattr__(self, "capabilities", frozen_mapping(self.capabilities))
         object.__setattr__(self, "runtime_instance_ids", tuple(self.runtime_instance_ids))
         if not isinstance(self.semantic_scopes, MappingProxyType):
-            object.__setattr__(
-                self, "semantic_scopes", MappingProxyType(dict(self.semantic_scopes))
-            )
+            object.__setattr__(self, "semantic_scopes", frozen_mapping(self.semantic_scopes))
         if not isinstance(self.metadata, MappingProxyType):
-            object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
+            object.__setattr__(self, "metadata", frozen_mapping(self.metadata))
         if not isinstance(self.scopes, MappingProxyType):
-            object.__setattr__(self, "scopes", MappingProxyType(dict(self.scopes)))
+            object.__setattr__(self, "scopes", frozen_mapping(self.scopes))
 
     def to_dict(self) -> dict[str, Any]:
         """Canonical, JSON-compatible representation used for hashing and emission."""
 
-        return {
-            "chassis_version": self.chassis_version,
-            "generation_id": self.generation_id,
-            "sequence": self.sequence,
-            "agent_runtime": self.agent_runtime,
-            "agent": self.agent,
-            "agent_revision": self.agent_revision,
-            "plugins": dict(sorted(self.plugins.items())),
-            "capabilities": {
-                name: list(versions) for name, versions in sorted(self.capabilities.items())
-            },
-            "config_hash": self.config_hash,
-            "plugin_graph_hash": self.plugin_graph_hash,
-            "graph_definition_hash": self.graph_definition_hash,
-            "tool_schema_hash": self.tool_schema_hash,
-            "prompt_hash": self.prompt_hash,
-            "metadata": dict(sorted(self.metadata.items(), key=lambda item: str(item[0]))),
-            "scopes": self.scopes,
-            "runtime_instance_ids": list(self.runtime_instance_ids),
-        }
+        return _jsonable(
+            {
+                "chassis_version": self.chassis_version,
+                "generation_id": self.generation_id,
+                "sequence": self.sequence,
+                "agent_runtime": self.agent_runtime,
+                "agent": self.agent,
+                "agent_revision": self.agent_revision,
+                "plugins": dict(sorted(self.plugins.items())),
+                "capabilities": {
+                    name: list(versions) for name, versions in sorted(self.capabilities.items())
+                },
+                "config_hash": self.config_hash,
+                "plugin_graph_hash": self.plugin_graph_hash,
+                "graph_definition_hash": self.graph_definition_hash,
+                "tool_schema_hash": self.tool_schema_hash,
+                "prompt_hash": self.prompt_hash,
+                "metadata": dict(sorted(self.metadata.items(), key=lambda item: str(item[0]))),
+                "scopes": self.scopes,
+                "runtime_instance_ids": list(self.runtime_instance_ids),
+            }
+        )
 
     def semantic_composition(self) -> dict[str, Any]:
         """The generation's semantic composition, independent of how it was built.

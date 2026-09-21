@@ -55,6 +55,21 @@ that a minor release may break the documented surface.
   composition view will now raise `CapabilityNotFound`/`CapabilityVersionMismatch`;
   widen the spec's `capabilities` view where that access is intended. Lookups
   against an undeclared scope path raise instead of returning empty results.
+- **Published state is deeply immutable** (roadmap R009). Recursive
+  copy-and-freeze now applies at every publication boundary — plugin config and
+  manifest metadata, scopes and resolved scopes, generation metadata, capability
+  and tool registrations, `ToolPolicy`, run metadata (`AgentRequest`,
+  `AgentResult`, `HarnessRunContext`), and runtime snapshots — so nested mutation
+  of any published container raises `TypeError` and author-owned dicts, lists,
+  and sets can never alias published state. Semantic fingerprints are computed
+  from exactly the frozen state a generation exposes. The intentional exception
+  is documented: executable provider and tool objects are live runtime objects —
+  their contracts and metadata are frozen, not their internals.
+- **Migration note:** code that mutated nested containers obtained from
+  `entry.config`, `manifest.metadata`, `scope.metadata`, `generation.metadata`,
+  registration/tool metadata, `ToolPolicy.metadata`, run metadata, or snapshot
+  metadata must mutate its own copies instead; published containers now raise at
+  every depth.
 
 ## [0.5.1] - 2026-09-22
 

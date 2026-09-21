@@ -22,6 +22,7 @@ from chassis.capabilities.registry import (
     CapabilityRegistry,
     ScopedCapabilities,
 )
+from chassis.core.collections import freeze
 from chassis.core.errors import CapabilityNotFound, CapabilityVersionMismatch
 from chassis.core.scope import EffectRecord, Scope
 from chassis.hooks.registry import HookRegistry, ScopedHooks
@@ -260,7 +261,7 @@ class Plugin(ABC):
     manifest: ClassVar[PluginManifest]
 
     def __init__(self, config: Mapping[str, Any] | None = None) -> None:
-        self._config: Mapping[str, Any] = dict(config or {})
+        self._config: Mapping[str, Any] = freeze(config or {})
 
     @property
     def config(self) -> Mapping[str, Any]:

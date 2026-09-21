@@ -47,6 +47,14 @@ below is enforced by tests, and the tests are the specification of record.
 | G23 | Agent composition is materialized through the same scoped resolver, ownership, semantic identity, and generation publication machinery as all other composition | `agents.py`, `composition.py`, `tests/agents/test_agent_lifecycle.py` |
 | G24 | Agent tool and capability visibility is composition, not authorization; it grants no user or organization authority | `docs/agent-composition.md`, `docs/security.md` |
 
+Every published container is deeply frozen by recursive copy-and-freeze at the
+publication boundary — plugin config and manifest metadata, scopes and resolved
+scopes, generation metadata, capability and tool registrations, tool policy, run
+metadata, and runtime snapshots — so author-owned dicts, lists, and sets can
+never alias published state. The intentional exception: executable provider and
+tool objects are live runtime objects; their contracts and metadata are frozen,
+not their internals.
+
 ## Decisions worth knowing
 
 - **Agent composition is a thin layer, not a framework.** `AgentSpec` describes what

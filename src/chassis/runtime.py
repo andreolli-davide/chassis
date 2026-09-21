@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from chassis.budget.governor import BudgetGovernor
 from chassis.capabilities.keys import CapabilityKey
 from chassis.capabilities.snapshot import CapabilitySnapshot
+from chassis.core.collections import frozen_mapping
 from chassis.hooks.registry import HookSnapshot
 from chassis.policy.engine import PolicyEngine
 from chassis.secrets.base import SecretProvider
@@ -105,7 +106,7 @@ class HarnessRunContext:
 
     def __post_init__(self) -> None:
         if not isinstance(self.metadata, MappingProxyType):
-            object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
+            object.__setattr__(self, "metadata", frozen_mapping(self.metadata))
 
     @property
     def agent_identity(self) -> str | None:
@@ -203,6 +204,9 @@ class AgentRequest:
     checkpoint_id: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metadata", frozen_mapping(self.metadata))
+
     @property
     def is_resume(self) -> bool:
         return self.resume is not None
@@ -240,6 +244,9 @@ class AgentResult:
     interrupts: tuple[AgentInterrupt, ...] = ()
     duration_seconds: float = 0.0
     metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metadata", frozen_mapping(self.metadata))
 
     @property
     def interrupted(self) -> bool:

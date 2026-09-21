@@ -14,9 +14,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 from chassis.capabilities.registry import CapabilityRegistration
+from chassis.core.collections import frozen_mapping
 from chassis.core.errors import HarnessStateError
 from chassis.core.scope import Scope
 from chassis.plugins.base import Plugin, PluginContext
@@ -83,6 +85,10 @@ class PluginInstance:
     error: BaseException | None = field(default=None, repr=False)
     generation_refs: int = 0
     semantic_identity: SemanticIdentity | None = None
+
+    def __post_init__(self) -> None:
+        self.config = frozen_mapping(self.config)
+        self.resolved = MappingProxyType(dict(self.resolved))
 
     @property
     def identity(self) -> str:

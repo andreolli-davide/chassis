@@ -13,9 +13,10 @@ warnings, which ``types.MappingProxyType`` does not.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Any
 
-__all__ = ["FrozenDict", "freeze"]
+__all__ = ["FrozenDict", "freeze", "frozen_mapping"]
 
 
 class FrozenDict(dict[str, Any]):
@@ -65,3 +66,14 @@ def freeze(value: Any) -> Any:
     if isinstance(value, (set, frozenset)):
         return frozenset(freeze(item) for item in value)
     return value
+
+
+def frozen_mapping(value: Mapping[str, Any] | None = None) -> Mapping[str, Any]:
+    """Deep-frozen, read-only mapping for published metadata containers.
+
+    The outer proxy denies key assignment; the inner :func:`freeze` denies
+    nested mutation and copies the payload, so author-owned containers can
+    never alias published state.
+    """
+
+    return MappingProxyType(dict(freeze(value or {})))

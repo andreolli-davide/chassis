@@ -51,6 +51,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from chassis.capabilities.keys import CapabilityKey, CapabilityRequirement
 from chassis.capabilities.registry import CapabilityRegistration
+from chassis.core.collections import freeze, frozen_mapping
 from chassis.core.errors import ConfigurationError
 from chassis.core.identity import (
     DependencyBinding,
@@ -142,7 +143,7 @@ class ScopeSpec:
 
     def __post_init__(self) -> None:
         if not isinstance(self.metadata, MappingProxyType):
-            object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
+            object.__setattr__(self, "metadata", frozen_mapping(self.metadata))
 
     def to_dict(self) -> dict[str, Any]:
         """Structured form. Metadata is never included."""
@@ -212,7 +213,7 @@ class CompositionScope:
         self._parent = parent
         self._capabilities = _view_from(capabilities)
         self._tools = _tool_view_from(tools)
-        self._metadata: dict[str, Any] = dict(metadata or {})
+        self._metadata: Mapping[str, Any] = freeze(metadata or {})
         self._children: list[CompositionScope] = []
         self._requirements: dict[str, CapabilityRequirement] = {}
 
@@ -270,7 +271,7 @@ class CompositionScope:
     def set_metadata(self, metadata: Mapping[str, Any]) -> None:
         """Replace this scope's metadata. Never store secret values here."""
 
-        self._metadata = dict(metadata)
+        self._metadata = freeze(metadata)
         self._tree.invalidate()
 
     @property
@@ -657,7 +658,7 @@ class ResolvedScope:
         for name in ("providers", "inherited", "visible", "metadata"):
             value = getattr(self, name)
             if not isinstance(value, MappingProxyType):
-                object.__setattr__(self, name, MappingProxyType(dict(value)))
+                object.__setattr__(self, name, frozen_mapping(value))
 
     def is_local(self, provider_entry_id: str) -> bool:
         """Whether a provider entry is declared local to this scope."""

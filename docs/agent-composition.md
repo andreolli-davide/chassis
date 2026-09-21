@@ -272,7 +272,8 @@ reuse/rebuild analysis to the existing generation impact engine, reporting
 An `AgentSpec` describes a **composition ceiling**, not authority. The ceiling is
 enforced at run time: `HarnessRunContext.require_capability()` and graph
 build-time capability versions observe only the registrations the acquired
-scope's view exposes — in both the invoke and the stream path — and an unknown    scope path is rejected rather than silently exposing an empty view. What the
+scope's view exposes — in both the invoke and the stream path — and an unknown
+scope path is rejected rather than silently exposing an empty view. What the
 ceiling defines:
 
 ```text

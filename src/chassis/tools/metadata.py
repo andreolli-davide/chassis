@@ -13,9 +13,11 @@ and how it should be bounded.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from chassis.core.collections import frozen_mapping
 from chassis.policy.permissions import Permission
 
 __all__ = ["ToolPolicy"]
@@ -42,7 +44,10 @@ class ToolPolicy:
     timeout_seconds: float | None = None
     cost_class: str | None = None
     approval_required: bool = False
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metadata", frozen_mapping(self.metadata))
 
     @property
     def permission_objects(self) -> tuple[Permission, ...]:

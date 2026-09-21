@@ -19,9 +19,9 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable, Mapping
-from types import MappingProxyType
 from typing import Any, Protocol
 
+from chassis.core.collections import frozen_mapping
 from chassis.core.errors import ConfigurationError
 from chassis.core.scope import Scope
 from chassis.tools.metadata import ToolPolicy
@@ -99,7 +99,7 @@ class RegisteredTool:
         self.owner_id = owner_id
         self.owner_name = owner_name
         self.scope_id = scope_id
-        self.metadata: Mapping[str, Any] = MappingProxyType(dict(metadata or {}))
+        self.metadata: Mapping[str, Any] = frozen_mapping(metadata)
 
     @property
     def name(self) -> str:
