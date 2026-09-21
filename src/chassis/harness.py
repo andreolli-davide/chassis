@@ -59,11 +59,15 @@ from chassis.config.reconcile import (
     diff_desired_state,
 )
 from chassis.core.errors import (
+    CapabilityAmbiguous,
+    CapabilityVersionMismatch,
+    ChassisError,
     CleanupFailure,
     ConfigurationError,
     EffectCleanupError,
     HarnessStateError,
     HookExecutionError,
+    SecretResolutionError,
 )
 from chassis.core.generation import RuntimeGeneration
 from chassis.core.generations import GenerationManager
@@ -84,10 +88,10 @@ from chassis.plugins.base import Plugin, PluginContext, plugin
 from chassis.plugins.lifecycle import PluginInstance, PluginState
 from chassis.plugins.registry import PluginEntry, PluginRegistry
 from chassis.plugins.resolver import DependencyResolver, ResolutionPlan
-from chassis.policy.engine import AllowAllPolicy, PolicyEngine
+from chassis.policy.engine import AllowAllPolicy, PolicyEngine, PolicyRequest, PolicyResult
 from chassis.replay.session import ReplaySession
 from chassis.runtime import AgentRuntime, RunEnvironment
-from chassis.secrets.base import SecretProvider
+from chassis.secrets.base import SecretProvider, SecretValue
 from chassis.secrets.env import EnvSecretProvider, RedactingSecretProvider
 from chassis.secrets.redaction import SecretRedactor
 from chassis.telemetry.base import NoopTelemetry, Telemetry
@@ -113,15 +117,38 @@ class ConfigApplyResult:
         }
 
 
-def _provided(
-    generation: RuntimeGeneration, key: CapabilityKey, expected: Any, fallback: Any
-) -> Any:
-    """A generation's provider for ``key`` when exactly one matches its protocol."""
+class _FailClosedPolicy:
+    """Denying stand-in for an unresolvable policy system requirement.
 
-    providers = generation.snapshot.providers(key)
-    if len(providers) == 1 and isinstance(providers[0].value, expected):
-        return providers[0].value
-    return fallback
+    Resolution failure must deny; it must never widen back to the configured
+    default, which may be permissive.
+    """
+
+    def __init__(self, error: ChassisError) -> None:
+        self._error = error
+
+    async def evaluate(self, request: PolicyRequest) -> PolicyResult:
+        return PolicyResult(
+            allowed=False,
+            reason=f"policy resolution failed: {self._error.message}",
+        )
+
+
+class _FailClosedSecrets:
+    """Denying stand-in for an unresolvable secrets system requirement."""
+
+    def __init__(self, error: ChassisError) -> None:
+        self._error = error
+
+    async def get(self, name: str) -> SecretValue:
+        raise SecretResolutionError(
+            "secret provider resolution failed", secret=name, reason=self._error.message
+        ) from self._error
+
+    async def get_optional(self, name: str) -> SecretValue | None:
+        raise SecretResolutionError(
+            "secret provider resolution failed", secret=name, reason=self._error.message
+        ) from self._error
 
 
 def _services_plugin(
@@ -1329,6 +1356,18 @@ class Harness:
         """
 
         effective_limits = limits if limits is not None else self._default_budget_limits
+        policy: PolicyEngine
+        try:
+            policy = self._system_requirement(generation, POLICY, PolicyEngine, self._policy, scope)
+        except ChassisError as error:
+            policy = _FailClosedPolicy(error)
+        secrets: SecretProvider
+        try:
+            secrets = self._system_requirement(
+                generation, SECRETS, SecretProvider, self._secrets, scope
+            )
+        except ChassisError as error:
+            secrets = _FailClosedSecrets(error)
         return RunEnvironment(
             generation=generation,
             capabilities=generation.snapshot,
@@ -1337,13 +1376,75 @@ class Harness:
             executor=self._tool_executor,
             # A provider registered for these capabilities belongs to the
             # generation, so a run observes the policy and secret provider of the
-            # composition it acquired rather than the harness default.
-            policy=_provided(generation, POLICY, PolicyEngine, self._policy),
-            secrets=_provided(generation, SECRETS, SecretProvider, self._secrets),
+            # composition it acquired rather than the harness default. A system
+            # requirement that cannot be resolved installs a denying stand-in
+            # instead of the default.
+            policy=policy,
+            secrets=secrets,
             telemetry=self._telemetry,
             redactor=self._redactor,
             budget=environment_budget(effective_limits),
         )
+
+    def _system_requirement(
+        self,
+        generation: RuntimeGeneration,
+        key: CapabilityKey,
+        expected: Any,
+        default: Any,
+        scope: CompositionScope | str | None,
+    ) -> Any:
+        """Resolve one system requirement -- policy or secrets -- fail-closed.
+
+        The configured default applies only when the generation registers no
+        provider for ``key``. Registered providers are explicit system
+        requirements: one eligible provider is selected, more than one is rejected
+        unless an explicit preference selects one, and a registration that does
+        not implement the required contract is a provider failure. Resolution
+        failure therefore never widens back to the default.
+        """
+
+        snapshot = generation.snapshot
+        registered = [item for item in snapshot.registrations if item.key.name == key.name]
+        if not registered:
+            return default
+        eligible = [item for item in snapshot.providers(key) if isinstance(item.value, expected)]
+        if not eligible:
+            raise CapabilityVersionMismatch(
+                f"no provider of {key} implements the required contract",
+                capability=str(key),
+                generation_id=generation.generation_id,
+                providers=[item.provider_id for item in registered],
+            )
+        if len(eligible) == 1:
+            return eligible[0].value
+        preferred = self._preferred_provider(key.name, scope)
+        if preferred is not None:
+            for item in eligible:
+                if preferred in (item.registration_id, item.provider_id):
+                    return item.value
+            instance = self._plugin_registry.instance(preferred)
+            if instance is not None:
+                for item in eligible:
+                    if item.provider_id == instance.instance_id:
+                        return item.value
+        raise CapabilityAmbiguous(
+            f"capability {key} has several eligible providers and no explicit preference",
+            capability=str(key),
+            generation_id=generation.generation_id,
+            providers=[item.provider_id for item in eligible],
+        )
+
+    def _preferred_provider(
+        self, capability: str, scope: CompositionScope | str | None
+    ) -> str | None:
+        """Most specific explicit preference: scope first, then global."""
+
+        if scope is not None:
+            scoped = self._provider_preference.get(f"scope:{self._scope_path(scope)}:{capability}")
+            if scoped is not None:
+                return scoped
+        return self._provider_preference.get(capability)
 
     def snapshot_for(
         self,

@@ -465,17 +465,51 @@ class ToolExecutor:
 
         if engine is not None:
             for permission in policy.permission_objects:
-                result = await engine.evaluate(
-                    PolicyRequest(
-                        permission=permission,
-                        subject=f"tool:{entry.name}",
-                        resource=permission.resource,
-                        context={
+                try:
+                    result = await engine.evaluate(
+                        PolicyRequest(
+                            permission=permission,
+                            subject=f"tool:{entry.name}",
+                            resource=permission.resource,
+                            context={
+                                "owner": entry.owner_name,
+                                "generation_id": request.generation_id,
+                            },
+                        )
+                    )
+                except Exception as error:
+                    # A policy provider that cannot decide denies: "could not
+                    # decide" must never be read as "allowed". The original
+                    # exception stays an internal cause; the public error and the
+                    # observed reason carry no provider text.
+                    await self._dispatch(
+                        HookEvent.POLICY_DECISION,
+                        {
+                            "tool": entry.name,
                             "owner": entry.owner_name,
+                            "permission": str(permission),
+                            "allowed": False,
+                            "reason": "policy provider failure",
                             "generation_id": request.generation_id,
+                            "run_id": request.run_id,
+                        },
+                        hooks,
+                    )
+                    self._telemetry.event(
+                        "policy.decision",
+                        {
+                            "permission": str(permission),
+                            "tool": entry.name,
+                            "allowed": False,
+                            "reason": "policy provider failure",
                         },
                     )
-                )
+                    raise PolicyDenied(
+                        f"tool {entry.name!r} was denied: the policy provider failed",
+                        tool=entry.name,
+                        permission=str(permission),
+                        reason="policy provider failure",
+                    ) from error
                 await self._dispatch(
                     HookEvent.POLICY_DECISION,
                     {

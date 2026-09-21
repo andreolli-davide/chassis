@@ -23,6 +23,16 @@ that a minor release may break the documented surface.
   lease id previously corrupted the lease count silently; they now receive
   `UnknownLeaseError`. Catch it only if you intentionally tolerate buggy release
   paths; correct callers are unaffected.
+- **Policy and secret resolution fails closed** (roadmap R002). Registered policy
+  and secret providers are resolved as explicit system requirements: the
+  configured default is used only when the generation registers no provider,
+  several eligible providers are rejected unless an explicit
+  `prefer_provider(...)` preference selects one, and a registration that does not
+  implement the contract is a provider failure. Resolution failures deny the tool
+  call (and deny secret reads) instead of falling back to `AllowAllPolicy` or the
+  environment-backed default, and a policy provider that raises while deciding
+  denies the call with `PolicyDenied`, preserving the original exception only as
+  an internal cause.
 
 ### Documentation
 

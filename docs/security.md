@@ -46,7 +46,13 @@ harness = Harness(policy=GrantPolicy([
 
 The default policy (`AllowAllPolicy`) permits everything. That default is explicit
 rather than implicit: Chassis is a harness, not a security product, and a policy
-that silently denied everything would be just as misleading.
+that silently denied everything would be just as misleading. The default applies
+only when the composition registers no policy provider at all: registered policy
+and secret providers are resolved as explicit system requirements, and a
+resolution failure (an ambiguous provider set with no explicit preference, or a
+provider that does not implement the contract) denies the tool call instead of
+falling back to the default. A policy provider that fails while deciding also
+denies, with the provider's exception preserved only as an internal cause.
 
 Policy is enforced at harness-controlled boundaries: tool execution today, and any
 future boundary the harness mediates. It is evaluated before a replayed tool call is
