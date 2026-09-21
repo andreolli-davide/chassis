@@ -176,6 +176,7 @@ class Scope:
         self._failures: list[CleanupFailure] = []
         self._close_task: asyncio.Task[None] | None = None
         self._task_shutdown_timeout = task_shutdown_timeout
+        self._stragglers: tuple[asyncio.Task[Any], ...] = ()
 
     # ------------------------------------------------------------------ state
 
@@ -229,6 +230,18 @@ class Scope:
 
         return tuple(self._failures)
 
+    @property
+    def stragglers(self) -> tuple[asyncio.Task[Any], ...]:
+        """Owned tasks still alive after close timed out waiting for them."""
+
+        return self._stragglers
+
+    @property
+    def fully_disposed(self) -> bool:
+        """Whether the scope closed with every owned effect and task finished."""
+
+        return self._state is ScopeState.CLOSED and not self._stragglers
+
     def assert_open(self, operation: str) -> None:
         """Raise :class:`ScopeClosedError` unless the scope accepts new work."""
 
@@ -252,6 +265,8 @@ class Scope:
             "children": [child.id for child in self._children],
             "effects": [effect.to_dict() for effect in self._effects.values()],
             "tasks": [task.get_name() for task in self._tasks],
+            "stragglers": [task.get_name() for task in self._stragglers],
+            "fully_disposed": self.fully_disposed,
             "failures": [failure.description for failure in self._failures],
         }
 
@@ -299,19 +314,35 @@ class Scope:
         return record
 
     def enter_context(self, cm: AbstractContextManager[T]) -> T:
-        """Enter a synchronous context manager owned by this scope."""
+        """Enter a synchronous context manager owned by this scope.
+
+        A failed ``__enter__`` leaves no effect record behind: the scope never
+        owns an effect it could not create.
+        """
 
         record = self.register_effect("context", f"context {type(cm).__name__}")
-        result = cm.__enter__()
+        try:
+            result = cm.__enter__()
+        except BaseException:
+            self.release_effect(record)
+            raise
         handler = _ContextCleanup(self, record, type(cm).__exit__, cm)
         self._stack.push_async_exit(handler.__aexit__)
         return result
 
     async def enter_async_context(self, cm: AbstractAsyncContextManager[T]) -> T:
-        """Enter an async context manager owned by this scope."""
+        """Enter an async context manager owned by this scope.
+
+        A failed ``__aenter__`` leaves no effect record behind: the scope never
+        owns an effect it could not create.
+        """
 
         record = self.register_effect("context", f"async context {type(cm).__name__}")
-        result = await cm.__aenter__()
+        try:
+            result = await cm.__aenter__()
+        except BaseException:
+            self.release_effect(record)
+            raise
         handler = _ContextCleanup(self, record, type(cm).__aexit__, cm)
         self._stack.push_async_exit(handler.__aexit__)
         return result
@@ -396,7 +427,8 @@ class Scope:
         if not pending:
             return
         _done, still_running = await asyncio.wait(pending, timeout=self._task_shutdown_timeout)
-        for task in still_running:
+        self._stragglers = tuple(sorted(still_running, key=lambda task: task.get_name()))
+        for task in self._stragglers:
             self.record_failure(
                 f"task {task.get_name()}",
                 TimeoutError(

@@ -141,9 +141,24 @@ class PluginLoadError(ChassisError):
 
 
 class PluginSetupError(ChassisError):
-    """Raised when plugin setup fails and its partial effects have been reverted."""
+    """Raised when plugin setup fails and its partial effects have been reverted.
+
+    Rollback cleanup failures are aggregated in ``cleanup_failures`` and counted
+    in the structured context, so they are never hidden inside the failed scope.
+    """
 
     code = "plugin_setup"
+
+    def __init__(
+        self,
+        message: str,
+        /,
+        *,
+        cleanup_failures: tuple[CleanupFailure, ...] = (),
+        **context: Any,
+    ) -> None:
+        super().__init__(message, cleanup_failures=len(cleanup_failures), **context)
+        self.cleanup_failures = cleanup_failures
 
 
 class PluginDependencyError(ChassisError):

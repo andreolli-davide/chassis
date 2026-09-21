@@ -254,6 +254,11 @@ Programmatic `install`/`provide`/`uninstall` are synchronous desired-state chang
 6. close the harness scope;
 7. raise one aggregated `EffectCleanupError` if anything failed.
 
+Owned tasks that resist cancellation past the shutdown timeout are reported as
+failures and stay visible afterwards (`scope.stragglers`), and such a scope is
+never presented as fully disposed (`scope.fully_disposed` is `False`): Chassis
+does not pretend that work which is still running has been cleaned up.
+
 ## Diagnostics
 
 ```python

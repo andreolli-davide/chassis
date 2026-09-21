@@ -68,6 +68,7 @@ from chassis.core.errors import (
     HarnessStateError,
     HookExecutionError,
     PluginContractError,
+    PluginSetupError,
     SecretResolutionError,
 )
 from chassis.core.generation import RuntimeGeneration
@@ -823,6 +824,10 @@ class Harness:
                     await self._dispose_instance(instance, failures)
                 if isinstance(error, PluginContractError):
                     error.context["rolled_back"] = rolled_back
+                if isinstance(error, PluginSetupError):
+                    # Setup and rollback failures are aggregated here, never
+                    # hidden inside the failed scope.
+                    failures.extend(error.cleanup_failures)
                 self._last_failures = tuple(failures)
                 raise
 
@@ -1291,10 +1296,12 @@ class Harness:
         instances = self._plugin_registry.instances()
         self._generations.refresh_references(instances)
         reachable = self._generations.reachable_instance_ids()
+        desired = {entry.entry_id for entry in self._plugin_registry.entries()}
         doomed = [
             instance
             for instance in instances
-            if instance.state is PluginState.ACTIVE and instance.instance_id not in reachable
+            if (instance.state is PluginState.ACTIVE and instance.instance_id not in reachable)
+            or (instance.state is PluginState.FAILED and instance.entry_id not in desired)
         ]
 
         disposed: list[str] = []

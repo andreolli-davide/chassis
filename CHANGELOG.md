@@ -68,6 +68,20 @@ that a minor release may break the documented surface.
 - **Migration note:** plugin fixtures that declare `provides` without registering
   the capability now fail at publication; register what you declare or narrow
   the manifest.
+- **Failed scope entry and failed plugin cleanup are reversible** (roadmap R005).
+  A `__enter__`/`__aenter__` that fails no longer leaves an effect record the
+  scope cannot revert. Rollback cleanup failures are aggregated into the raised
+  `PluginSetupError` (`cleanup_failures`, with a count in the structured
+  context) and into `last_cleanup_failures` instead of being hidden inside the
+  failed scope. Failed plugin instances stay inspectable and retryable while    their entry is desired, and are reclaimed once it is not — no orphaned
+  `FAILED` instances remain resident. Owned tasks that resist cancellation past
+  the shutdown timeout are reported and stay visible (`Scope.stragglers`), and
+  such a scope is never presented as fully disposed (`Scope.fully_disposed`,
+  plus `stragglers`/`fully_disposed` in `Scope.to_dict()`).
+- **Migration note:** `PluginSetupError` gained `cleanup_failures=` and reports
+  a `cleanup_failures` count in its context; a scope that failed to stop all its
+  tasks now reports `fully_disposed: False` where it previously claimed a clean
+  close.
 
 ### Documentation
 

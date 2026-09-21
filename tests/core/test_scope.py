@@ -279,3 +279,64 @@ async def test_scope_diagnostics_redact_nothing_but_expose_ownership() -> None:
     assert descriptions == ["child scope 'child'", "effect"]
 
     await scope.aclose()
+
+
+def test_failed_sync_context_entry_leaves_no_effect_record() -> None:
+    """A failed ``__enter__`` must not leave an effect the scope cannot revert."""
+
+    class Exploding:
+        def __enter__(self) -> str:
+            raise RuntimeError("enter failed")
+
+        def __exit__(self, *args: object) -> bool:
+            return False
+
+    scope = Scope("failed-entry")
+    with pytest.raises(RuntimeError):
+        scope.enter_context(Exploding())
+
+    assert scope.effects == ()
+
+
+async def test_failed_async_context_entry_leaves_no_effect_record() -> None:
+    class Exploding:
+        async def __aenter__(self) -> str:
+            raise RuntimeError("enter failed")
+
+        async def __aexit__(self, *args: object) -> bool:
+            return False
+
+    scope = Scope("failed-async-entry")
+    with pytest.raises(RuntimeError):
+        await scope.enter_async_context(Exploding())
+
+    assert scope.effects == ()
+    await scope.aclose()  # clean close: no stale record, no phantom disposer
+
+
+async def test_a_cancellation_resistant_task_is_reported_and_not_pretended_gone() -> None:
+    stop = asyncio.Event()
+
+    async def stubborn() -> None:
+        while not stop.is_set():
+            try:
+                await asyncio.sleep(0.01)
+            except asyncio.CancelledError:
+                continue  # cancellation-resistant by design
+
+    scope = Scope("straggler", task_shutdown_timeout=0.05)
+    task = scope.create_task(stubborn(), name="unkillable")
+    await asyncio.sleep(0)
+
+    try:
+        with pytest.raises(EffectCleanupError):
+            await scope.aclose()
+
+        assert [item.get_name() for item in scope.stragglers] == ["unkillable"]
+        assert scope.fully_disposed is False
+        assert scope.to_dict()["stragglers"] == ["unkillable"]
+        assert scope.to_dict()["fully_disposed"] is False
+    finally:
+        # Always release the task: it is deliberately cancellation-resistant.
+        stop.set()
+        await task

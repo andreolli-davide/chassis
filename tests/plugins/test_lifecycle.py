@@ -461,3 +461,59 @@ async def test_decoration_produces_a_reusable_plugin_class() -> None:
         assert len(harness.capability_registry) == 2
     finally:
         await harness.stop()
+
+
+async def test_failed_setup_aggregates_rollback_cleanup_failures() -> None:
+    @plugin(name="bad", version="1.0.0", provides={"database": "1.0.0"})
+    async def bad(ctx: PluginContext) -> None:
+        ctx.capabilities.provide(DATABASE, Marker("bad"))
+
+        def broken_disposer() -> None:
+            raise RuntimeError("disposal failed")
+
+        ctx.cleanup("broken effect", broken_disposer)
+        raise RuntimeError("setup failed")
+
+    harness = Harness()
+    harness.install(bad, entry_id="bad")
+    try:
+        with pytest.raises(PluginSetupError) as excinfo:
+            await harness.start()
+
+        error = excinfo.value
+        assert error.context["error"] == "RuntimeError"
+        # The rollback cleanup failure is aggregated into the setup error,
+        # not hidden inside the failed scope.
+        assert error.context["cleanup_failures"] == 1
+        assert [failure.description for failure in error.cleanup_failures] == ["broken effect"]
+        assert isinstance(error.__cause__, RuntimeError)
+        assert any(
+            failure.description == "broken effect" for failure in harness.last_cleanup_failures
+        )
+    finally:
+        await harness.stop()
+
+
+async def test_orphaned_failed_instances_are_reclaimed() -> None:
+    @plugin(name="broken", version="1.0.0", provides={"database": "1.0.0"})
+    async def broken(ctx: PluginContext) -> None:
+        raise RuntimeError("setup failed")
+
+    harness = Harness()
+    harness.install(broken, entry_id="broken")
+    try:
+        with pytest.raises(PluginSetupError):
+            await harness.start()
+
+        # While the entry is still desired the failed instance stays
+        # inspectable for diagnostics and retry.
+        instance = mounted(harness, "broken")
+        assert instance.state is PluginState.FAILED
+
+        # Once it is no longer desired it is reclaimed, not left resident.
+        harness.uninstall("broken")
+        await harness.reconcile()
+        assert harness.plugin_registry.instance("broken") is None
+        assert harness.plugin_registry.instances() == ()
+    finally:
+        await harness.stop()

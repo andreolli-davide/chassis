@@ -21,6 +21,7 @@ from chassis.agents import AgentRegistry
 from chassis.capabilities.registry import CapabilityRegistration, CapabilityRegistry
 from chassis.core.collections import FrozenDict
 from chassis.core.errors import (
+    CleanupFailure,
     EffectCleanupError,
     PluginLoadError,
     PluginSetupError,
@@ -273,10 +274,11 @@ class PluginRegistry:
         try:
             await entry.plugin.setup(context)
         except BaseException as error:
-            await self._rollback(instance, error)
+            cleanup_failures = await self._rollback(instance, error)
             if isinstance(error, Exception):
                 raise PluginSetupError(
                     f"plugin {entry.manifest.name!r} failed during setup",
+                    cleanup_failures=cleanup_failures,
                     plugin=entry.manifest.name,
                     entry_id=entry.entry_id,
                     instance_id=instance_id,
@@ -332,6 +334,12 @@ class PluginRegistry:
 
         try:
             await instance.scope.aclose()
+        except EffectCleanupError:
+            if instance.state is not PluginState.FAILED:
+                raise
+            # A failed mount already rolled this scope back and reported its
+            # cleanup failures through PluginSetupError; the idempotent re-close
+            # must not report them a second time.
         finally:
             if instance.state in (PluginState.UNLOADING, PluginState.FAILED):
                 instance.transition(PluginState.DISPOSED)
@@ -339,15 +347,25 @@ class PluginRegistry:
         if teardown_error is not None:
             instance.error = teardown_error
 
-    async def _rollback(self, instance: PluginInstance, setup_error: BaseException) -> None:
+    async def _rollback(
+        self, instance: PluginInstance, setup_error: BaseException
+    ) -> tuple[CleanupFailure, ...]:
+        """Revert everything setup created, reporting rollback cleanup failures.
+
+        Cleanup failures are returned to the caller so they are aggregated into
+        the setup error instead of being hidden inside the failed scope.
+        """
+
+        cleanup_failures: tuple[CleanupFailure, ...] = ()
         try:
             await instance.scope.aclose()
         except EffectCleanupError as cleanup_error:
-            instance.scope.record_failure("setup rollback", cleanup_error)
+            cleanup_failures = cleanup_error.failures
         finally:
             instance.transition(PluginState.FAILED)
             instance.health = PluginHealth.UNHEALTHY
             instance.error = setup_error
+        return cleanup_failures
 
     # ---------------------------------------------------------------- helpers
 
