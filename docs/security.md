@@ -82,8 +82,8 @@ diagnostics so an operator can audit what a plugin asks for.
     The 0.5.0 audit found paths where nested replay values, metadata, backend
     updates, and raw exception text can bypass the intended redaction boundary. It
     also found that independently constructed components could use different
-    redactors. These gaps are remediated by R003 in 0.5.1; until you upgrade, do
-    not rely on 0.5.0 to process production secret material without an additional
+    redactors. These gaps are remediated by R002/R003 in 0.5.1: do not rely on
+    version 0.5.0 to process production secret material without an additional
     external sanitization boundary.
 
 Plugins read secrets through a provider rather than the process environment, so a
