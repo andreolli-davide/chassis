@@ -71,18 +71,51 @@ async def test_registration_after_scope_close_is_rejected() -> None:
         registry.register(scope=scope, tool=echo)
 
 
-def test_duplicate_and_invalid_registrations_are_rejected() -> None:
+def test_invalid_registrations_are_rejected() -> None:
     registry = ToolRegistry()
     scope = Scope("owner")
-    registry.register(scope=scope, tool=echo, owner_name="first")
-
-    with pytest.raises(ConfigurationError) as excinfo:
-        registry.register(scope=scope, tool=echo, owner_name="second")
-
-    assert excinfo.value.context["owner"] == "first"
 
     with pytest.raises(ConfigurationError):
         registry.register(scope=scope, tool="not a tool")  # type: ignore[arg-type]
+
+
+async def test_same_named_registrations_coexist_and_release_by_identity() -> None:
+    registry = ToolRegistry()
+    old_scope = Scope("old")
+    new_scope = Scope("new")
+    old = registry.register(scope=old_scope, tool=echo, owner_id="plugin_old")
+    new = registry.register(scope=new_scope, tool=echo, owner_id="plugin_new")
+
+    assert old.registration_id != new.registration_id
+    assert registry.get("echo") is new  # live lookups see the newest
+
+    # Generation views select by owner identity, not by name.
+    assert registry.snapshot("gen", owner_ids=["plugin_old"]).require("echo") is old
+    assert registry.snapshot("gen", owner_ids=["plugin_new"]).require("echo") is new
+
+    # Closing the old scope must not remove its successor.
+    assert old_scope.effects[0].kind == "tool"
+    await old_scope.aclose()
+    assert registry.get("echo") is new
+    assert registry.names() == ("echo",)
+    assert registry.snapshot("gen", owner_ids=["plugin_old"]).names == ()
+
+
+async def test_same_named_registrations_release_in_either_order() -> None:
+    registry = ToolRegistry()
+    old_scope = Scope("old")
+    new_scope = Scope("new")
+    old = registry.register(scope=old_scope, tool=echo, owner_id="plugin_old")
+    registry.register(scope=new_scope, tool=echo, owner_id="plugin_new")
+
+    # Successor first: the superseded registration stays owned by its scope
+    # until that scope closes too.
+    await new_scope.aclose()
+    assert registry.get("echo") is old
+    assert registry.snapshot("gen", owner_ids=["plugin_new"]).names == ()
+
+    await old_scope.aclose()
+    assert registry.names() == ()
 
 
 def test_snapshot_is_restricted_to_a_generations_owners_and_sorted() -> None:

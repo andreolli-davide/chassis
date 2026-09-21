@@ -172,8 +172,10 @@ async with harness:
 `None` (the default) exposes every tool visible from the lineage, so an ordinary
 scope behaves exactly as before. Tool visibility is composition visibility, not
 authorization: it decides which tools a run may *see*, not which actions a user is
-allowed to take. Tool names are process-global, so two scopes cannot contribute the
-same name — share a tool plugin at an ancestor scope instead.
+allowed to take. Tool registrations are identity-keyed, so two scopes (or two
+generations) may contribute the same tool name; within one generation names are
+unique, and a candidate that would expose a duplicate name is rejected at
+publication.
 
 Agent scopes use this directly; see
 [agent-composition.md](agent-composition.md).

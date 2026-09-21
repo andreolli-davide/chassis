@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
 import pytest
@@ -12,6 +12,7 @@ from chassis.agent_spec import AgentSpec
 from chassis.agents import AgentNotFound, AgentRetired
 from chassis.capabilities.keys import CapabilityKey
 from chassis.core.errors import ConfigurationError
+from chassis.runtime import AgentEvent, AgentRequest, AgentResult, HarnessRunContext
 
 TOOLS = CapabilityKey("tools", "1")
 DATABASE = CapabilityKey("database", "1")
@@ -38,6 +39,73 @@ def harness() -> Harness:
     instance.register_plugin_type("ledger", ledger_plugin())
     instance.register_plugin_type("web", toolbox_plugin())
     return instance
+
+
+class NamedRuntime:
+    """Minimal named runtime used to prove registration identity."""
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    async def invoke(self, request: AgentRequest, run_context: HarnessRunContext) -> AgentResult:
+        return AgentResult(
+            agent=self._name,
+            generation_id=run_context.generation_id,
+            run_id=run_context.run_id,
+        )
+
+    async def stream(
+        self, request: AgentRequest, run_context: HarnessRunContext
+    ) -> AsyncIterator[AgentEvent]:
+        yield AgentEvent(
+            agent=self._name,
+            generation_id=run_context.generation_id,
+            run_id=run_context.run_id,
+            kind="end",
+        )
+
+
+async def test_a_replaced_runtimes_cleanup_cannot_remove_its_successor() -> None:
+    from chassis.agents import AgentRegistry
+    from chassis.core.scope import Scope
+
+    registry = AgentRegistry()
+    old_scope = Scope("old")
+    new_scope = Scope("new")
+    registry.register(NamedRuntime("worker"), scope=old_scope)
+    new = registry.register(NamedRuntime("worker"), scope=new_scope, replace=True)
+
+    assert registry.get("worker") is new
+
+    # The superseded owner going away must not remove the successor.
+    await old_scope.aclose()
+    assert registry.get("worker") is new
+
+    await new_scope.aclose()
+    assert "worker" not in registry
+
+
+async def test_replaced_runtimes_release_cleanly_in_either_order() -> None:
+    from chassis.agents import AgentRegistry
+    from chassis.core.scope import Scope
+
+    registry = AgentRegistry()
+    old_scope = Scope("old")
+    new_scope = Scope("new")
+    old = registry.register(NamedRuntime("worker"), scope=old_scope)
+    registry.register(NamedRuntime("worker"), scope=new_scope, replace=True)
+
+    # Successor first: the superseded registration is still owned by its scope
+    # and answers lookups again until that scope closes.
+    await new_scope.aclose()
+    assert registry.get("worker") is old
+
+    await old_scope.aclose()
+    assert "worker" not in registry
 
 
 async def test_install_materializes_a_scope_and_its_contributions() -> None:

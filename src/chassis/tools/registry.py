@@ -191,10 +191,19 @@ class ToolSnapshot:
 
 
 class ToolRegistry:
-    """Live registry of tools, with scope-owned registrations."""
+    """Live registry of tools, with scope-owned, identity-keyed registrations.
+
+    The store is keyed by immutable registration id and name indexes are
+    maintained separately, so old and new generations can reference same-named
+    registrations concurrently and an old scope's cleanup can never remove its
+    successor. Generation snapshots select registrations by owner identity; a
+    duplicate tool *name* within one resolved generation is rejected when the
+    candidate is published.
+    """
 
     def __init__(self) -> None:
         self._entries: dict[str, RegisteredTool] = {}
+        self._names: dict[str, list[str]] = {}
 
     # ------------------------------------------------------------- registration
 
@@ -212,8 +221,7 @@ class ToolRegistry:
 
         Raises:
             ConfigurationError: the object does not satisfy the tool contract
-                (no non-empty ``name`` or no awaitable ``ainvoke``), or a tool
-                with that name is already registered.
+                (no non-empty ``name`` or no awaitable ``ainvoke``).
         """
 
         scope.assert_open(f"register tool {getattr(tool, 'name', '?')}")
@@ -221,13 +229,6 @@ class ToolRegistry:
             raise ConfigurationError(
                 "registered tools must expose a non-empty name and an awaitable ainvoke",
                 tool=type(tool).__name__,
-            )
-        name = tool.name
-        if name in self._entries:
-            raise ConfigurationError(
-                "a tool with this name is already registered",
-                tool=name,
-                owner=self._entries[name].owner_name,
             )
         entry = RegisteredTool(
             registration_id=f"tool_{uuid.uuid4().hex[:12]}",
@@ -238,25 +239,56 @@ class ToolRegistry:
             scope_id=scope.id,
             metadata=metadata,
         )
-        self._entries[name] = entry
-        scope.cleanup(f"tool {name}", self.unregister, name, kind="tool")
+        self._entries[entry.registration_id] = entry
+        self._names.setdefault(entry.name, []).append(entry.registration_id)
+        scope.cleanup(f"tool {entry.name}", self._release, entry.registration_id, kind="tool")
         return entry
 
-    def unregister(self, name: str) -> bool:
-        """Remove a tool by name. Returns whether it was present."""
+    def _release(self, registration_id: str) -> bool:
+        """Remove one registration by identity; never a same-named successor."""
 
-        return self._entries.pop(name, None) is not None
+        entry = self._entries.pop(registration_id, None)
+        if entry is None:
+            return False
+        ids = self._names.get(entry.name, [])
+        if registration_id in ids:
+            ids.remove(registration_id)
+        if not ids:
+            self._names.pop(entry.name, None)
+        return True
+
+    def unregister(self, name: str, *, owner_id: str | None = None) -> bool:
+        """Remove registrations of ``name`` early.
+
+        With ``owner_id`` only that owner's registrations are removed, so a
+        plugin never unregisters a successor's same-named tool. Without it, the
+        newest registration is removed.
+        """
+
+        ids = list(self._names.get(name, []))
+        if owner_id is None:
+            return self._release(ids[-1]) if ids else False
+        removed = False
+        for registration_id in ids:
+            if self._entries[registration_id].owner_id == owner_id:
+                removed = self._release(registration_id) or removed
+        return removed
 
     # ------------------------------------------------------------------ reading
 
     def get(self, name: str) -> RegisteredTool | None:
-        return self._entries.get(name)
+        """The newest live registration of ``name``, if any."""
+
+        ids = self._names.get(name, [])
+        return self._entries[ids[-1]] if ids else None
 
     def names(self) -> tuple[str, ...]:
-        return tuple(sorted(self._entries))
+        return tuple(sorted(self._names))
 
     def entries(self) -> tuple[RegisteredTool, ...]:
-        return tuple(self._entries[name] for name in self.names())
+        return tuple(
+            sorted(self._entries.values(), key=lambda entry: (entry.name, entry.registration_id))
+        )
 
     def __len__(self) -> int:
         return len(self._entries)
@@ -316,9 +348,12 @@ class ScopedTools:
         )
 
     def unregister(self, name: str) -> bool:
-        """Remove a tool early, before the scope closes."""
+        """Remove this plugin's registration of ``name`` early.
 
-        return self._registry.unregister(name)
+        Identity-checked: it can never remove a successor's same-named tool.
+        """
+
+        return self._registry.unregister(name, owner_id=self._owner_id)
 
     @property
     def names(self) -> tuple[str, ...]:

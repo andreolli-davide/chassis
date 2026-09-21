@@ -12,7 +12,7 @@ import pytest
 
 from chassis import Harness, PluginContext, plugin
 from chassis.capabilities import DATABASE, CapabilityKey
-from chassis.core.errors import PluginContractError
+from chassis.core.errors import ConfigurationError, PluginContractError
 
 
 def liar(name: str, capability: str):  # type: ignore[no-untyped-def]
@@ -153,5 +153,35 @@ async def test_consistent_providers_publish_normally() -> None:
         result = await harness.start()
         assert result.generation_id
         assert harness.current_generation is not None
+    finally:
+        await harness.stop()
+
+
+async def test_duplicate_tool_names_within_one_generation_are_rejected() -> None:
+    from langchain_core.tools import tool as langchain_tool
+
+    def tool_owner(owner: str):  # type: ignore[no-untyped-def]
+        @langchain_tool
+        def fetch(url: str) -> str:
+            """Fetch a URL."""
+
+            return owner
+
+        @plugin(name=owner, version="1.0.0")
+        async def provide(ctx: PluginContext) -> None:
+            ctx.tools.register(fetch)
+
+        return provide
+
+    harness = Harness()
+    harness.install(tool_owner("owner-a"), entry_id="owner-a")
+    harness.install(tool_owner("owner-b"), entry_id="owner-b")
+
+    try:
+        with pytest.raises(ConfigurationError) as excinfo:
+            await harness.start()
+
+        assert excinfo.value.context["tool"] == "fetch"
+        assert harness.current_generation is None
     finally:
         await harness.stop()

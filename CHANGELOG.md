@@ -7,6 +7,24 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tool and agent registrations are keyed by identity** (roadmap R006). Every
+  registration now carries an immutable registration id, with name indexes
+  maintained separately from the store, so old and new generations can reference
+  same-named registrations concurrently and each generation's tool view selects
+  the registrations owned by its own instances. Cleanup is identity-checked: an
+  old scope closing can never unregister its successor, in either release order,
+  and hot replacement of same-named tools and runtimes works while an old run
+  remains leased (the leased run keeps the objects it resolved).
+- **Migration note:** a duplicate tool *name* is no longer rejected at
+  registration; a candidate generation that would expose two same-named tools is
+  rejected at publication with `ConfigurationError` and rolled back. Agent
+  runtime names stay explicitly unique unless `replace=True`.
+  `ToolRegistry.unregister`/`AgentRegistry.unregister` gained keyword-only
+  `owner_id`/`scope_id` filters so a plugin's early unregister touches only its
+  own registration.
+
 ## [0.5.1] - 2026-09-22
 
 ### Fixed

@@ -320,8 +320,9 @@ harness.diagnostics.explain_agent("finance").to_dict()["visible_tools"]
 ```
 
 Common causes: the tool's plugin is declared in a **sibling** scope (never visible),
-the scope's `tools` view does not list it, or another scope already registered a tool
-with the same process-global name. Share the tool plugin at an ancestor scope instead.
+the scope's `tools` view does not list it, or a candidate would expose two tools
+with the same name in one generation (rejected at publication). Share the tool
+plugin at an ancestor scope instead.
 
 ## `ConfigurationError: cannot install into an undeclared composition scope`
 

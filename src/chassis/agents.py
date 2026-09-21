@@ -13,9 +13,10 @@ and execution happens without it (invariant I8).
 from __future__ import annotations
 
 import time
+import uuid
 from collections.abc import AsyncIterator, Mapping
 from contextlib import AbstractContextManager, nullcontext
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from chassis.agent_spec import AgentRevision, AgentSpec, composition_payload
@@ -79,6 +80,16 @@ class AgentRetired(ChassisError):
     code = "agent_retired"
 
 
+@dataclass(frozen=True, slots=True)
+class _RuntimeRegistration:
+    """One identity-keyed agent-runtime registration."""
+
+    registration_id: str
+    name: str
+    runtime: AgentRuntime
+    scope_id: str | None = None
+
+
 class AgentRegistry:
     """Registered execution engines, plus the app-facing invocation surface.
 
@@ -90,7 +101,8 @@ class AgentRegistry:
 
     def __init__(self, *, harness: Harness | None = None) -> None:
         self._harness = harness
-        self._runtimes: dict[str, AgentRuntime] = {}
+        self._entries: dict[str, _RuntimeRegistration] = {}
+        self._names: dict[str, list[str]] = {}
         self._spec_history: dict[str, dict[str, AgentRevision]] = {}
         self._active_revisions: dict[str, str] = {}
         self._retired: set[str] = set()
@@ -107,8 +119,10 @@ class AgentRegistry:
     ) -> AgentRuntime:
         """Register an agent runtime under its name.
 
-        When ``scope`` is given the registration is owned by it, so unloading the
-        plugin that provided the agent also removes the agent.
+        Registrations are identity-keyed and owned by ``scope`` when one is
+        given, so unloading the plugin that provided the agent removes exactly
+        that registration — never a successor's — and an old run keeps the
+        runtime object it already resolved.
         """
 
         name = getattr(runtime, "name", "")
@@ -118,40 +132,73 @@ class AgentRegistry:
             )
         if scope is not None:
             scope.assert_open(f"register agent {name!r}")
-        if name in self._runtimes and not replace:
+        if self._names.get(name) and not replace:
             raise ConfigurationError("agent name is already registered", agent=name)
-        self._runtimes[name] = runtime
+        registration = _RuntimeRegistration(
+            registration_id=f"agent_{uuid.uuid4().hex[:12]}",
+            name=name,
+            runtime=runtime,
+            scope_id=None if scope is None else scope.id,
+        )
+        self._entries[registration.registration_id] = registration
+        self._names.setdefault(name, []).append(registration.registration_id)
         if scope is not None:
-            scope.cleanup(f"agent {name}", self.unregister, name, kind="agent")
+            scope.cleanup(
+                f"agent {name}", self._release, registration.registration_id, kind="agent"
+            )
         return runtime
 
-    def unregister(self, name: str) -> bool:
-        """Remove an agent by name. Returns whether it was present."""
+    def _release(self, registration_id: str) -> bool:
+        """Remove one registration by identity; never a same-named successor."""
 
-        return self._runtimes.pop(name, None) is not None
+        registration = self._entries.pop(registration_id, None)
+        if registration is None:
+            return False
+        ids = self._names.get(registration.name, [])
+        if registration_id in ids:
+            ids.remove(registration_id)
+        if not ids:
+            self._names.pop(registration.name, None)
+        return True
+
+    def unregister(self, name: str, *, scope_id: str | None = None) -> bool:
+        """Remove registrations of ``name`` early.
+
+        With ``scope_id`` only that scope's registrations are removed; without
+        it, the newest registration is removed.
+        """
+
+        ids = list(self._names.get(name, []))
+        if scope_id is None:
+            return self._release(ids[-1]) if ids else False
+        removed = False
+        for registration_id in ids:
+            if self._entries[registration_id].scope_id == scope_id:
+                removed = self._release(registration_id) or removed
+        return removed
 
     def get(self, name: str) -> AgentRuntime:
-        """Return a registered runtime.
+        """Return the newest registered runtime of ``name``.
 
         Raises:
             AgentNotFound: the name is not registered.
         """
 
-        runtime = self._runtimes.get(name)
-        if runtime is None:
+        ids = self._names.get(name)
+        if not ids:
             raise AgentNotFound(
                 f"agent {name!r} is not registered", agent=name, available=list(self.names())
             )
-        return runtime
+        return self._entries[ids[-1]].runtime
 
     def names(self) -> tuple[str, ...]:
-        return tuple(sorted(self._runtimes))
+        return tuple(sorted(self._names))
 
     def __len__(self) -> int:
-        return len(self._runtimes)
+        return len(self._names)
 
     def __contains__(self, name: object) -> bool:
-        return isinstance(name, str) and name in self._runtimes
+        return isinstance(name, str) and name in self._names
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -776,9 +823,12 @@ class ScopedAgents:
         return self._registry.register(runtime, scope=self._scope, replace=replace)
 
     def unregister(self, name: str) -> bool:
-        """Remove an agent early, before the scope closes."""
+        """Remove this scope's agent registration of ``name`` early.
 
-        return self._registry.unregister(name)
+        Identity-checked: it can never remove a successor's same-named runtime.
+        """
+
+        return self._registry.unregister(name, scope_id=self._scope.id)
 
 
 def _budget_scope(environment: RunEnvironment) -> AbstractContextManager[None]:

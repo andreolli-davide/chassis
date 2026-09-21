@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 
 import pytest
 
@@ -8,6 +9,7 @@ from chassis import CapabilityNotFound, Harness, PluginContext, plugin
 from chassis.capabilities import CapabilityKey, ScopedCapabilities
 from chassis.core.errors import HarnessStateError
 from chassis.plugins.lifecycle import PluginInstance, PluginState
+from chassis.runtime import AgentEvent, AgentRequest, AgentResult, HarnessRunContext
 
 DATABASE = CapabilityKey("database", "1")
 MEMORY = CapabilityKey("memory", "1")
@@ -427,3 +429,112 @@ async def test_generation_provided_policy_governs_its_own_runs() -> None:
         assert decisions == ["network.fetch"]
     finally:
         await harness.stop()
+
+
+async def test_hot_replacement_keeps_each_generations_own_tools_under_a_lease() -> None:
+    from langchain_core.tools import tool as langchain_tool
+
+    def fetcher(version: str):  # type: ignore[no-untyped-def]
+        @langchain_tool
+        def fetch(url: str) -> str:
+            """Fetch a URL."""
+
+            return version
+
+        @plugin(name=f"fetcher-{version}", version="1.0.0")
+        async def provide(ctx: PluginContext) -> None:
+            ctx.tools.register(fetch)
+
+        return provide
+
+    harness = Harness()
+    harness.install(fetcher("v1"), entry_id="fetcher")
+    await harness.start()
+
+    async with harness.acquire() as old_generation:
+        first = harness.tool_snapshot(old_generation).require("fetch")
+
+        harness.install(fetcher("v2"), entry_id="fetcher", replace=True)
+        await harness.reconcile()
+
+        new_generation = harness.current_generation
+        assert new_generation is not None
+        second = harness.tool_snapshot(new_generation).require("fetch")
+
+        # Old and new generations reference same-named registrations
+        # concurrently, each selected by its own instance identity.
+        assert harness.tool_snapshot(old_generation).require("fetch") is first
+        assert second is not first
+        assert await first.tool.ainvoke({"url": "x"}) == "v1"
+        assert await second.tool.ainvoke({"url": "x"}) == "v2"
+
+    await harness.stop()
+
+
+class BlockingRuntime:
+    """Named runtime whose run holds a barrier, proving hot replacement."""
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+        self.entered = asyncio.Event()
+        self.release = asyncio.Event()
+        self.calls = 0
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    async def invoke(self, request: AgentRequest, run_context: HarnessRunContext) -> AgentResult:
+        self.calls += 1
+        self.entered.set()
+        await self.release.wait()
+        return AgentResult(
+            agent=self._name,
+            generation_id=run_context.generation_id,
+            run_id=run_context.run_id,
+        )
+
+    async def stream(
+        self, request: AgentRequest, run_context: HarnessRunContext
+    ) -> AsyncIterator[AgentEvent]:
+        yield AgentEvent(
+            agent=self._name,
+            generation_id=run_context.generation_id,
+            run_id=run_context.run_id,
+            kind="end",
+        )
+
+
+async def test_hot_replacing_a_runtime_keeps_the_old_run_working() -> None:
+    def runtime_owner(runtime: BlockingRuntime, owner: str):  # type: ignore[no-untyped-def]
+        @plugin(name=owner, version="1.0.0")
+        async def provide(ctx: PluginContext) -> None:
+            ctx.agents.register(runtime, replace=True)
+
+        return provide
+
+    harness = Harness()
+    old = BlockingRuntime("worker")
+    new = BlockingRuntime("worker")
+    harness.install(runtime_owner(old, "owner-old"), entry_id="owner-old")
+    await harness.start()
+
+    run = asyncio.create_task(harness.agents.invoke("worker", {"messages": []}))
+    await old.entered.wait()
+
+    harness.install(runtime_owner(new, "owner-new"), entry_id="owner-new")
+    await harness.reconcile()
+    harness.uninstall("owner-old")
+    await harness.reconcile()
+
+    old.release.set()
+    result = await run
+
+    # The leased run finished on the runtime it started with, and disposing the
+    # old owner must not remove its successor.
+    assert old.calls == 1
+    assert new.calls == 0
+    assert result.agent == "worker"
+    assert harness.agents.get("worker") is new
+
+    await harness.stop()

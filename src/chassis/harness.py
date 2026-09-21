@@ -1078,6 +1078,21 @@ class Harness:
                     consumers=self._consumers_of(plan, name),
                 )
 
+        # Duplicate tool names within one resolved generation are rejected
+        # here: across generations, same-named registrations coexist and are
+        # selected by owner identity.
+        seen_tools: dict[str, str] = {}
+        for instance in instances:
+            owned = self._tool_registry.snapshot("", owner_ids=[instance.instance_id])
+            for entry in owned.entries:
+                if entry.name in seen_tools:
+                    raise ConfigurationError(
+                        "a tool with this name is already registered",
+                        tool=entry.name,
+                        owner=entry.owner_name,
+                    )
+                seen_tools[entry.name] = instance.instance_id
+
         for entry_id in plan.activation_order:
             planned = plan.plan_for(entry_id)
             if planned is None:  # pragma: no cover - defensive
