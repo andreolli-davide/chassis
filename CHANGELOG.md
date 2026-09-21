@@ -5,6 +5,17 @@ All notable changes to Chassis are recorded here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with the pre-1.0 caveat
 that a minor release may break the documented surface.
 
+## [Unreleased]
+
+### Documentation
+
+- Added the [release roadmap](docs/roadmap.md), mapping every finding from the 0.5.0
+  repository audit to the planned 0.5.1–0.8.0 releases, with acceptance criteria,
+  dependencies, exit gates, and permanent traceability.
+- Marked the known 0.5.0 enforcement gaps in the design guarantees and security
+  guide so the documentation does not overstate current secret, lifecycle, and
+  transactional protections while remediation is pending.
+
 ## [0.5.0] - 2026-09-17
 
 Introduces **first-class, versioned agent composition** on top of the existing

@@ -17,6 +17,7 @@ below for task-oriented detail.
 | [langgraph.md](langgraph.md) | agent definitions, the run context, graph caching, tools, streaming, interrupts |
 | [recipes.md](recipes.md) | behind a web service, per-tenant composition, hot provider swap, budgets, durability |
 | [troubleshooting.md](troubleshooting.md) | symptom → cause → fix, with the exact diagnostics output |
+| [roadmap.md](roadmap.md) | ordered 0.5.1–0.8.0 audit remediation, acceptance criteria, release gates, and finding traceability |
 | [observability.md](observability.md) | tracing, snapshots, canonical hashing, redaction, evaluation |
 | [security.md](security.md) | trust model, policy, secrets, and what Chassis is *not* |
 | [replay.md](replay.md) | record/replay boundaries and their explicit limitations |

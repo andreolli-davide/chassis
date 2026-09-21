@@ -30,7 +30,7 @@ Additional jobs run in CI and should be run if you touch what they cover:
 
 ```bash
 uv build                                        # the wheel must build
-uv run mkdocs build --strict                    # if you touched docs/
+uv run --group docs mkdocs build --strict       # if you touched docs/
 uvx --from actionlint-py actionlint .github/workflows/*.yml   # if you touched CI
 ```
 

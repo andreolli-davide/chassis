@@ -229,6 +229,8 @@ suite runs all of them.
   hot provider swaps, budgets, durable runs.
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) — symptom, cause, and the exact
   diagnostics output for each.
+- [`docs/roadmap.md`](docs/roadmap.md) — the ordered 0.5.1–0.8.0 audit-remediation plan,
+  with acceptance criteria, release gates, and traceability for every finding.
 - [`docs/migration.md`](docs/migration.md) — the 0.4 → 0.5, 0.3 → 0.4, 0.2 → 0.3, and 0.1 → 0.2 changes and how to migrate.
 - [`docs/agent-composition.md`](docs/agent-composition.md) — `AgentSpec`, immutable agent
   revisions, materialization, revision pinning, retirement, and agent diagnostics.

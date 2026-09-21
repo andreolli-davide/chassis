@@ -55,6 +55,7 @@ nav:
       - Replay and evaluation: replay.md
   - Recipes: recipes.md
   - Troubleshooting: troubleshooting.md
+  - Release roadmap: roadmap.md
   - Design guarantees: design.md
   - Migration: migration.md
   - Security: security.md

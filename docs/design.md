@@ -3,6 +3,14 @@
 This page states what Chassis promises. It is short on purpose: every guarantee
 below is enforced by tests, and the tests are the specification of record.
 
+!!! warning "Known 0.5.0 audit gaps"
+    A repository audit found reproducible gaps in the current enforcement of G3,
+    G4, G6, G11, G16, G23, and G24. These guarantees remain the target contracts,
+    but must not be treated as fully established by version 0.5.0. The ordered fixes,
+    regression requirements, and release gates are tracked in the
+    [release roadmap](roadmap.md). Security and lifetime repairs are targeted first
+    in 0.5.1; the remaining transactional repairs are targeted in 0.6.0.
+
 ## The proposition
 
 > Agent runtime composition changes over time while active runs retain a coherent
