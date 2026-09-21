@@ -42,6 +42,19 @@ that a minor release may break the documented surface.
   `Harness.provide`/`withdraw` are keyed by `CapabilityKey`; `withdraw` with a
   name removes every contract generation of that name. `PluginManifest.provides`
   values may now be `str | tuple[str, ...]`.
+- **AgentSpec composition visibility is enforced at runtime** (roadmap R008).
+  Runs now receive a capability snapshot filtered by the acquired
+  `ResolvedScope.visible` registrations, so `HarnessRunContext.require_capability()`
+  and graph build-time capability versions observe exactly the composed view:
+  hidden, narrowed, and sibling-local capabilities are invisible in both the
+  invoke and stream paths, while inherited and versioned ones resolve as
+  composed. This is isolation of composition, not security authorization. An
+  unknown scope path is now rejected with `ConfigurationError` instead of
+  silently exposing an empty tool view (`Harness.scoped_capabilities` is new).
+- **Migration note:** run code that reached capabilities outside its agent's
+  composition view will now raise `CapabilityNotFound`/`CapabilityVersionMismatch`;
+  widen the spec's `capabilities` view where that access is intended. Lookups
+  against an undeclared scope path raise instead of returning empty results.
 
 ## [0.5.1] - 2026-09-22
 

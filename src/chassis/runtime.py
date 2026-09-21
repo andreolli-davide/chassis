@@ -157,7 +157,7 @@ class HarnessRunContext:
         return cls(
             generation_id=generation.generation_id,
             run_id=run_id or f"run_{uuid.uuid4().hex[:12]}",
-            capabilities=generation.snapshot,
+            capabilities=(generation.snapshot if environment is None else environment.capabilities),
             agent=agent,
             agent_revision=agent_revision,
             environment=environment,

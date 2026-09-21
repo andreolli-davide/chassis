@@ -46,6 +46,7 @@ from chassis.capabilities.snapshot import CapabilitySnapshot
 from chassis.composition import (
     CompositionScope,
     CompositionTree,
+    ResolvedScope,
     ScopeTree,
     build_scope_tree,
 )
@@ -1493,7 +1494,7 @@ class Harness:
             secrets = _FailClosedSecrets(error)
         return RunEnvironment(
             generation=generation,
-            capabilities=generation.snapshot,
+            capabilities=self.scoped_capabilities(generation, scope),
             tools=self.tool_snapshot(generation, scope=scope),
             hooks=self.hook_snapshot(generation),
             executor=self._tool_executor,
@@ -1615,6 +1616,43 @@ class Harness:
             generation_id=run_context.generation_id,
         )
 
+    def scoped_capabilities(
+        self, generation: RuntimeGeneration, scope: CompositionScope | str | None = None
+    ) -> CapabilitySnapshot:
+        """Capability snapshot filtered to what ``scope`` can see.
+
+        Composition visibility, not authorization: the view selects the
+        registrations a scope's lineage exposes, exactly like tool visibility.
+        ``None`` returns the generation's full snapshot.
+        """
+
+        resolved = self._resolved_scope(generation, scope)
+        if resolved is None:
+            return generation.snapshot
+        registrations = [
+            registration
+            for registration in generation.snapshot.registrations
+            if registration.provider_id in resolved.visible.get(registration.key.name, ())
+        ]
+        return CapabilitySnapshot.from_registrations(generation.generation_id, registrations)
+
+    def _resolved_scope(
+        self, generation: RuntimeGeneration, scope: CompositionScope | str | None
+    ) -> ResolvedScope | None:
+        """The published scope named by ``scope``; unknown paths are rejected."""
+
+        if scope is None:
+            return None
+        path = scope.path if isinstance(scope, CompositionScope) else scope
+        resolved = generation.scopes.get(path)
+        if resolved is None:
+            raise ConfigurationError(
+                "unknown composition scope for this generation",
+                scope=path,
+                generation_id=generation.generation_id,
+            )
+        return resolved
+
     def tool_snapshot(
         self,
         generation: RuntimeGeneration,
@@ -1627,17 +1665,17 @@ class Harness:
         that left the composition stops contributing tools to new runs without
         disturbing runs already in flight. When ``scope`` is given, the view is
         narrowed to the tools that scope exposes, so sibling scopes never leak
-        tools into each other.
+        tools into each other. An unknown scope path is rejected rather than
+        silently exposing an empty view.
         """
 
         snapshot = self._tool_registry.snapshot(
             generation.generation_id, owner_ids=generation.instance_ids
         )
-        if scope is None:
+        resolved = self._resolved_scope(generation, scope)
+        if resolved is None:
             return snapshot
-        path = scope.path if isinstance(scope, CompositionScope) else scope
-        resolved = generation.scopes.get(path)
-        visible = frozenset() if resolved is None else frozenset(resolved.visible_tools)
+        visible = frozenset(resolved.visible_tools)
         return ToolSnapshot(
             generation.generation_id,
             (entry for entry in snapshot.entries if entry.name in visible),
