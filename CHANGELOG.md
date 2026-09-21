@@ -7,6 +7,8 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-22
+
 ### Fixed
 
 - **Generation lease accounting is authoritative** (roadmap R001). The idle event

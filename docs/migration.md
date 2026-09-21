@@ -6,10 +6,59 @@ why it was made, and what to do instead. Lifecycle behaviour is unchanged across
 these releases: published generations are still immutable, publication is still
 transactional, and logical unload is still distinct from physical disposal.
 
+- [0.5 → 0.5.1](#05-051): fail-closed policy and secrets, redaction boundary,
+  authoritative lease accounting, publication contracts
 - [0.4 → 0.5](#04-05): agent composition, agent revisions, tool visibility
 - [0.3 → 0.4](#03-04): incremental composition, semantic identity, reuse diagnostics
 - [0.2 → 0.3](#02-03): composition scopes, explain and diff diagnostics
 - [0.1 → 0.2](#01-02): optional extras, tool protocol, lease identity, budgets
+
+## 0.5 → 0.5.1
+
+0.5.1 is a security and lifetime hotfix: it closes the audit gaps in G3, G6, and
+G11. No API was removed, but behaviours that were silently wrong now fail loudly.
+
+### Stale lease releases are rejected
+
+Releasing an unknown or already released lease id previously corrupted the lease
+count silently; it now raises `UnknownLeaseError` and never alters the
+accounting. `GenerationManager.retire()` refuses a generation with outstanding
+leases except after the terminal `begin_shutdown()` transition, and a negative
+`history_limit` is rejected with `ConfigurationError`.
+
+### Policy and secret resolution fails closed
+
+Registered policy and secret providers are resolved as explicit system
+requirements. The configured default applies only when the composition registers
+no provider at all. Several eligible providers are rejected unless an explicit
+`prefer_provider(...)` preference selects one — such runs deny tool calls and
+secret reads instead of silently widening to `AllowAllPolicy` — and a policy
+provider that raises while deciding denies the call (`PolicyDenied`, with the
+original exception as internal cause).
+
+### Agent runtime failures are wrapped
+
+An agent runtime failure other than a `ChassisError` now surfaces as
+`AgentExecutionError`, with the original exception preserved as `__cause__`.
+Catch `AgentExecutionError` (or `ChassisError`) instead of the runtime's own
+exception types.
+
+### Redaction and publication are stricter
+
+`SecretRedactor.add` now protects every non-empty value, including values shorter
+than four characters; `redact_value` also replaces whole values under sensitive
+key names at every depth. A plugin manifest `provides` entry that registers
+nothing (or registers an incompatible contract) now fails publication with
+`PluginContractError` and rolls the candidate back — register what you declare.
+`PluginSetupError` gained `cleanup_failures` (rollback cleanup errors are no
+longer hidden), and a scope that could not stop all its owned tasks reports
+`fully_disposed: False` instead of claiming a clean close.
+
+### Additive APIs
+
+New in 0.5.1: `AgentExecutionError`, `UnknownLeaseError`, `PluginContractError`,
+`RedactingTelemetry`, `ReplaySession.bind_redactor`, `Scope.stragglers`,
+`Scope.fully_disposed`, and `LangSmithSpan(run, redactor=...)`.
 
 ## 0.4 → 0.5
 

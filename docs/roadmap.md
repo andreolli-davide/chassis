@@ -452,50 +452,50 @@ actually meets every gate.
 The table ensures every audit finding has a destination. A row may map to more than
 one item where a cross-cutting fix is required.
 
-| Audit finding | Roadmap item |
-| --- | --- |
-| Idle event remains set after lease reacquisition; unknown/double release corrupts accounting | R001 |
-| `GenerationManager.retire()` and history-limit guard gaps | R001 |
-| Multiple policy providers fall back to allow-all | R002 |
-| Harness/replay/LangGraph/LangSmith use disconnected redactors | R003, R019 |
-| Nested request/response, metadata, error, cleanup, policy, and stream secret leaks | R003, R023 |
-| Secret values shorter than four characters are not redacted | R003 |
-| First generation can publish a consumer whose provider did not register its declared capability | R004 |
-| Failed context entry leaves an effect record | R005 |
-| Failed plugin instances and cleanup failures remain hidden or resident | R005 |
-| Cancellation-resistant tasks can outlive a closed scope | R005 |
-| Same-named tool/agent registrations block hot replacement or remove their successor | R006 |
-| Capability binding ignores the exact selected version/contract | R007 |
-| Multi-major specifiers are pinned to an incorrect lower-bound major | R007 |
-| Application provisions are keyed only by capability name | R007 |
-| Agent capability view is not enforced in `HarnessRunContext` | R008 |
-| Unknown runtime scope silently becomes an empty tool view | R008, R022 |
-| Config, scope, registration, policy, run, and snapshot state are shallow-frozen | R009 |
-| AgentSpec overwrites user scopes and does not roll back partial materialization | R010 |
-| `apply_config` is non-atomic and retains stale preferences | R011 |
-| Unsupported configuration schema versions are accepted | R011, R012 |
-| Composition trees accept foreign parents and inconsistent paths/names | R012 |
-| Agent lookup happens before readiness reconciliation | R013 |
-| Evaluation cannot target logical AgentSpec names | R013 |
-| Stream lacks invoke-equivalent spans, attribution, hooks, and budget scope | R014 |
-| Model replay omits semantic kwargs and result metadata | R015 |
-| Replay presence ignores cursor exhaustion | R015, R022 |
-| Replayed tools skip live-path spans/after-hooks and retain historical ids | R016 |
-| Hook transform semantics, shallow payloads, and recorded failures are inconsistent | R017 |
-| Negative/fractional/non-finite budgets are accepted | R018 |
-| Tool protocol and ToolPolicy validation is too weak | R018 |
-| Tee/custom telemetry failures can break runtime or suppress later backends | R019 |
-| Independently built LangGraph agents fragment telemetry/redaction | R003, R019 |
-| Custom runtimes are labelled `langgraph`; graph-cache capacity is unchecked | R020 |
-| Static graph inputs can retain obsolete implementations | R020 |
-| Canonical hashing can collide after stringifying mapping keys; float rounding is implicit | R021 |
-| Mixed AgentRequest arguments are silently ignored | R022 |
-| `AgentResult.text` omits mapping-shaped messages | R022 |
-| Raw diagnostic errors and stale resolver/hook/observability claims | R003, R017, R023 |
-| No coverage threshold or focused invariant coverage | R024 |
-| No minimum/latest dependency compatibility matrix | R024, R025 |
-| No sdist or clean LangSmith-extra smoke test | R025 |
-| No dependency vulnerability scan, SBOM, or provenance gate | R025 |
+| Audit finding | Roadmap item | Status |
+| --- | --- | --- |
+| Idle event remains set after lease reacquisition; unknown/double release corrupts accounting | R001 | complete (0.5.1) |
+| `GenerationManager.retire()` and history-limit guard gaps | R001 | complete (0.5.1) |
+| Multiple policy providers fall back to allow-all | R002 | complete (0.5.1) |
+| Harness/replay/LangGraph/LangSmith use disconnected redactors | R003, R019 | partial (R003 complete in 0.5.1) |
+| Nested request/response, metadata, error, cleanup, policy, and stream secret leaks | R003, R023 | partial (R003 complete in 0.5.1) |
+| Secret values shorter than four characters are not redacted | R003 | complete (0.5.1) |
+| First generation can publish a consumer whose provider did not register its declared capability | R004 | complete (0.5.1) |
+| Failed context entry leaves an effect record | R005 | complete (0.5.1) |
+| Failed plugin instances and cleanup failures remain hidden or resident | R005 | complete (0.5.1) |
+| Cancellation-resistant tasks can outlive a closed scope | R005 | complete (0.5.1) |
+| Same-named tool/agent registrations block hot replacement or remove their successor | R006 | open |
+| Capability binding ignores the exact selected version/contract | R007 | open |
+| Multi-major specifiers are pinned to an incorrect lower-bound major | R007 | open |
+| Application provisions are keyed only by capability name | R007 | open |
+| Agent capability view is not enforced in `HarnessRunContext` | R008 | open |
+| Unknown runtime scope silently becomes an empty tool view | R008, R022 | open |
+| Config, scope, registration, policy, run, and snapshot state are shallow-frozen | R009 | open |
+| AgentSpec overwrites user scopes and does not roll back partial materialization | R010 | open |
+| `apply_config` is non-atomic and retains stale preferences | R011 | open |
+| Unsupported configuration schema versions are accepted | R011, R012 | open |
+| Composition trees accept foreign parents and inconsistent paths/names | R012 | open |
+| Agent lookup happens before readiness reconciliation | R013 | open |
+| Evaluation cannot target logical AgentSpec names | R013 | open |
+| Stream lacks invoke-equivalent spans, attribution, hooks, and budget scope | R014 | open |
+| Model replay omits semantic kwargs and result metadata | R015 | open |
+| Replay presence ignores cursor exhaustion | R015, R022 | open |
+| Replayed tools skip live-path spans/after-hooks and retain historical ids | R016 | open |
+| Hook transform semantics, shallow payloads, and recorded failures are inconsistent | R017 | open |
+| Negative/fractional/non-finite budgets are accepted | R018 | open |
+| Tool protocol and ToolPolicy validation is too weak | R018 | open |
+| Tee/custom telemetry failures can break runtime or suppress later backends | R019 | open |
+| Independently built LangGraph agents fragment telemetry/redaction | R003, R019 | partial (R003 complete in 0.5.1) |
+| Custom runtimes are labelled `langgraph`; graph-cache capacity is unchecked | R020 | open |
+| Static graph inputs can retain obsolete implementations | R020 | open |
+| Canonical hashing can collide after stringifying mapping keys; float rounding is implicit | R021 | open |
+| Mixed AgentRequest arguments are silently ignored | R022 | open |
+| `AgentResult.text` omits mapping-shaped messages | R022 | open |
+| Raw diagnostic errors and stale resolver/hook/observability claims | R003, R017, R023 | partial (R003 complete in 0.5.1) |
+| No coverage threshold or focused invariant coverage | R024 | open |
+| No minimum/latest dependency compatibility matrix | R024, R025 | open |
+| No sdist or clean LangSmith-extra smoke test | R025 | open |
+| No dependency vulnerability scan, SBOM, or provenance gate | R025 | open |
 
 ## Definition of done for every roadmap item
 
