@@ -23,7 +23,7 @@ below is enforced by tests, and the tests are the specification of record.
 | --- | --- | --- |
 | G1 | Every harness-managed effect has exactly one owning scope | `core/scope.py`, `tests/core/test_scope.py` |
 | G2 | A failed plugin setup reverts every effect that setup created | `plugins/registry.py`, `tests/plugins/test_lifecycle.py` |
-| G3 | An active composition never contains a plugin whose selected provider is absent or incompatible | `plugins/resolver.py`, `tests/plugins/test_resolver.py` |
+| G3 | An active composition never contains a plugin whose selected provider is absent or incompatible | `plugins/resolver.py`, `harness.py` publication validation, `tests/plugins/test_publication_contract.py` |
 | G4 | A published generation is never mutated in a way visible to existing runs | `core/generation.py`, `tests/integration/test_generation_lifecycle.py` |
 | G5 | A run acquires either the old complete generation or the new one — never a partial candidate | `core/generations.py` |
 | G6 | A plugin scope is never physically disposed while a live generation can reach it | `harness.py` reclamation, `tests/concurrency/test_generation_concurrency.py` |

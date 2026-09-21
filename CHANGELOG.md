@@ -54,6 +54,20 @@ that a minor release may break the documented surface.
 - **Secret values shorter than four characters are now protected** like any
   other; only the empty string is untrackable. Callers relying on `add()`
   refusing short values must stop doing so.
+- **Publication validates actual capability registrations** (roadmap R004).
+  Before a candidate generation is published, every mounted plugin's effective
+  registrations are compared with the contracts its manifest promises, and the
+  resolution fixpoint is re-checked against the registrations consumers actually
+  got. A provider that promised a capability but registered none — including in
+  the first generation — a registration on the wrong contract generation, or a
+  registered version no consumer's requirement accepts now rolls the entire
+  candidate back with a structured `PluginContractError` naming the provider,
+  promised contract, actual registrations, affected consumers, and rollback
+  result. Previously such a candidate published silently and the gap surfaced
+  only at run time.
+- **Migration note:** plugin fixtures that declare `provides` without registering
+  the capability now fail at publication; register what you declare or narrow
+  the manifest.
 
 ### Documentation
 

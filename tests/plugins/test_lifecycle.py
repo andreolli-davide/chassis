@@ -407,6 +407,7 @@ async def test_teardown_runs_before_scope_unwind() -> None:
         manifest = PluginManifest(name="ordered", version="1.0.0", provides={"tools": "1.0.0"})
 
         async def setup(self, ctx: PluginContext) -> None:
+            ctx.capabilities.provide(TOOLS, Marker("ordered"))
             ctx.cleanup("resource", lambda: events.append("scope"))
 
         async def teardown(self, ctx: PluginContext) -> None:

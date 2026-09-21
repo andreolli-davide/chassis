@@ -73,6 +73,14 @@ PluginManifest(
 )
 ```
 
+What `provides` declares must actually be registered during `setup`, under the
+same contract: publication validates every mounted plugin's effective
+registrations against its manifest and refuses the whole candidate — rolling it
+back with a structured `PluginContractError` naming the provider, the promised
+contract, its actual registrations, the affected consumers, and the rollback
+result — when a promised capability is missing, registered on another contract
+generation, or registered in a version no consumer's requirement accepts.
+
 Versions and specifiers use `packaging`; a bare version is normalized to an exact
 match. Manifests validate when they are constructed, so an unparseable requirement
 fails immediately rather than at resolution time.

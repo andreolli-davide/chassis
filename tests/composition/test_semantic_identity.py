@@ -10,6 +10,7 @@ from __future__ import annotations
 from tests.composition.support import consumer, mounted, tracked_provider
 
 from chassis import Harness, plugin
+from chassis.capabilities import DATABASE
 from chassis.core.identity import SemanticIdentity
 
 
@@ -175,7 +176,7 @@ def build(implementation_revision: str | None = None):  # type: ignore[no-untype
         implementation_revision=implementation_revision,
     )
     async def generated(ctx) -> None:  # type: ignore[no-untyped-def]
-        return None
+        ctx.capabilities.provide(DATABASE, "db")
 
     return generated
 

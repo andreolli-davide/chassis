@@ -47,6 +47,7 @@ DOCUMENTED = {
         "HookExecutionError",
         "Plugin",
         "PluginContext",
+        "PluginContractError",
         "PluginCycleError",
         "PluginHealth",
         "PluginInstance",

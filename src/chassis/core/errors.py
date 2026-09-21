@@ -30,6 +30,7 @@ __all__ = [
     "GraphBuildError",
     "HarnessStateError",
     "HookExecutionError",
+    "PluginContractError",
     "PluginCycleError",
     "PluginDependencyError",
     "PluginLoadError",
@@ -149,6 +150,16 @@ class PluginDependencyError(ChassisError):
     """Raised when a plugin's required capabilities cannot be satisfied."""
 
     code = "plugin_dependency"
+
+
+class PluginContractError(ChassisError):
+    """Raised when effective registrations violate a plugin's manifest contract.
+
+    The structured context names the provider, the promised contract, its actual
+    registrations, the affected consumers, and the rollback result.
+    """
+
+    code = "plugin_contract"
 
 
 class PluginCycleError(ChassisError):

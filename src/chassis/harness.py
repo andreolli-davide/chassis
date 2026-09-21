@@ -67,6 +67,7 @@ from chassis.core.errors import (
     EffectCleanupError,
     HarnessStateError,
     HookExecutionError,
+    PluginContractError,
     SecretResolutionError,
 )
 from chassis.core.generation import RuntimeGeneration
@@ -814,10 +815,14 @@ class Harness:
             reused: list[str] = []
             try:
                 instances = await self._materialize(plan, mounted, reused, failures)
+                self._validate_publication(plan, instances)
             except BaseException as error:
                 span.record_error(error)
+                rolled_back = [instance.entry_id for instance in reversed(mounted)]
                 for instance in reversed(mounted):
                     await self._dispose_instance(instance, failures)
+                if isinstance(error, PluginContractError):
+                    error.context["rolled_back"] = rolled_back
                 self._last_failures = tuple(failures)
                 raise
 
@@ -1032,6 +1037,80 @@ class Harness:
             ordered.append(instance)
             mounted.append(instance)
         return tuple(ordered)
+
+    def _validate_publication(
+        self, plan: ResolutionPlan, instances: tuple[PluginInstance, ...]
+    ) -> None:
+        """Validate effective registrations before a candidate is published.
+
+        The registry -- not the manifest -- is authoritative about what a plugin
+        actually provides, so the resolution fixpoint is checked against actual
+        registrations after mount: every promised contract must be registered by
+        the instance that promised it, and every satisfied requirement must be
+        answerable by its selected provider's registrations. Violations raise
+        with a structured diagnostic; the caller rolls the candidate back and
+        records the rollback result.
+        """
+
+        by_provider: dict[str, list[Any]] = {}
+        for registration in self._capability_registry.registrations():
+            by_provider.setdefault(registration.provider_id, []).append(registration)
+
+        for instance in instances:
+            actual = by_provider.get(instance.instance_id, [])
+            actual_keys = {registration.key for registration in actual}
+            for name, promised in sorted(instance.manifest.provides.items()):
+                key = CapabilityKey.from_version(name, promised)
+                if key in actual_keys:
+                    continue
+                raise PluginContractError(
+                    f"plugin {instance.manifest.name!r} promised {key} "
+                    "but its registrations do not provide it",
+                    provider=instance.entry_id,
+                    provider_name=instance.manifest.name,
+                    promised=str(key),
+                    actual=[f"{item.key} {item.version}" for item in actual],
+                    consumers=self._consumers_of(plan, name),
+                )
+
+        for entry_id in plan.activation_order:
+            planned = plan.plan_for(entry_id)
+            if planned is None:  # pragma: no cover - defensive
+                continue
+            for resolution in planned.requirements:
+                if not resolution.satisfied:
+                    continue
+                provider = next(
+                    (item for item in instances if item.entry_id == resolution.provider_entry_id),
+                    None,
+                )
+                actual = [] if provider is None else by_provider.get(provider.instance_id, [])
+                if any(resolution.requirement.accepts(item.key, item.version) for item in actual):
+                    continue
+                raise PluginContractError(
+                    f"consumer {entry_id!r} resolved {resolution.requirement} to "
+                    f"{resolution.provider_entry_id!r}, whose registrations cannot satisfy it",
+                    provider=resolution.provider_entry_id,
+                    provider_name=resolution.provider_name,
+                    promised=str(resolution.requirement),
+                    actual=[f"{item.key} {item.version}" for item in actual],
+                    consumers=[entry_id],
+                )
+
+    def _consumers_of(self, plan: ResolutionPlan, capability: str) -> list[str]:
+        """Entry ids whose satisfied requirements depend on ``capability``."""
+
+        consumers: list[str] = []
+        for entry_id in plan.activation_order:
+            planned = plan.plan_for(entry_id)
+            if planned is None:  # pragma: no cover - defensive
+                continue
+            if any(
+                resolution.satisfied and resolution.requirement.name == capability
+                for resolution in planned.requirements
+            ):
+                consumers.append(entry_id)
+        return consumers
 
     def _resolutions_for(
         self, plan: ResolutionPlan, entry_id: str
