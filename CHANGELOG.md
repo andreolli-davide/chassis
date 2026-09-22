@@ -7,6 +7,16 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-22
+
+Production confidence: compatibility, operability, resilience, and scale. The
+last planned release with deliberate pre-1.0 compatibility changes — the
+surface is classified and baselined, persisted formats are versioned and
+migrated, lifecycle behavior is hardened under cancellation and concurrency,
+planning and telemetry are stable machine contracts, capacity is measured, and
+a production reference application composes it all. The review record is
+[production-readiness.md](https://github.com/andreolli-davide/chassis/blob/main/docs/production-readiness.md).
+
 ### Added
 
 - **Production reference application** (roadmap R034).

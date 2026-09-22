@@ -2,9 +2,9 @@
 
 Rendered at **https://andreolli-davide.github.io/chassis/**.
 
-Current release: **0.8.1**. Install it from
-[PyPI](https://pypi.org/project/chassis-harness/0.8.1/) or inspect the
-[GitHub Release](https://github.com/andreolli-davide/chassis/releases/tag/v0.8.1).
+Current release: **0.9.0**. Install it from
+[PyPI](https://pypi.org/project/chassis-harness/0.9.0/) or inspect the
+[GitHub Release](https://github.com/andreolli-davide/chassis/releases/tag/v0.9.0).
 
 New here? Start with [getting-started.md](getting-started.md), then use the guides
 below for task-oriented detail.

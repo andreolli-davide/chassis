@@ -174,12 +174,15 @@ what Chassis refuses to promise.
 
 ## Status
 
-Pre-1.0 Beta (`0.8.1`). The surface covered by `tests/test_public_api.py` may break in a
-minor release; every break is recorded in [CHANGELOG.md](CHANGELOG.md), and
-[migrations](docs/migration.md) lists the 0.1 → 0.2, 0.2 → 0.3, 0.3 → 0.4,
-0.4 → 0.5, 0.5 → 0.5.1, 0.5.1 → 0.6, 0.6 → 0.7, 0.7 → 0.8, and
-0.8 → 0.8.1 changes. The Beta readiness review is recorded in
-[beta-readiness.md](docs/beta-readiness.md).
+Pre-1.0 Beta (`0.9.0`) — production confidence. The surface covered by
+`tests/test_public_api.py` is classified and baselined
+([compatibility](docs/compatibility.md)); a minor release may still break it
+until 1.0, and every break is recorded in [CHANGELOG.md](CHANGELOG.md).
+[migrations](docs/migration.md) lists the 0.8 → 0.9, 0.8 → 0.8.1, 0.7 → 0.8,
+0.6 → 0.7, 0.5.1 → 0.6, 0.5 → 0.5.1, 0.4 → 0.5, 0.3 → 0.4, 0.2 → 0.3, and
+0.1 → 0.2 changes. The release reviews are recorded in
+[production-readiness.md](docs/production-readiness.md) (0.9.0) and
+[beta-readiness.md](docs/beta-readiness.md) (0.8.0).
 
 ## Development
 
@@ -237,9 +240,10 @@ suite runs all of them.
   hot provider swaps, budgets, durable runs.
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) — symptom, cause, and the exact
   diagnostics output for each.
-- [`docs/roadmap.md`](docs/roadmap.md) — the ordered 0.5.1–0.8.0 audit-remediation plan,
-  with acceptance criteria, release gates, and traceability for every finding.
-- [`docs/migration.md`](docs/migration.md) — the 0.4 → 0.5, 0.3 → 0.4, 0.2 → 0.3, and 0.1 → 0.2 changes and how to migrate.
+- [`docs/roadmap.md`](docs/roadmap.md) — the ordered 0.5.1–0.9.0 audit-remediation and
+  production-confidence plan, with acceptance criteria, release gates, and traceability.
+- [`docs/migration.md`](docs/migration.md) — every compatibility change from 0.1 through
+  0.8 → 0.9 and how to migrate.
 - [`docs/agent-composition.md`](docs/agent-composition.md) — `AgentSpec`, immutable agent
   revisions, materialization, revision pinning, retirement, and agent diagnostics.
 - [`docs/incremental-composition.md`](docs/incremental-composition.md) — how composition
