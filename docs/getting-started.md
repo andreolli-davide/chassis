@@ -11,7 +11,7 @@ pip install "chassis-harness[langsmith]"          # LangSmith telemetry + evalua
 ```
 
 The import package is `chassis`; the distribution is `chassis-harness`. Python 3.12
-or newer.
+and 3.13 are supported.
 
 The core depends only on `pydantic`, `packaging`, and `pyyaml`; it imports and runs
 without `langgraph`, `langchain-core`, or `langsmith`. This page uses the LangGraph

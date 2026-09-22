@@ -7,7 +7,7 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
-## [1.0.0b1] - Unreleased
+## [1.0.0b1] - 2026-09-22
 
 First 1.0 beta checkpoint. It freezes a candidate public API for review and
 makes the release workflow prerelease-aware without yet declaring the permanent
@@ -18,6 +18,8 @@ makes the release workflow prerelease-aware without yet declaring the permanent
 - **The development version is now `1.0.0b1`.** Chassis uses the canonical
   [PEP 440](https://peps.python.org/pep-0440/) spelling for the release commonly
   described as 1.0.0-beta 1; its eventual tag is `v1.0.0b1`.
+- **The beta supports Python 3.12 and 3.13.** Package metadata now excludes
+  untested newer interpreters; support for them requires a future tested release.
 - **The 1.0 beta API has its own checked-in candidate baseline.** Compatibility
   is checked both against the released 0.8.1 contract and against the exact
   surface selected for 1.0.0b1, so review changes cannot silently move the beta

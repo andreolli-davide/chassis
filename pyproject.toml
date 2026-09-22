@@ -3,7 +3,7 @@ name = "chassis-harness"
 version = "1.0.0b1"
 description = "Chassis: transactional runtime composition for dynamic agent systems -- scoped ownership, reactive capabilities, and immutable runtime generations."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Chassis contributors" }]
