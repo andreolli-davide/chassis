@@ -6,12 +6,93 @@ why it was made, and what to do instead. Lifecycle behaviour is unchanged across
 these releases: published generations are still immutable, publication is still
 transactional, and logical unload is still distinct from physical disposal.
 
+- [0.5.1 → 0.6](#051--06): identity-keyed registries, exact contract binding,
+  runtime composition visibility, deep immutability, transactional
+  materialization and configuration
 - [0.5 → 0.5.1](#05-051): fail-closed policy and secrets, redaction boundary,
   authoritative lease accounting, publication contracts
 - [0.4 → 0.5](#04-05): agent composition, agent revisions, tool visibility
 - [0.3 → 0.4](#03-04): incremental composition, semantic identity, reuse diagnostics
 - [0.2 → 0.3](#02-03): composition scopes, explain and diff diagnostics
 - [0.1 → 0.2](#01-02): optional extras, tool protocol, lease identity, budgets
+
+## 0.5.1 → 0.6.0
+
+0.6.0 makes composition transactional and generation-safe. Pre-1.0 minor
+releases may break the documented surface; everything that can break a caller
+from 0.5.1 is listed here.
+
+### Registries are identity-keyed
+
+`ToolRegistry` and `AgentRegistry` stores are keyed by immutable registration id
+with separate name indexes, so old and new generations can reference same-named
+registrations concurrently and an old scope's cleanup can never remove its
+successor. A duplicate tool *name* is no longer rejected at registration: a
+candidate generation that would expose two same-named tools is rejected at
+publication with `ConfigurationError`. `unregister` gained keyword-only
+`owner_id`/`scope_id` filters so a plugin's early unregister touches only its
+own registration.
+
+### Requirements bind the exact contract
+
+`RequirementResolution` carries `provider_key`; materialization filters
+registrations with the original requirement predicate and deterministic
+(insertion) ordering. Application provisions are keyed by full `CapabilityKey`
+(`Harness.provide`/`withdraw`); `withdraw` with a name removes every contract
+generation of that name. A specifier pins a contract generation only when its
+accepted range proves a single major — `>1.9,<3` and `>=2` are now
+generation-neutral; pass an explicit `api_version` when a specific generation is
+required. `PluginManifest.provides` accepts `str | tuple[str, ...]` for
+multi-contract providers.
+
+### Composition visibility is enforced at runtime
+
+Runs receive a capability snapshot filtered by the acquired
+`ResolvedScope.visible` registrations; code that reached capabilities outside its
+agent's view now raises
+`CapabilityNotFound`/`CapabilityVersionMismatch` — widen the spec's
+`capabilities` view where that access is intended. Unknown scope paths raise
+`ConfigurationError` instead of returning empty views
+(`Harness.scoped_capabilities` is new).
+
+### Published state is deeply immutable
+
+Nested mutation of any published container raises `TypeError` at every depth
+(plugin config, manifest metadata, scopes, resolved scopes, generation metadata,
+capability/tool registrations, `ToolPolicy`, run metadata, runtime snapshots).
+Mutate your own copies instead.
+
+### AgentSpec materialization is transactional and owner-safe
+
+`install` refuses to take over a pre-existing user-owned composition scope — use
+the agent's own scope (the default `/agents/<name>`). Failed materialization
+restores the exact previous scope and registry state; a failed replacement never
+withdraws the active revision first. `chassis.agent` and
+`chassis.agent_revision` metadata keys are reserved; specs carrying them fail
+construction.
+
+### Declarative configuration is atomic and preference-scoped
+
+The complete configuration is parsed, migrated, validated, and catalog-resolved
+before any desired state mutates; a failure restores the exact previous state.
+`provider_preferences` are replaced wholesale on every application — re-declare
+a preference you still want. Programmatic `prefer_provider` preferences are
+stored separately and take precedence over config-owned ones. Schema `version`
+must be `1`; unknown versions are rejected by an explicit migration dispatcher.
+
+### Paths and names are validated
+
+Scope paths must be canonical and absolute everywhere (no relative forms, empty
+or untrimmed segments, `.`/`..`, or trailing slashes). Whitespace-only or
+untrimmed capability, permission, catalog, entry, and agent-runtime names are
+rejected, and config/manifest `config_version` values must be non-negative.
+
+### Additive APIs
+
+New in 0.6.0: `Harness.scoped_capabilities`, `PluginManifest.provided_contracts`,
+`RequirementResolution.provider_key`, `chassis.core.paths.canonical_scope_path`,
+`chassis.config.loader.migrate_config`, and `ScopeSpec`/`ResolvedScope` deep
+freezing (behavioral).
 
 ## 0.5 → 0.5.1
 

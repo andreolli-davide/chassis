@@ -457,24 +457,24 @@ one item where a cross-cutting fix is required.
 | Idle event remains set after lease reacquisition; unknown/double release corrupts accounting | R001 | complete (0.5.1) |
 | `GenerationManager.retire()` and history-limit guard gaps | R001 | complete (0.5.1) |
 | Multiple policy providers fall back to allow-all | R002 | complete (0.5.1) |
-| Harness/replay/LangGraph/LangSmith use disconnected redactors | R003, R019 | partial (R003 complete in 0.5.1) |
-| Nested request/response, metadata, error, cleanup, policy, and stream secret leaks | R003, R023 | partial (R003 complete in 0.5.1) |
+| Harness/replay/LangGraph/LangSmith use disconnected redactors | R003, R019 | partial (R003 complete in 0.6.0) |
+| Nested request/response, metadata, error, cleanup, policy, and stream secret leaks | R003, R023 | partial (R003 complete in 0.6.0) |
 | Secret values shorter than four characters are not redacted | R003 | complete (0.5.1) |
 | First generation can publish a consumer whose provider did not register its declared capability | R004 | complete (0.5.1) |
 | Failed context entry leaves an effect record | R005 | complete (0.5.1) |
 | Failed plugin instances and cleanup failures remain hidden or resident | R005 | complete (0.5.1) |
 | Cancellation-resistant tasks can outlive a closed scope | R005 | complete (0.5.1) |
-| Same-named tool/agent registrations block hot replacement or remove their successor | R006 | open |
-| Capability binding ignores the exact selected version/contract | R007 | open |
-| Multi-major specifiers are pinned to an incorrect lower-bound major | R007 | open |
-| Application provisions are keyed only by capability name | R007 | open |
-| Agent capability view is not enforced in `HarnessRunContext` | R008 | open |
-| Unknown runtime scope silently becomes an empty tool view | R008, R022 | open |
-| Config, scope, registration, policy, run, and snapshot state are shallow-frozen | R009 | open |
-| AgentSpec overwrites user scopes and does not roll back partial materialization | R010 | open |
-| `apply_config` is non-atomic and retains stale preferences | R011 | open |
-| Unsupported configuration schema versions are accepted | R011, R012 | open |
-| Composition trees accept foreign parents and inconsistent paths/names | R012 | open |
+| Same-named tool/agent registrations block hot replacement or remove their successor | R006 | complete (0.6.0) |
+| Capability binding ignores the exact selected version/contract | R007 | complete (0.6.0) |
+| Multi-major specifiers are pinned to an incorrect lower-bound major | R007 | complete (0.6.0) |
+| Application provisions are keyed only by capability name | R007 | complete (0.6.0) |
+| Agent capability view is not enforced in `HarnessRunContext` | R008 | complete (0.6.0) |
+| Unknown runtime scope silently becomes an empty tool view | R008, R022 | partial (R008 complete in 0.6.0) |
+| Config, scope, registration, policy, run, and snapshot state are shallow-frozen | R009 | complete (0.6.0) |
+| AgentSpec overwrites user scopes and does not roll back partial materialization | R010 | complete (0.6.0) |
+| `apply_config` is non-atomic and retains stale preferences | R011 | complete (0.6.0) |
+| Unsupported configuration schema versions are accepted | R011, R012 | complete (0.6.0) |
+| Composition trees accept foreign parents and inconsistent paths/names | R012 | complete (0.6.0) |
 | Agent lookup happens before readiness reconciliation | R013 | open |
 | Evaluation cannot target logical AgentSpec names | R013 | open |
 | Stream lacks invoke-equivalent spans, attribution, hooks, and budget scope | R014 | open |
@@ -485,13 +485,13 @@ one item where a cross-cutting fix is required.
 | Negative/fractional/non-finite budgets are accepted | R018 | open |
 | Tool protocol and ToolPolicy validation is too weak | R018 | open |
 | Tee/custom telemetry failures can break runtime or suppress later backends | R019 | open |
-| Independently built LangGraph agents fragment telemetry/redaction | R003, R019 | partial (R003 complete in 0.5.1) |
+| Independently built LangGraph agents fragment telemetry/redaction | R003, R019 | partial (R003 complete in 0.6.0) |
 | Custom runtimes are labelled `langgraph`; graph-cache capacity is unchecked | R020 | open |
 | Static graph inputs can retain obsolete implementations | R020 | open |
 | Canonical hashing can collide after stringifying mapping keys; float rounding is implicit | R021 | open |
 | Mixed AgentRequest arguments are silently ignored | R022 | open |
 | `AgentResult.text` omits mapping-shaped messages | R022 | open |
-| Raw diagnostic errors and stale resolver/hook/observability claims | R003, R017, R023 | partial (R003 complete in 0.5.1) |
+| Raw diagnostic errors and stale resolver/hook/observability claims | R003, R017, R023 | partial (R003 complete in 0.6.0) |
 | No coverage threshold or focused invariant coverage | R024 | open |
 | No minimum/latest dependency compatibility matrix | R024, R025 | open |
 | No sdist or clean LangSmith-extra smoke test | R025 | open |

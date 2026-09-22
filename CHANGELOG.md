@@ -7,6 +7,16 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-22
+
+Makes composition transactional and generation-safe: identity-keyed
+registrations, exact capability contract binding, runtime enforcement of
+composition visibility, deeply immutable published state, transactional
+`AgentSpec` materialization and declarative configuration, and validated
+composition-tree ownership, paths, and names. Every change that can break a
+caller from 0.5.1 is listed in
+[migrations](https://github.com/andreolli-davide/chassis/blob/main/docs/migration.md).
+
 ### Fixed
 
 - **Tool and agent registrations are keyed by identity** (roadmap R006). Every
