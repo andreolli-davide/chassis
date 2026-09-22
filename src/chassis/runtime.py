@@ -271,14 +271,14 @@ class AgentResult:
     def text(self) -> str | None:
         """Text of the most recent message carrying textual content.
 
-        Documented content shapes: a string, a mapping with a textual ``text``
-        field, or a sequence of blocks whose ``text`` fields are joined. Other
-        shapes contribute nothing.
+        Documented message shapes: an object with a ``content`` attribute or a
+        mapping with a ``content`` key. Documented content shapes: a string, a
+        mapping with a textual ``text`` field, or a sequence of blocks whose
+        ``text`` fields are joined. Other shapes contribute nothing.
         """
 
         for message in reversed(self.messages):
-            content = getattr(message, "content", None)
-            text = _text_of(content)
+            text = _text_of(_content_of(message))
             if text:
                 return text
         return None
@@ -345,6 +345,18 @@ class AgentRuntime(Protocol):
         """Execute the agent, emitting events as they occur."""
 
         ...
+
+
+def _content_of(message: Any) -> Any:
+    """Message body of one message, for the documented message shapes.
+
+    A message is an object carrying ``content`` as an attribute or a mapping
+    carrying it under the ``content`` key; other shapes carry no content.
+    """
+
+    if isinstance(message, Mapping):
+        return message.get("content")
+    return getattr(message, "content", None)
 
 
 def _text_of(content: Any) -> str | None:
