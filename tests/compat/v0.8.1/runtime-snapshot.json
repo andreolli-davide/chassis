@@ -1,0 +1,66 @@
+{
+  "agent": "support-agent",
+  "agent_revision": null,
+  "agent_runtime": "unknown",
+  "capabilities": {
+    "database": [
+      "1"
+    ],
+    "memory": [
+      "1"
+    ]
+  },
+  "chassis_version": "0.8.1",
+  "config_hash": "eab5abe040e737a85b7f95e1a43941d388364fb8c9378a8ef66cc8220df96439",
+  "generation_id": "gen_0002",
+  "graph_definition_hash": null,
+  "metadata": {
+    "dataset": "compat-fixtures"
+  },
+  "plugin_graph_hash": "031f4b7e9efaa7d9df24106beb9c85cd9f5d94d8543d2fb236d87d9e2881da38",
+  "plugins": {
+    "memory": "2.1.0",
+    "orders-db": "1.0.0"
+  },
+  "prompt_hash": null,
+  "runtime_instance_ids": [
+    "plugin_fixture_0",
+    "plugin_fixture_1"
+  ],
+  "scopes": {
+    "root": "/",
+    "scopes": [
+      {
+        "capabilities": null,
+        "children": [],
+        "entries": [
+          "memory",
+          "orders-db"
+        ],
+        "parent": null,
+        "path": "/",
+        "providers": {
+          "database": [
+            "plugin_fixture_0"
+          ],
+          "memory": [
+            "plugin_fixture_1"
+          ]
+        },
+        "selections": [
+          {
+            "consumer": "memory",
+            "provider": "orders-db",
+            "provider_scope": "/",
+            "requirement": "database <2,>=1",
+            "status": "resolved"
+          }
+        ],
+        "tools": null,
+        "visible_tools": []
+      }
+    ]
+  },
+  "sequence": 2,
+  "tool_schema_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+}

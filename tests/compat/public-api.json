@@ -72,6 +72,9 @@
       "EffectRecord": {
         "stability": "stable"
       },
+      "FormatError": {
+        "stability": "stable"
+      },
       "GenerationConflictError": {
         "stability": "stable"
       },
@@ -413,7 +416,19 @@
       }
     },
     "chassis.persistence": {
+      "DIAGNOSTICS_FORMAT_VERSION": {
+        "stability": "stable"
+      },
+      "PLAN_FORMAT_VERSION": {
+        "stability": "stable"
+      },
+      "REPLAY_FORMAT_VERSION": {
+        "stability": "stable"
+      },
       "RuntimeSnapshot": {
+        "stability": "stable"
+      },
+      "SNAPSHOT_FORMAT_VERSION": {
         "stability": "stable"
       },
       "canonical_json": {
@@ -422,7 +437,13 @@
       "chassis_version": {
         "stability": "stable"
       },
+      "declared_format_version": {
+        "stability": "stable"
+      },
       "hash_text": {
+        "stability": "stable"
+      },
+      "migrate_payload": {
         "stability": "stable"
       },
       "prompt_hash": {

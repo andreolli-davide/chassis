@@ -147,7 +147,8 @@ snapshot.physical_digest()   # runtime instance ids
 
 ```json
 {
-  "chassis_version": "0.8.1",
+  "format_version": 1,
+  "chassis_version": "0.9.0",
   "generation_id": "gen_0004",
   "sequence": 4,
   "agent_runtime": "langgraph",
@@ -179,9 +180,12 @@ identities and instance ids only. Scope *metadata* is never included, and
 configuration values never appear anywhere in a snapshot.
 
 The `scopes` field names the runtime instance ids that provide a capability;
-`semantic_scopes` (used by `semantic_digest()`, not emitted in `to_dict`) names the
-provider *entry* ids instead, so it survives a separate materialisation of the same
-composition.
+`semantic_scopes` names the provider *entry* ids instead, so it survives a
+separate materialisation of the same composition. Both are part of the record:
+`to_dict()` declares its serialization format version (`SNAPSHOT_FORMAT_VERSION`,
+never the package version) and `RuntimeSnapshot.from_dict()` rebuilds an
+identical record — migrating or explicitly rejecting pre-versioning, future, or
+corrupted payloads ([compatibility.md](compatibility.md#persisted-formats)).
 
 **Scope structure is part of the digest, on purpose.** Topology and per-requirement
 selection are observable through the generation a run acquires: two generations

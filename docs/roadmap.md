@@ -22,9 +22,9 @@ security and runtime-lifetime invariants are restored.
   documentation, changelog, and migration notes (when needed) land together.
 - G1–G24 remain the intended contracts. The audit gaps affecting G3, G4, G6,
   G11, G16, G23, and G24 are tracked below and must not be treated as verified
-  properties of 0.5.0. 0.9.0 extends the table with G25–G27 for the preview,
-  persisted-format, and telemetry-signal contracts; every guarantee keeps a real
-  collected test node.
+  properties of 0.5.0. 0.9.0 extends the table with G25–G27 for the
+  persisted-format, preview, and telemetry-signal contracts (numbered in the
+  order they land); every guarantee keeps a real collected test node.
 
 ## Release sequence
 
@@ -469,11 +469,11 @@ unchanged, and every new contract extends them rather than replacing them.
 
 Three contracts are added to the guarantee table:
 
-- **G25** — a preview computes a complete plan — parsing, migration, validation,
-  catalog resolution, and resolution — without mutating any authoritative state.
-- **G26** — every persisted Chassis format carries an explicit format version;
+- **G25** — every persisted Chassis format carries an explicit format version;
   future, malformed, or corrupted payloads are rejected with typed
   machine-readable errors and their meaning is never guessed.
+- **G26** — a preview computes a complete plan — parsing, migration, validation,
+  catalog resolution, and resolution — without mutating any authoritative state.
 - **G27** — operational telemetry follows one documented signal contract with
   stable names, required correlation attributes, bounded cardinality, and no
   secret material in any signal.
@@ -481,7 +481,7 @@ Three contracts are added to the guarantee table:
 ### R027 — define the compatibility and deprecation contract
 
 **Severity:** Medium. **Affected guarantees:** the documented public surface
-(`docs/design.md` "What is public API"), G26.
+(`docs/design.md` "What is public API"), G25.
 
 *Motivation.* 0.9.0 is the final planned opportunity for deliberate pre-1.0
 compatibility changes, so the surface must be classified before 1.0 freezes it.
@@ -538,7 +538,7 @@ Non-goals:
 
 ### R028 — version and migrate persisted formats
 
-**Severity:** High. **Affected guarantees:** G11, G26.
+**Severity:** High. **Affected guarantees:** G11, G25.
 
 *Motivation.* Runtime snapshots, replay recordings, and configuration documents
 are written across process, test-run, deployment, and package-version
@@ -660,7 +660,7 @@ Non-goals:
 
 ### R030 — create a stable machine-readable planning contract
 
-**Severity:** Medium. **Affected guarantees:** G17, G20, G25.
+**Severity:** Medium. **Affected guarantees:** G17, G20, G26.
 
 *Motivation.* `Harness.plan()`, configuration diffing, resolver explanations,
 impact analysis, and diagnostics already answer "what would change and why", but
@@ -820,7 +820,7 @@ Non-goals:
 ### R034 — build a production reference application
 
 **Severity:** Low. **Affected guarantees:** the documented public workflow;
-exercises G4, G5, G11, G16, G21–G25 in one system.
+exercises G4, G5, G11, G16, G21–G26 in one system.
 
 *Motivation.* The examples are small snippets; nothing shows how the pieces
 compose into one production-shaped application, so adopters cannot see the

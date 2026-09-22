@@ -24,6 +24,7 @@ from chassis.core.identity import (
     analyse_impact,
     observations_from,
 )
+from chassis.persistence.formats import DIAGNOSTICS_FORMAT_VERSION
 from chassis.plugins.resolver import ProviderAssessment, RequirementResolution
 
 if TYPE_CHECKING:
@@ -158,9 +159,13 @@ class GenerationPressureReport:
             )
 
     def to_dict(self) -> dict[str, Any]:
-        """Structured, JSON-compatible form. Never contains configuration values."""
+        """Export document; declares its diagnostics format version.
+
+        Structured, JSON-compatible form. Never contains configuration values.
+        """
 
         return {
+            "format_version": DIAGNOSTICS_FORMAT_VERSION,
             "current_generation_id": self.current_generation_id,
             "live_generations": self.live_generations,
             "draining_generations": self.draining_generations,

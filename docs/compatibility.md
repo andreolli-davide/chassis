@@ -111,13 +111,20 @@ Data that is written out and read back later is versioned **per format
 family**, with its own integer format version — never the package version,
 because a format's compatibility lifecycle is independent of the code's:
 
-| Format family | Written by | Read by | Version |
+| Format family | Written by | Read by | Version constant |
 | --- | --- | --- | --- |
-| Runtime snapshot records | `RuntimeSnapshot.to_dict()` | `RuntimeSnapshot.from_dict()` | `snapshot_format_version` |
-| Replay recordings | `ReplaySession.to_dict()`/`save()` | `ReplaySession.from_dict()`/`load()` | `replay_format_version` |
-| Declarative configuration | `HarnessConfig` documents | `load_config`/`parse_config` | schema `version: 1` |
-| Planning exports | `PlanResult.to_dict()` | documented shape | `plan_format_version` |
-| Reconciliation and diagnostics exports | `ReconcileResult` and report `to_dict()` | documented shape | `diagnostics_format_version` |
+| Runtime snapshot records | `RuntimeSnapshot.to_dict()` | `RuntimeSnapshot.from_dict()` | `SNAPSHOT_FORMAT_VERSION` |
+| Replay recordings | `ReplaySession.to_dict()`/`save()` | `ReplaySession.from_dict()`/`load()` | `REPLAY_FORMAT_VERSION` |
+| Declarative configuration | configuration documents | `load_config`/`parse_config` | schema `version: 1` |
+| Planning exports | `PlanResult.to_dict()` | documented shape | `PLAN_FORMAT_VERSION` |
+| Reconciliation and diagnostics exports | `ReconcileResult`, `ConfigApplyResult`, `GenerationPressureReport` `to_dict()` | documented shape | `DIAGNOSTICS_FORMAT_VERSION` |
+
+The constants and the dispatcher live in `chassis.persistence` /
+`chassis.persistence.formats`. In-process diagnostic views (`status()`,
+`plugins()`, `explain()`, `metrics()` and friends) are deliberately *not*
+versioned: they are read in-process from authoritative state and never written
+out for later reading. A new document family that crosses a boundary must
+declare a format version of its own.
 
 Every serialized document declares its version. Readers dispatch explicitly:
 
@@ -127,17 +134,36 @@ Every serialized document declares its version. Readers dispatch explicitly:
 - a **malformed** version value is rejected (`malformed_version`);
 - a **corrupted** payload is rejected (`corrupted`);
 - a payload whose meaning cannot be recovered safely is rejected
-  (`unmigratable`).
+  (`unmigratable`) — a missing migration step is a refusal, never a guess.
 
-Rejections raise typed Chassis errors whose structured context carries the
-machine-readable reason; the meaning of an unknown version or field is never
-guessed.
+Rejections raise `FormatError`, whose structured context carries the
+machine-readable `format`, `reason`, `found`, and `supported` values; the
+meaning of an unknown version or field is never guessed.
+
+### What migrates from 0.8.1
+
+A payload written by 0.8.1 declares no format version (it predates versioning)
+and is read as format 0, then migrated explicitly. Migration preserves semantic
+attribution exactly: generation identity and sequence, agent identity and
+revision, capability versions, replay boundary kind and key, redaction status,
+tool and model result semantics, and every attribution field.
+
+**What cannot be migrated:** the *semantic* scope provider map of a runtime
+snapshot. 0.8.1 recorded provider *instance* ids and persisted no
+instance-to-entry mapping, so a migrated snapshot reconstructs the semantic
+scope tree from the recorded topology and reports empty provider maps rather
+than inventing identity. `semantic_digest()` of a migrated record therefore
+covers the reconstructed view; compare digests within one format version.
+
+Sanitized fixtures produced by the released 0.8.1 implementation live in
+`tests/compat/v0.8.1/`, and `tests/test_format_compat.py` asserts this contract
+against them field by field.
 
 **Support horizon.** A persisted format version stays readable — directly or by
 migration — for at least **two minor releases** after the release that
 superseded it. Within 0.9.x, artifacts written by 0.8.1 are supported as
-described in [migration.md](migration.md); 1.0.0 will state the first permanent
-format baseline.
+described above and in [migration.md](migration.md); 1.0.0 will state the first
+permanent format baseline.
 
 ## What compatibility does not cover
 

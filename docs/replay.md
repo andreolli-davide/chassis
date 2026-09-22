@@ -17,6 +17,12 @@ replaying = ReplaySession.load("recording.json", mode=ReplayMode.REPLAY)
 harness = Harness(replay=replaying)
 ```
 
+A saved recording is a versioned document: it declares its own format version
+(never the package version), `load()`/`from_dict()` migrate pre-versioning 0.8.1
+recordings explicitly, and a future, malformed, or corrupted payload is
+rejected with `FormatError` rather than misread
+([compatibility.md](compatibility.md#persisted-formats)).
+
 | Mode | Behaviour |
 | --- | --- |
 | `live` | inert; nothing recorded, nothing replayed |

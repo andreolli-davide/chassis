@@ -1,0 +1,324 @@
+{
+  "fallback": "error",
+  "metadata": {
+    "dataset": "compat-fixtures",
+    "produced_by": "chassis-harness 0.8.1"
+  },
+  "mode": "record",
+  "records": [
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "e68bc44571edfd3cf1a5dbb92d9c0add",
+      "kind": "lifecycle",
+      "request": {
+        "event": "generation.publish",
+        "generation_id": "gen_0001",
+        "plugins": 0,
+        "previous": null,
+        "sequence": 1
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 0
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "4edc01b6e849b21545ed1cf97abb3522",
+      "kind": "snapshot",
+      "request": {},
+      "response": {
+        "agent": null,
+        "agent_revision": null,
+        "agent_runtime": "unknown",
+        "capabilities": {},
+        "chassis_version": "0.8.1",
+        "config_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "generation_id": "gen_0001",
+        "graph_definition_hash": null,
+        "metadata": {},
+        "plugin_graph_hash": "57501e5c6808b3e14852a4ea21dc7873abf9409032a06f9b740c973e83f62cf7",
+        "plugins": {},
+        "prompt_hash": null,
+        "runtime_instance_ids": [],
+        "scopes": {
+          "root": "/",
+          "scopes": [
+            {
+              "capabilities": null,
+              "children": [],
+              "entries": [],
+              "parent": null,
+              "path": "/",
+              "providers": {},
+              "selections": [],
+              "tools": null,
+              "visible_tools": []
+            }
+          ]
+        },
+        "sequence": 1,
+        "tool_schema_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "run_id": null,
+      "sequence": 1
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "07705eb2e4c605f80e39a12f2be34ba9",
+      "kind": "lifecycle",
+      "request": {
+        "entry_id": "orders-db",
+        "event": "plugin.mount",
+        "instance_id": "plugin_fixture_0",
+        "plugin": "orders-db"
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 2
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "07705eb2e4c605f80e39a12f2be34ba9",
+      "kind": "lifecycle",
+      "request": {
+        "entry_id": "toolbox",
+        "event": "plugin.mount",
+        "instance_id": "plugin_fixture_1",
+        "plugin": "chassis-toolbox"
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 3
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "ebb1d101b8b27233dc82b0efc5f0dbb6",
+      "kind": "lifecycle",
+      "request": {
+        "event": "generation.draining",
+        "generation_id": "gen_0001",
+        "successor": "gen_0002"
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 4
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "e68bc44571edfd3cf1a5dbb92d9c0add",
+      "kind": "lifecycle",
+      "request": {
+        "event": "generation.publish",
+        "generation_id": "gen_0002",
+        "plugins": 2,
+        "previous": "gen_0001",
+        "sequence": 2
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 5
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "ddeb60333908f119347bd9ac9c5329ba",
+      "kind": "snapshot",
+      "request": {},
+      "response": {
+        "agent": null,
+        "agent_revision": null,
+        "agent_runtime": "unknown",
+        "capabilities": {
+          "database": [
+            "1"
+          ],
+          "tools": [
+            "1"
+          ]
+        },
+        "chassis_version": "0.8.1",
+        "config_hash": "cd0c877e091f23df9734432588f1e2f62135379af84810a26abf125fee443437",
+        "generation_id": "gen_0002",
+        "graph_definition_hash": null,
+        "metadata": {},
+        "plugin_graph_hash": "1398685415f1adf9df03eb455f62fa83fba9bc18c7e680a9ea81d9a72d03f802",
+        "plugins": {
+          "chassis-toolbox": "1.0.0",
+          "orders-db": "1.0.0"
+        },
+        "prompt_hash": null,
+        "runtime_instance_ids": [
+          "plugin_fixture_0",
+          "plugin_fixture_1"
+        ],
+        "scopes": {
+          "root": "/",
+          "scopes": [
+            {
+              "capabilities": null,
+              "children": [],
+              "entries": [
+                "orders-db",
+                "toolbox"
+              ],
+              "parent": null,
+              "path": "/",
+              "providers": {
+                "database": [
+                  "plugin_fixture_0"
+                ],
+                "tools": [
+                  "plugin_fixture_1"
+                ]
+              },
+              "selections": [],
+              "tools": null,
+              "visible_tools": [
+                "lookup_order"
+              ]
+            }
+          ]
+        },
+        "sequence": 2,
+        "tool_schema_hash": "0b45ff8bbd03e626cf78ddd77accf163dd6c6f94ccf0a20b995fef74399d2087"
+      },
+      "run_id": null,
+      "sequence": 6
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "1577378f17156e7d0fed9e44b968401e",
+      "kind": "lifecycle",
+      "request": {
+        "event": "generation.retired",
+        "generation_id": "gen_0001"
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 7
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "dc1af2e05671f74fb33f71c8456f9e2c",
+      "kind": "tool",
+      "request": {
+        "args": {
+          "order": "A-1"
+        },
+        "tool": "lookup_order"
+      },
+      "response": {
+        "artifact": null,
+        "content": {
+          "order": "A-1",
+          "status": "shipped"
+        },
+        "duration_seconds": 0.25,
+        "error": null,
+        "generation_id": "gen_0002",
+        "name": "lookup_order",
+        "redacted": false,
+        "run_id": null,
+        "status": "ok",
+        "tool_call_id": null
+      },
+      "run_id": null,
+      "sequence": 8
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "4f7155b57e38e3baf6309dfd5c7b5930",
+      "kind": "model",
+      "request": {
+        "messages": [
+          {
+            "additional_kwargs": {},
+            "content": "where is order A-1?",
+            "id": null,
+            "name": null,
+            "response_metadata": {},
+            "type": "human"
+          }
+        ],
+        "model": "fake-model",
+        "options": {
+          "stop": null
+        }
+      },
+      "response": {
+        "generations": [
+          {
+            "generation_info": null,
+            "message": {
+              "additional_kwargs": {},
+              "content": "Order A-1 shipped.",
+              "id": null,
+              "invalid_tool_calls": [],
+              "name": null,
+              "response_metadata": {},
+              "tool_calls": [],
+              "type": "ai",
+              "usage_metadata": null
+            }
+          }
+        ],
+        "llm_output": null
+      },
+      "run_id": null,
+      "sequence": 9
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "e843c914fb43a1ce0d96d66dc460c266",
+      "kind": "lifecycle",
+      "request": {
+        "event": "harness.shutdown",
+        "generation_id": "gen_0002",
+        "leases": 0
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 10
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "a24a5aaba06fde94589fb383655bc536",
+      "kind": "lifecycle",
+      "request": {
+        "entry_id": "toolbox",
+        "event": "plugin.unmount",
+        "instance_id": "plugin_fixture_1",
+        "plugin": "chassis-toolbox"
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 11
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "a24a5aaba06fde94589fb383655bc536",
+      "kind": "lifecycle",
+      "request": {
+        "entry_id": "orders-db",
+        "event": "plugin.unmount",
+        "instance_id": "plugin_fixture_0",
+        "plugin": "orders-db"
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 12
+    }
+  ]
+}

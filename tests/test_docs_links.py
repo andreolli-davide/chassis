@@ -8,7 +8,8 @@ URLs are out of scope (a heading rename is cheaper to catch by reading).
 R023's design table maps every guarantee to its enforcement. A row that merely
 names a test file proves nothing — any file with some ``def test_`` would pass —
 so every row must name a concrete ``tests/foo.py::test_name`` node and that node
-must come out of a real pytest collection.
+must come out of a real pytest collection. The range grows only when a new
+guarantee lands (G25 to G27 are the 0.9.0 contracts), and this test pins it.
 """
 
 from __future__ import annotations
@@ -116,7 +117,7 @@ def test_every_guarantee_maps_to_an_existing_test_node() -> None:
     rows: list[tuple[str, str, str]] = GUARANTEE_ROW.findall(design)
     names = [name for name, _claim, _enforcement in rows]
 
-    assert names == [f"G{i}" for i in range(1, 25)]
+    assert names == [f"G{i}" for i in range(1, 26)]
 
     violations = guarantee_violations(rows)
     assert not violations, (

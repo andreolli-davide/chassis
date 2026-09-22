@@ -46,6 +46,7 @@ below is enforced by tests, and the tests are the specification of record.
 | G22 | A run remains associated with the agent revision selected when it started, and with the generation it acquired | `agents.py`, `runtime.py`, `tests/agents/test_invocation.py::test_a_run_keeps_its_revision_when_a_new_one_is_published` |
 | G23 | Agent composition is materialized through the same scoped resolver, ownership, semantic identity, and generation publication machinery as all other composition | `agents.py`, `composition.py`, `tests/agents/test_agent_lifecycle.py::test_publication_while_an_old_revision_run_is_active` |
 | G24 | Agent tool and capability visibility is composition, not authorization; it grants no user or organization authority | `docs/agent-composition.md`, `docs/security.md`, `tests/agents/test_capability_visibility.py::test_hidden_capabilities_fail_in_invoke_and_stream` |
+| G25 | Every persisted Chassis format declares an explicit format version; unsupported future versions, malformed versions, corrupted payloads, and unmigratable payloads are rejected with typed machine-readable errors, never guessed | `chassis/persistence/formats.py`, `tests/test_format_versions.py::test_a_future_version_is_rejected`, `tests/test_format_compat.py::test_the_0_8_1_snapshot_migrates_without_losing_attribution` |
 
 Every published container is deeply frozen by recursive copy-and-freeze at the
 publication boundary — plugin config and manifest metadata, scopes and resolved

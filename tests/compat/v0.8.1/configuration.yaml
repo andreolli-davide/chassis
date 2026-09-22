@@ -1,0 +1,11 @@
+version: 1
+plugins:
+  - id: model
+    plugin: support-model
+    config:
+      model: example-model
+      api_key: placeholder-not-a-secret
+  - id: orders
+    plugin: order-lookup
+provider_preferences:
+  database: orders-db

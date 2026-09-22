@@ -26,6 +26,7 @@ __all__ = [
     "CleanupFailure",
     "ConfigurationError",
     "EffectCleanupError",
+    "FormatError",
     "GenerationConflictError",
     "GraphBuildError",
     "HarnessStateError",
@@ -299,3 +300,18 @@ class ReplayMismatch(ChassisError):
     """Raised when a recorded boundary does not match the replayed operation."""
 
     code = "replay_mismatch"
+
+
+class FormatError(ChassisError):
+    """Raised when a persisted payload cannot be read safely.
+
+    Covers explicit format-version dispatch: a version newer than this release
+    supports (``future_version``), a malformed version value
+    (``malformed_version``), a payload that does not match its declared shape
+    (``corrupted``), and a payload with no migration path to the supported
+    version (``unmigratable``). The meaning of an unknown version or field is
+    never guessed. ``context`` carries the machine-readable ``format``,
+    ``reason``, ``found``, and ``supported`` values.
+    """
+
+    code = "format_version"

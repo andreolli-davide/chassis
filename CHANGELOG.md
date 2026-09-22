@@ -9,6 +9,29 @@ that a minor release may break the documented surface.
 
 ### Added
 
+- **Versioned and migrated persisted formats** (roadmap R028, new guarantee
+  G25). Every Chassis document that crosses a process, test-run, deployment, or
+  package-version boundary now declares its own integer format version — never
+  the package version: runtime snapshot records (`SNAPSHOT_FORMAT_VERSION`),
+  replay recordings (`REPLAY_FORMAT_VERSION`), planning exports
+  (`PLAN_FORMAT_VERSION`), and reconciliation/diagnostics exports
+  (`DIAGNOSTICS_FORMAT_VERSION`), all dispatched by
+  `chassis.persistence.formats`. `RuntimeSnapshot.from_dict()` and
+  `ReplaySession.from_dict()`/`load()` are explicit readers that migrate
+  pre-versioning 0.8.1 payloads and reject future versions, malformed version
+  values, corrupted payloads, and payloads with no migration path with a typed
+  `FormatError` (machine-readable `reason`: `future_version`,
+  `malformed_version`, `corrupted`, `unmigratable`) — never reinterpreting an
+  unknown field or version. Migration preserves semantic attribution (generation
+  identity and sequence, agent identity and revision, capability versions,
+  replay boundary kind and key, redaction status, tool/model result semantics).
+  Sanitized fixtures produced by the released 0.8.1 implementation
+  (`tests/compat/v0.8.1/`, generated from the `v0.8.1` tag) prove the readers
+  against what 0.8.1 actually wrote. The one documented non-migration: a 0.8.1
+  snapshot's semantic scope *provider* map (0.8.1 persisted provider instance
+  ids with no instance-to-entry mapping) is reported empty rather than guessed.
+  `RuntimeSnapshot.to_dict()` also persists the semantic scope tree now, so a
+  record round-trips exactly — snapshot `digest()` values therefore change.
 - **Classified public API and compatibility checking** (roadmap R027). The
   documented surface — every top-level export and documented import path — is
   audited in `tests/compat/public-api.json` with a stability class per name

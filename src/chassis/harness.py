@@ -87,6 +87,7 @@ from chassis.core.scope import Scope
 from chassis.diagnostics import Diagnostics
 from chassis.hooks.registry import HookRegistry, HookSnapshot
 from chassis.hooks.types import HookEvent
+from chassis.persistence.formats import DIAGNOSTICS_FORMAT_VERSION
 from chassis.persistence.snapshots import RuntimeSnapshot
 from chassis.plugins.base import Plugin, PluginContext, plugin
 from chassis.plugins.lifecycle import PluginInstance, PluginState
@@ -114,7 +115,10 @@ class ConfigApplyResult:
     applied: tuple[DesiredStateChange, ...]
 
     def to_dict(self) -> dict[str, Any]:
+        """Export document; declares its diagnostics format version."""
+
         return {
+            "format_version": DIAGNOSTICS_FORMAT_VERSION,
             "version": self.config.version,
             "changes": [change.to_dict() for change in self.changes],
             "applied": [change.to_dict() for change in self.applied],
@@ -202,7 +206,10 @@ class ReconcileResult:
     impact: ImpactAnalysis | None = None
 
     def to_dict(self, *, sanitize: Callable[[str], str] | None = None) -> dict[str, Any]:
+        """Export document; declares its diagnostics format version."""
+
         return {
+            "format_version": DIAGNOSTICS_FORMAT_VERSION,
             "generation_id": self.generation_id,
             "mounted": list(self.mounted),
             "reused": list(self.reused),

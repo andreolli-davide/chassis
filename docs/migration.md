@@ -46,10 +46,28 @@ changes to be aware of.
 
 ### Persisted formats
 
-Persisted and exchanged documents gain explicit per-format version fields.
-Payloads written by 0.8.1 (which declare no format version) are read and
-migrated explicitly; each format's support horizon is documented in
-[compatibility.md](compatibility.md#persisted-formats).
+Persisted and exchanged documents gain explicit per-format version fields, with
+explicit readers and migration dispatch (`docs/compatibility.md`):
+
+- `RuntimeSnapshot.to_dict()` now declares `format_version: 1` and persists the
+  semantic scope tree, so a record round-trips exactly through
+  `RuntimeSnapshot.from_dict()` and keeps its `semantic_digest()`.
+  **`digest()` values therefore change** (the record gained two fields) — digests
+  are only comparable within one package version anyway, since the record
+  carries `chassis_version`.
+- `ReplaySession.to_dict()`/`save()` declare `format_version: 1`;
+  `from_dict()`/`load()` reject future, malformed, and corrupted payloads with
+  `FormatError` instead of misreading them.
+- `ReconcileResult`, `ConfigApplyResult`, and `GenerationPressureReport`
+  `to_dict()` declare the diagnostics format version.
+
+Payloads written by 0.8.1 (which declare no format version) are migrated
+explicitly and preserve generation identity, agent identity and revision,
+capability versions, boundary kind and key, redaction status, and tool/model
+result semantics. What cannot be migrated: a 0.8.1 snapshot's *semantic* scope
+provider map — 0.8.1 recorded provider instance ids and persisted no
+instance-to-entry mapping — so a migrated record reports empty provider maps in
+`semantic_scopes` rather than guessing.
 
 ## 0.8 → 0.8.1
 
