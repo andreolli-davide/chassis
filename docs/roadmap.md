@@ -460,6 +460,11 @@ actually meets every gate.
 
 ## 0.9.0 — production confidence
 
+**Status: complete.** Every requirement below landed with its regression
+coverage, documentation, and compatibility evidence; the review record — audit
+resolutions, validation matrix results, and deferred work — is
+[production-readiness.md](production-readiness.md).
+
 This milestone makes existing Chassis behavior explicitly versioned,
 backward-compatible where promised, diagnosable, safe under cancellation and
 prolonged concurrency, measurable at realistic scale, and supported by a

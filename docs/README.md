@@ -24,6 +24,7 @@ below for task-oriented detail.
 | [performance.md](performance.md) | benchmark methodology, the 0.9.0 baseline, capacity, and known scaling limits |
 | [roadmap.md](roadmap.md) | ordered 0.5.1–0.9.0 audit remediation, acceptance criteria, release gates, and finding traceability |
 | [compatibility.md](compatibility.md) | surface classes, the API baseline and compatibility check, deprecations, persisted format versions |
+| [production-readiness.md](production-readiness.md) | the 0.9.0 compatibility and operational review: domains, validation matrix, audit resolutions, limitations |
 | [observability.md](observability.md) | tracing, snapshots, canonical hashing, redaction, evaluation |
 | [security.md](security.md) | trust model, policy, secrets, and what Chassis is *not* |
 | [replay.md](replay.md) | record/replay boundaries and their explicit limitations |

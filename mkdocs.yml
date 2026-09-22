@@ -59,6 +59,7 @@ nav:
   - Performance and capacity: performance.md
   - Release roadmap: roadmap.md
   - Compatibility and deprecation: compatibility.md
+  - Production readiness review: production-readiness.md
   - Beta readiness review: beta-readiness.md
   - Design guarantees: design.md
   - Migration: migration.md
