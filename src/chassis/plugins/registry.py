@@ -67,6 +67,14 @@ class PluginEntry:
             )
 
 
+@dataclass(frozen=True, slots=True)
+class CapturedEntry:
+    """One desired entry exactly as captured before a transactional batch."""
+
+    entry: PluginEntry | None
+    revision: int | None
+
+
 class PluginRegistry:
     """Tracks desired entries and mounted instances."""
 
@@ -166,6 +174,24 @@ class PluginRegistry:
 
     def entries(self) -> tuple[PluginEntry, ...]:
         return tuple(self._entries[entry_id] for entry_id in sorted(self._entries))
+
+    def capture_entry(self, entry_id: str) -> CapturedEntry:
+        """Capture one desired entry exactly, for transactional undo."""
+
+        return CapturedEntry(self._entries.get(entry_id), self._revisions.get(entry_id))
+
+    def restore_entry(self, entry_id: str, captured: CapturedEntry) -> None:
+        """Restore a captured entry exactly: no reinstall, no revision bump."""
+
+        entry, revision = captured.entry, captured.revision
+        if entry is None:
+            self._entries.pop(entry_id, None)
+        else:
+            self._entries[entry_id] = entry
+        if revision is None:
+            self._revisions.pop(entry_id, None)
+        else:
+            self._revisions[entry_id] = revision
 
     # ---------------------------------------------------------------- instances
 

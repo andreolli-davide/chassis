@@ -119,6 +119,19 @@ class StaticSecretProvider:
         return {"provider": [self._name], "names": self.names()}
 
 
+def redacting_secrets(provider: SecretProvider, redactor: SecretRedactor | None) -> SecretProvider:
+    """Hand out ``provider`` through ``redactor``: every value it returns
+    becomes redactable at the moment it is read.
+
+    The wrap is idempotent and honors an explicitly redacting provider, so a
+    plugin that already protects its values keeps its own boundary.
+    """
+
+    if redactor is None or isinstance(provider, RedactingSecretProvider):
+        return provider
+    return RedactingSecretProvider(provider, redactor)
+
+
 class RedactingSecretProvider:
     """Wraps a provider so every value it hands out becomes redactable.
 
@@ -130,6 +143,12 @@ class RedactingSecretProvider:
     def __init__(self, inner: SecretProvider, redactor: SecretRedactor) -> None:
         self._inner = inner
         self._redactor = redactor
+
+    @property
+    def redactor(self) -> SecretRedactor:
+        """The redactor every value this provider hands out joins."""
+
+        return self._redactor
 
     @property
     def source(self) -> str:

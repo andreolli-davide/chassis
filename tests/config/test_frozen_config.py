@@ -26,14 +26,14 @@ def test_mutating_the_input_after_construction_cannot_change_the_config() -> Non
     preference: dict[str, str] = {"database": "primary"}
     preferences: dict[str, str] = {"database": "primary"}
     config = HarnessConfig(
-        plugins=[
+        plugins=(
             PluginEntryConfig(
                 id="db",
                 plugin="postgres",
                 config=nested,
                 provider_preference=preference,
-            )
-        ],
+            ),
+        ),
         provider_preferences=preferences,
     )
     entry = config.plugins[0]
@@ -64,14 +64,14 @@ def test_no_mutable_structure_is_reachable_through_the_config_surface() -> None:
         "retries": [1, 2],
     }
     config = HarnessConfig(
-        plugins=[
+        plugins=(
             PluginEntryConfig(
                 id="db",
                 plugin="postgres",
                 config=nested,
                 provider_preference={"database": "primary"},
-            )
-        ],
+            ),
+        ),
         provider_preferences={"database": "primary"},
     )
     entry = config.plugins[0]

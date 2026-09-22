@@ -28,6 +28,7 @@ from chassis.core.scope import EffectRecord, Scope
 from chassis.hooks.registry import HookRegistry, ScopedHooks
 from chassis.plugins.manifest import PluginManifest
 from chassis.secrets.base import SecretProvider
+from chassis.secrets.env import RedactingSecretProvider, redacting_secrets
 from chassis.tasks.manager import ScopedTasks
 from chassis.tools.registry import ScopedTools, ToolRegistry
 
@@ -167,7 +168,7 @@ class PluginContext:
 
         registration = self._resolved.get(SECRETS.name)
         if registration is not None and isinstance(registration.value, SecretProvider):
-            return registration.value
+            return self._protected_secrets(registration.value)
         return self._secrets
 
     @property
@@ -179,6 +180,20 @@ class PluginContext:
         """
 
         return self._agents
+
+    def _protected_secrets(self, value: Any) -> Any:
+        """Hand a resolved secrets provider through the shared redactor.
+
+        Every handout seam must teach the redactor, or a secret read from a
+        composition-provided provider reaches telemetry, replay records, and
+        error strings unredacted.
+        """
+
+        if not isinstance(value, SecretProvider):
+            return value
+        secrets = self._secrets
+        redactor = secrets.redactor if isinstance(secrets, RedactingSecretProvider) else None
+        return redacting_secrets(value, redactor)
 
     def require(self, capability: CapabilityKey | str) -> Any:
         """Return the provider object resolved for a required capability.
@@ -211,14 +226,14 @@ class PluginContext:
                 resolved=registration.key.api_version,
                 expected=capability.api_version,
             )
-        return registration.value
+        return self._protected_secrets(registration.value)
 
     def get(self, capability: CapabilityKey | str) -> Any | None:
         """Return the provider object for an optional capability, or ``None``."""
 
         name = capability.name if isinstance(capability, CapabilityKey) else capability
         registration = self._resolved.get(name)
-        return None if registration is None else registration.value
+        return None if registration is None else self._protected_secrets(registration.value)
 
     def cleanup(
         self,

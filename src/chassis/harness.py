@@ -96,7 +96,7 @@ from chassis.policy.engine import AllowAllPolicy, PolicyEngine, PolicyRequest, P
 from chassis.replay.session import ReplaySession
 from chassis.runtime import AgentRuntime, RunEnvironment
 from chassis.secrets.base import SecretProvider, SecretValue
-from chassis.secrets.env import EnvSecretProvider, RedactingSecretProvider
+from chassis.secrets.env import EnvSecretProvider, RedactingSecretProvider, redacting_secrets
 from chassis.secrets.redaction import SecretRedactor
 from chassis.telemetry.base import NoopTelemetry, RedactingTelemetry, SafeTelemetry, Telemetry
 from chassis.tools.executor import ApprovalGate, ToolExecutor
@@ -119,21 +119,6 @@ class ConfigApplyResult:
             "changes": [change.to_dict() for change in self.changes],
             "applied": [change.to_dict() for change in self.applied],
         }
-
-
-def _entry_restorer(harness: Harness, entry: PluginEntry) -> Callable[[], Any]:
-    """Undo action that restores one desired entry exactly."""
-
-    def restore() -> None:
-        harness.install(
-            entry.plugin,
-            entry_id=entry.entry_id,
-            config=dict(entry.config),
-            replace=True,
-            scope=entry.scope,
-        )
-
-    return restore
 
 
 class _FailClosedPolicy:
@@ -411,22 +396,17 @@ class Harness:
         undo: list[Callable[[], Any]] = []
         previous_config = self._config
         previous_preferences = dict(self._config_preferences)
+        previous_dirty = self._dirty
         try:
             for change in changes:
                 if not change.is_mutation:
                     continue
                 entry = config.entry(change.entry_id)
                 if change.action is DesiredStateAction.REMOVE:
-                    existing = self.entry(change.entry_id)
-                    if existing is not None:
-                        undo.append(_entry_restorer(self, existing))
+                    undo.append(self.entry_restorer(change.entry_id))
                     self.uninstall(change.entry_id)
                 elif entry is not None:
-                    existing = self.entry(entry.id)
-                    if existing is not None:
-                        undo.append(_entry_restorer(self, existing))
-                    else:
-                        undo.append(lambda entry_id=entry.id: self.uninstall(entry_id))
+                    undo.append(self.entry_restorer(entry.id))
                     self.install(
                         self._catalog.get(entry.plugin),
                         entry_id=entry.id,
@@ -446,6 +426,7 @@ class Harness:
                 restore()
             self._config_preferences = previous_preferences
             self._config = previous_config
+            self._dirty = previous_dirty
             raise
         if config_preferences != previous_preferences:
             self._dirty = True
@@ -1565,8 +1546,12 @@ class Harness:
             policy = _FailClosedPolicy(error)
         secrets: SecretProvider
         try:
-            secrets = self._system_requirement(
-                generation, SECRETS, SecretProvider, self._secrets, scope
+            # A provider registered for the secrets capability is handed out
+            # through the shared redactor exactly like the default one: the
+            # moment a value is read it can be scrubbed from anything emitted.
+            secrets = redacting_secrets(
+                self._system_requirement(generation, SECRETS, SecretProvider, self._secrets, scope),
+                self._redactor,
             )
         except ChassisError as error:
             secrets = _FailClosedSecrets(error)
@@ -1789,6 +1774,28 @@ class Harness:
 
     def entry(self, entry_id: str) -> PluginEntry | None:
         return self._plugin_registry.entry(entry_id)
+
+    def entry_restorer(self, entry_id: str) -> Callable[[], Any]:
+        """Undo action restoring one desired entry exactly as captured now.
+
+        Transactional batches (``apply_config``, AgentSpec materialization)
+        register these before mutating an entry. Restoring the captured state
+        directly keeps a rollback from re-running installation: no revision
+        bump, no new entry object, no resurrection of an entry that was never
+        removed.
+        """
+
+        captured = self._plugin_registry.capture_entry(entry_id)
+
+        def restore() -> None:
+            self._plugin_registry.restore_entry(entry_id, captured)
+
+        return restore
+
+    def restore_pending_changes(self, pending: bool) -> None:
+        """Restore the pending-changes flag captured before a failed batch."""
+
+        self._dirty = pending
 
     # -------------------------------------------------------- context manager
 

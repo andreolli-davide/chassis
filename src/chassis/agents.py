@@ -446,6 +446,7 @@ class AgentRegistry:
             )
         state = None if existing is None else _scope_state(existing)
         applied: list[Callable[[], Any]] = []
+        pending = harness.has_pending_changes
         scope = existing
         try:
             if scope is None:
@@ -481,6 +482,7 @@ class AgentRegistry:
         except BaseException:
             for undo in reversed(applied):
                 undo()
+            harness.restore_pending_changes(pending)
             if state is None:
                 if tree.get(path) is not None:
                     tree.remove(path)
@@ -552,19 +554,7 @@ class AgentRegistry:
             ):
                 entries.append(entry_id)
                 continue
-            if existing is None:
-                applied.append(lambda entry_id=entry_id: harness.uninstall(entry_id))
-            else:
-                snapshot = existing
-                applied.append(
-                    lambda snapshot=snapshot, entry_id=entry_id: harness.install(
-                        snapshot.plugin,
-                        entry_id=entry_id,
-                        config=dict(snapshot.config),
-                        replace=True,
-                        scope=snapshot.scope,
-                    )
-                )
+            applied.append(harness.entry_restorer(entry_id))
             harness.install(
                 plugin_type,
                 entry_id=entry_id,
