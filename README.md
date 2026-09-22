@@ -27,7 +27,7 @@ pip install "chassis-harness[opentelemetry]"      # OpenTelemetry telemetry adap
 pip install "chassis-harness[langgraph,langsmith,opentelemetry]"
 ```
 
-Python 3.12+. The import package is `chassis`.
+Python 3.12 or 3.13. The import package is `chassis`.
 
 The core has no dependency on `langgraph`, `langchain-core`, or `langsmith`:
 importing `chassis`, the plugin lifecycle, generations, budgets, and diagnostics all
@@ -192,7 +192,7 @@ the 0.9 → 1.0 beta, 0.8 → 0.9, 0.8 → 0.8.1, 0.7 → 0.8,
 ## Development
 
 Chassis uses [uv](https://docs.astral.sh/uv/) as its canonical project manager.
-Python ≥ 3.12 is required.
+Python 3.12 or 3.13 is required.
 
 ```bash
 uv sync

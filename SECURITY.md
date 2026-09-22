@@ -2,6 +2,9 @@
 
 ## Supported versions
 
+The 1.0.0b1 beta supports Python 3.12 and 3.13. Newer Python versions are not
+supported by this beta until they are added to the release test matrix.
+
 The latest stable release, currently 0.9.1, is supported. Security fixes land on
 `main` and ship in the next appropriate release. 1.0 betas are evaluation
 releases: reported vulnerabilities are fixed in a subsequent beta or final
