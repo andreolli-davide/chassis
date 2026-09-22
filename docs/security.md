@@ -149,6 +149,18 @@ Diagnostics describe configuration by key, never by value; provider payloads are
 excluded from capability, tool, and hook descriptions; and everything they emit is
 generated from authoritative state rather than scraped from logs.
 
+## Dependency audit
+
+CI runs a dependency vulnerability scan (`pip-audit`) over the locked
+environment on every push. Every finding is either fixed, pinned with a reviewed
+upper bound, or ignored in the audit job with a written rationale and an owner —
+an untriaged finding fails the build. Upper bounds are added only where an
+upstream compatibility break makes them necessary; the minimum-supported and
+latest-compatible dependency jobs exercise the range between the lockfile floor
+and current releases. Published artifacts ship with a CycloneDX SBOM, and
+PyPI publishing uses Trusted Publishing with digital attestations for
+provenance.
+
 ## Checklist for reviewers
 
 - Can a plugin resource outlive its scope? Only if a plugin bypasses `ctx`.

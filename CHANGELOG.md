@@ -55,6 +55,14 @@ that a minor release may break the documented surface.
   baseline, with a minimum-supported-direct-dependencies job
   (`uv lock --resolution lowest-direct`) and a latest-compatible job
   (`uv lock --upgrade`) comparing against it.
+- **Package and dependency verification expanded** (roadmap R025). CI now
+  smoke-tests the wheel and the sdist in clean environments and exercises the
+  core, `langgraph`, `langsmith`, and combined extras independently; a    dependency vulnerability scan (`pip-audit`) runs on every push with a
+  documented triage process (fix, reviewed upper bound, or a written exception —
+  untriaged findings fail the build). Lower-bound-only dependencies are reviewed
+  through the minimum/latest compatibility jobs; no upper bounds are needed
+  today. Release artifacts ship with a CycloneDX SBOM and PyPI digital
+  attestations.
 
 ## [0.7.0] - 2026-09-22
 

@@ -167,3 +167,49 @@ jobs:
 
       - name: Run the quickstart against the installed package
         run: .smoke/bin/python examples/quickstart.py
+
+      - name: Install and import the sdist in a clean environment
+        run: |
+          uv venv .smoke-sdist
+          uv pip install --python .smoke-sdist/bin/python dist/*.tar.gz
+          .smoke-sdist/bin/python -c "import chassis, chassis.replay; print('sdist chassis', chassis.__version__)"
+
+      - name: Smoke the LangSmith extra independently
+        run: |
+          wheel=$(ls dist/*.whl)
+          uv venv .smoke-ls
+          uv pip install --python .smoke-ls/bin/python "${wheel}[langsmith]"
+          .smoke-ls/bin/python -c "import chassis.testing, langsmith; print('langsmith extra ok')"
+
+      - name: Smoke the combined extras independently
+        run: |
+          wheel=$(ls dist/*.whl)
+          uv venv .smoke-all
+          uv pip install --python .smoke-all/bin/python "${wheel}[langgraph,langsmith]"
+          .smoke-all/bin/python - <<'PY'
+          import chassis.langgraph
+          import langsmith
+
+          print("combined extras ok")
+          PY
+
+  audit:
+    name: dependency vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Sync environment from the lockfile
+        run: uv sync --locked --all-extras --dev
+
+      # Triage process (see docs/security.md): every finding is fixed, pinned
+      # with a reviewed upper bound, or ignored here with a written rationale.
+      # An untriaged finding fails the job.
+      - name: Audit installed dependencies
+        run: uv run --with pip-audit pip-audit
