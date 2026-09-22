@@ -1,14 +1,21 @@
-"""Documentation links must resolve.
+"""Documentation links must resolve, and guarantee rows must name real tests.
 
 A broken link is the first defect a reader hits and the only check that never
 reports it, so it is asserted here: every relative link in the README, the
 changelog, and ``docs/`` must point at a file that exists. Anchors and external
 URLs are out of scope (a heading rename is cheaper to catch by reading).
+
+R023's design table maps every guarantee to its enforcement. A row that merely
+names a test file proves nothing — any file with some ``def test_`` would pass —
+so every row must name a concrete ``tests/foo.py::test_name`` node and that node
+must come out of a real pytest collection.
 """
 
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -48,22 +55,70 @@ GUARANTEE_ROW = re.compile(r"^\| (G\d+) \| (.*?) \| (.*?) \|$", re.MULTILINE)
 TEST_REF = re.compile(r"(tests/[A-Za-z0-9_./-]+\.py)(?:::(test_[A-Za-z0-9_]+))?")
 
 
+def collected_test_nodes(paths: list[str]) -> set[str]:
+    """Node ids pytest collects from ``paths``, from one real collection run."""
+
+    if not paths:
+        return set()
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "--continue-on-collection-errors",
+            *paths,
+        ],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+        check=False,
+    )
+    return {
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip().startswith("tests/") and "::" in line
+    }
+
+
+def guarantee_violations(rows: list[tuple[str, str, str]]) -> list[str]:
+    """Why the design-table rows fail R023 — empty only for real collected nodes."""
+
+    violations: list[str] = []
+    named: set[str] = set()
+    wanted: list[tuple[str, str]] = []
+    for name, claim, enforcement in rows:
+        refs: list[tuple[str, str]] = TEST_REF.findall(enforcement)
+        if not refs:
+            violations.append(f"{name} maps to no test node: {claim}")
+            continue
+        for path_text, node in refs:
+            if not node:
+                violations.append(f"{name} names {path_text} with no ::test_name node")
+            if not (ROOT / path_text).exists():
+                violations.append(f"{name} references missing {path_text}")
+            if node and (ROOT / path_text).exists():
+                named.add(path_text)
+                wanted.append((f"{path_text}::{node}", name))
+
+    collected = collected_test_nodes(sorted(named))
+    for node_id, name in wanted:
+        if not any(item == node_id or item.startswith(f"{node_id}[") for item in collected):
+            violations.append(f"{name} names node {node_id} which pytest does not collect")
+    return violations
+
+
 def test_every_guarantee_maps_to_an_existing_test_node() -> None:
-    """Each G-row names at least one real test node, not just prose or links."""
+    """Each G-row names a real collected ``file::test_name`` node, not just a file."""
 
     design = (ROOT / "docs" / "design.md").read_text(encoding="utf-8")
-    rows = GUARANTEE_ROW.findall(design)
+    rows: list[tuple[str, str, str]] = GUARANTEE_ROW.findall(design)
     names = [name for name, _claim, _enforcement in rows]
 
     assert names == [f"G{i}" for i in range(1, 25)]
 
-    for name, claim, enforcement in rows:
-        refs = TEST_REF.findall(enforcement)
-        assert refs, f"{name} maps to no test node: {claim}"
-        for path_text, node in refs:
-            target = ROOT / path_text
-            assert target.exists(), f"{name} references missing {path_text}"
-            source = target.read_text(encoding="utf-8")
-            assert "def test_" in source, f"{path_text} contains no tests for {name}"
-            if node:
-                assert f"def {node}" in source, f"{name} references missing node {node}"
+    violations = guarantee_violations(rows)
+    assert not violations, (
+        "R023 rows whose enforcement is not a collected test node:\n" + "\n".join(violations)
+    )
