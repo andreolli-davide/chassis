@@ -51,7 +51,7 @@ from chassis.composition import (
     build_scope_tree,
 )
 from chassis.config.loader import PluginCatalog, parse_config
-from chassis.config.models import HarnessConfig
+from chassis.config.models import HarnessConfig, PluginEntryConfig
 from chassis.config.reconcile import (
     DesiredStateAction,
     DesiredStateChange,
@@ -59,6 +59,7 @@ from chassis.config.reconcile import (
     config_fingerprint,
     diff_desired_state,
 )
+from chassis.core.collections import freeze
 from chassis.core.errors import (
     CapabilityAmbiguous,
     CapabilityVersionMismatch,
@@ -69,6 +70,7 @@ from chassis.core.errors import (
     HarnessStateError,
     HookExecutionError,
     PluginContractError,
+    PluginLoadError,
     PluginSetupError,
     SecretResolutionError,
 )
@@ -88,11 +90,27 @@ from chassis.diagnostics import Diagnostics
 from chassis.hooks.registry import HookRegistry, HookSnapshot
 from chassis.hooks.types import HookEvent
 from chassis.persistence.formats import DIAGNOSTICS_FORMAT_VERSION
-from chassis.persistence.snapshots import RuntimeSnapshot
+from chassis.persistence.snapshots import RuntimeSnapshot, chassis_version
+from chassis.planning import (
+    INPUT_REASONS,
+    ActionKind,
+    Ambiguity,
+    GenerationImpact,
+    PlanAction,
+    PlanResult,
+    ReasonCode,
+    ValidationFailure,
+)
 from chassis.plugins.base import Plugin, PluginContext, plugin
 from chassis.plugins.lifecycle import PluginInstance, PluginState
+from chassis.plugins.manifest import PluginManifest
 from chassis.plugins.registry import PluginEntry, PluginRegistry
-from chassis.plugins.resolver import DependencyResolver, ResolutionPlan
+from chassis.plugins.resolver import (
+    DependencyResolver,
+    PluginCandidate,
+    PluginPlan,
+    ResolutionPlan,
+)
 from chassis.policy.engine import AllowAllPolicy, PolicyEngine, PolicyRequest, PolicyResult
 from chassis.replay.session import ReplaySession
 from chassis.runtime import AgentRuntime, RunEnvironment
@@ -169,6 +187,20 @@ def _retrieve_task_exception(task: asyncio.Task[Any]) -> None:
 
     if not task.cancelled():
         task.exception()
+
+
+def preference_for(
+    preferences: Mapping[str, str], consumer: str, capability: str, scope: str
+) -> str | None:
+    """Most specific applicable preference: consumer, then scope, then global."""
+
+    scoped = preferences.get(f"{consumer}:{capability}")
+    if scoped is not None:
+        return scoped
+    by_scope = preferences.get(f"scope:{scope}:{capability}")
+    if by_scope is not None:
+        return by_scope
+    return preferences.get(capability)
 
 
 def _services_plugin(
@@ -1315,20 +1347,30 @@ class Harness:
         entry: PluginEntry,
         plan: ResolutionPlan,
         identities: Mapping[str, SemanticIdentity],
+        *,
+        preferences: Mapping[str, str] | None = None,
+        provider_instance: Callable[[str], str | None] | None = None,
     ) -> SemanticIdentity:
         """Compute the semantic identity of one entry in a candidate composition.
 
         Dependency bindings are read from live control-plane state rather than
         from the plan: providers are materialized before their consumers, so this
         sees the instance the candidate will actually publish.
+
+        ``preferences`` and ``provider_instance`` default to the live control
+        plane; preview passes the state a not-yet-applied plan would have.
         """
 
         registry = self._plugin_registry
-        preferences = self._effective_preferences()
+        effective_preferences = (
+            self._effective_preferences() if preferences is None else dict(preferences)
+        )
 
-        def provider_instance(provider_entry: str) -> str | None:
+        def live_provider_instance(provider_entry: str) -> str | None:
             instance = registry.instance(provider_entry)
             return None if instance is None else instance.instance_id
+
+        resolve_instance = provider_instance or live_provider_instance
 
         def provider_identity(provider_entry: str) -> str | None:
             known = identities.get(provider_entry)
@@ -1348,15 +1390,6 @@ class Harness:
                 return instance.semantic_identity.semantic_id
             return None
 
-        def preference(consumer: str, capability: str, scope: str) -> str | None:
-            scoped = preferences.get(f"{consumer}:{capability}")
-            if scoped is not None:
-                return scoped
-            by_scope = preferences.get(f"scope:{scope}:{capability}")
-            if by_scope is not None:
-                return by_scope
-            return preferences.get(capability)
-
         plan_entry = plan.plan_for(entry.entry_id)
         resolutions = () if plan_entry is None else plan_entry.requirements
         plugin_type = type(entry.plugin)
@@ -1366,10 +1399,12 @@ class Harness:
             manifest=entry.manifest,
             config=entry.config,
             resolutions=resolutions,
-            provider_instance=provider_instance,
+            provider_instance=resolve_instance,
             provider_identity=provider_identity,
             provider_display=provider_display,
-            preference=preference,
+            preference=lambda consumer, capability, scope: preference_for(
+                effective_preferences, consumer, capability, scope
+            ),
             implementation_hint=f"{plugin_type.__module__}.{plugin_type.__qualname__}",
             redactor=self._redactor,
         )
@@ -1422,7 +1457,10 @@ class Harness:
         candidate_ids = tuple(instance.instance_id for instance in instances)
         if candidate_ids != current.instance_ids:
             return False
-        if scope_tree != current.scopes:
+        # Observable composition only: topology, selection, and scope metadata.
+        # Comparing resolution provenance object-wise would see pre-mount
+        # instance ids and churn a generation for an identical composition.
+        if not scope_tree.same_observable_composition(current.scopes):
             return False
         return snapshot_factory(current.generation_id) == current.snapshot
 
@@ -1842,6 +1880,412 @@ class Harness:
             self._plugin_registry.candidates(),
             prefer=self._effective_preferences() if prefer is None else prefer,
             scopes=self._composition.specs(),
+        )
+
+    def preview(self, config: Any = None) -> PlanResult:
+        """Compute what the next apply would do, with zero mutation.
+
+        Runs the full pipeline a subsequent ``apply_config`` + ``reconcile``
+        would — parsing, migration, validation, catalog resolution,
+        desired-state diffing, dependency resolution, semantic-identity reuse
+        analysis, and generation-impact prediction — and returns the stable
+        planning contract (:mod:`chassis.planning`). It mutates nothing: no
+        revision bump, no dirty flag, no mounted plugin, no published
+        generation, and no setup or cleanup effect. Plugin objects are
+        constructed exactly as :meth:`install` would (so instance-configured
+        manifests work) and discarded without mounting.
+
+        Plan-level problems — unsatisfied or ambiguous requirements, cycles —
+        are reported as ``reject`` actions rather than raised;
+        configuration-level errors raise exactly as :meth:`apply_config` would.
+        Publication-time contract validation needs mounted registrations and
+        runs only during a real :meth:`reconcile`.
+
+        Args:
+            config: A declarative configuration to preview against the current
+                state, or ``None`` to preview the next reconciliation of the
+                current desired state.
+
+        Raises:
+            ConfigurationError: invalid or inconsistent configuration.
+            PluginLoadError: a configured plugin cannot be constructed or does
+                not declare a manifest.
+        """
+
+        entries: dict[str, PluginEntry] = {}
+        changes: dict[str, DesiredStateChange] = {}
+        preferences: dict[str, str]
+        if config is None:
+            entries = {entry.entry_id: entry for entry in self._plugin_registry.entries()}
+            preferences = self._effective_preferences()
+        else:
+            document = parse_config(config)
+            self._stage_config(document)
+            config_preferences = dict(document.provider_preferences)
+            for entry in document.enabled_entries:
+                for capability, provider in entry.provider_preference.items():
+                    config_preferences[f"{entry.id}:{capability}"] = provider
+            preferences = {**config_preferences, **self._provider_preference}
+            for change in diff_desired_state(document, self._installed_state()):
+                changes[change.entry_id] = change
+                if change.action is DesiredStateAction.REMOVE:
+                    continue
+                desired = document.entry(change.entry_id)
+                if desired is not None:
+                    entries[change.entry_id] = self._preview_entry(desired)
+
+        plan = self._resolver.resolve(
+            self._preview_candidates(entries, changes),
+            prefer=preferences,
+            scopes=self._composition.specs(),
+        )
+        return self._build_plan_result(plan, entries, changes, preferences)
+
+    def _preview_entry(self, desired: PluginEntryConfig) -> PluginEntry:
+        """The entry an apply would install — constructed, never installed."""
+
+        plugin_type = self._catalog.get(desired.plugin)
+        plugin_object = (
+            plugin_type(desired.config) if isinstance(plugin_type, type) else plugin_type
+        )
+        manifest = getattr(plugin_object, "manifest", None)
+        if not isinstance(manifest, PluginManifest):
+            raise PluginLoadError("plugin does not declare a PluginManifest", plugin=desired.plugin)
+        existing = self._plugin_registry.entry(desired.id)
+        return PluginEntry(
+            entry_id=desired.id,
+            plugin=plugin_object,
+            manifest=manifest,
+            config=freeze(desired.config),
+            revision=1 if existing is None else existing.revision + 1,
+        )
+
+    def _preview_candidates(
+        self, entries: Mapping[str, PluginEntry], changes: Mapping[str, DesiredStateChange]
+    ) -> tuple[PluginCandidate, ...]:
+        """Resolver input for the previewed state, mirroring a real reconcile.
+
+        A replaced entry resolves as declaring-only, exactly like a real apply:
+        its revision is bumped before resolution, so the outgoing instance's
+        registrations no longer count as its active provisions.
+        """
+
+        existing = {
+            candidate.entry_id: candidate for candidate in self._plugin_registry.candidates()
+        }
+        candidates: list[PluginCandidate] = []
+        for entry_id in sorted(entries):
+            entry = entries[entry_id]
+            change = changes.get(entry_id)
+            mutating = change is not None and change.action in (
+                DesiredStateAction.ADD,
+                DesiredStateAction.REMOVE,
+                DesiredStateAction.REPLACE,
+            )
+            current = existing.get(entry_id)
+            if current is None or mutating:
+                candidates.append(
+                    PluginCandidate(
+                        entry_id=entry_id,
+                        manifest=entry.manifest,
+                        instance_id=None if current is None else current.instance_id,
+                        active=False,
+                        registrations=(),
+                        scope=entry.scope,
+                    )
+                )
+            else:
+                candidates.append(current)
+        return tuple(candidates)
+
+    def _build_plan_result(
+        self,
+        plan: ResolutionPlan,
+        entries: Mapping[str, PluginEntry],
+        changes: Mapping[str, DesiredStateChange],
+        preferences: Mapping[str, str],
+    ) -> PlanResult:
+        """Walk the plan exactly like materialization would, without mounting."""
+
+        identities: dict[str, SemanticIdentity] = {}
+        reused: dict[str, bool] = {}
+        actions: dict[str, PlanAction] = {}
+
+        def predicted_instance(provider_entry: str) -> str | None:
+            if reused.get(provider_entry) is False:
+                # The provider will be a new instance; binding to the outgoing
+                # one would predict false reuse for its consumers.
+                return f"pending:{provider_entry}"
+            instance = self._plugin_registry.instance(provider_entry)
+            return None if instance is None else instance.instance_id
+
+        for entry_id in plan.activation_order:
+            entry = entries.get(entry_id)
+            if entry is None:  # pragma: no cover - defensive
+                continue
+            change = changes.get(entry_id)
+            identity = self._semantic_identity(
+                entry,
+                plan,
+                identities,
+                preferences=preferences,
+                provider_instance=predicted_instance,
+            )
+            identities[entry_id] = identity
+            existing = self._plugin_registry.instance(entry_id)
+            untouched = change is None or change.action is DesiredStateAction.UNCHANGED
+            will_reuse = (
+                untouched
+                and existing is not None
+                and existing.state is PluginState.ACTIVE
+                and existing.entry_revision == entry.revision
+                and existing.semantic_identity == identity
+            )
+            reused[entry_id] = will_reuse
+            actions[entry_id] = self._plan_action(entry, change, identity, existing, will_reuse)
+
+        for entry_id, change in changes.items():
+            if change.action is DesiredStateAction.REMOVE:
+                actions[entry_id] = self._remove_action(entry_id, change)
+
+        for planned in plan.plugins:
+            if planned.entry_id in actions:
+                continue
+            actions[planned.entry_id] = self._reject_action(
+                planned,
+                entries.get(planned.entry_id),
+                plan,
+                preferences,
+            )
+
+        entry_actions = tuple(actions[entry_id] for entry_id in sorted(actions))
+        forcing = any(
+            action.generation_impact is GenerationImpact.NEW_GENERATION for action in entry_actions
+        )
+        current = self._generations.current
+        would_publish = True
+        if not forcing and current is not None:
+            # Everything is reused: the exact no-op test a reconcile performs.
+            instances = tuple(
+                instance
+                for entry_id in plan.activation_order
+                if (instance := self._plugin_registry.instance(entry_id)) is not None
+            )
+            scope_tree = build_scope_tree(
+                plan=plan,
+                instances=instances,
+                registrations=self._capability_registry.registrations(),
+                tools=self._tool_registry.entries(),
+            )
+            would_publish = not self._same_composition(
+                current, instances, self._snapshot_factory(instances), scope_tree
+            )
+
+        publication = PlanAction(
+            action=ActionKind.PUBLISH if would_publish else ActionKind.NOOP,
+            reasons=(
+                (
+                    ReasonCode.COMPOSITION_CHANGED
+                    if would_publish
+                    else ReasonCode.COMPOSITION_UNCHANGED
+                ),
+            ),
+            generation_impact=(
+                GenerationImpact.NEW_GENERATION if would_publish else GenerationImpact.NONE
+            ),
+        )
+        return PlanResult(
+            chassis_version=chassis_version(),
+            actions=(*entry_actions, publication),
+            would_publish=would_publish,
+            current_generation_id=None if current is None else current.generation_id,
+            pending=tuple(plan.pending),
+            cycles=tuple(tuple(cycle) for cycle in plan.cycles),
+            preferences=dict(preferences),
+        )
+
+    def _plan_action(
+        self,
+        entry: PluginEntry,
+        change: DesiredStateChange | None,
+        identity: SemanticIdentity,
+        existing: PluginInstance | None,
+        will_reuse: bool,
+    ) -> PlanAction:
+        """Classify one eligible entry exactly like materialization would."""
+
+        common: dict[str, Any] = {
+            "entry_id": entry.entry_id,
+            "plugin": entry.manifest.identity,
+            "scope": entry.scope,
+            "config_keys": tuple(sorted(entry.config)),
+        }
+        if change is not None and change.action is DesiredStateAction.ADD:
+            return PlanAction(
+                action=ActionKind.ADD,
+                reasons=(ReasonCode.ENTRY_ADDED,),
+                generation_impact=GenerationImpact.NEW_GENERATION,
+                **common,
+            )
+        if change is not None and change.action is DesiredStateAction.REPLACE:
+            old = self._plugin_registry.entry(entry.entry_id)
+            old_fingerprint = (
+                None
+                if old is None
+                else config_fingerprint(plugin=old.manifest.name, config=old.config)
+            )
+            configured = old_fingerprint != config_fingerprint(
+                plugin=entry.manifest.name, config=entry.config
+            )
+            return PlanAction(
+                action=ActionKind.REPLACE,
+                reasons=(
+                    (
+                        ReasonCode.CONFIGURATION_CHANGED
+                        if configured
+                        else ReasonCode.IMPLEMENTATION_CHANGED
+                    ),
+                ),
+                generation_impact=GenerationImpact.NEW_GENERATION,
+                **common,
+            )
+        if existing is None:
+            # Never mounted: whatever its desired history, the composition gains
+            # it fresh.
+            return PlanAction(
+                action=ActionKind.ADD,
+                reasons=(ReasonCode.ENTRY_ADDED,),
+                generation_impact=GenerationImpact.NEW_GENERATION,
+                **common,
+            )
+        if will_reuse:
+            return PlanAction(
+                action=ActionKind.REUSE,
+                reasons=(ReasonCode.SEMANTIC_IDENTITY_UNCHANGED,),
+                expected_reuse=True,
+                instance_id=existing.instance_id,
+                **common,
+            )
+
+        reasons: list[ReasonCode] = []
+        cause_capability: str | None = None
+        cause_provider: str | None = None
+        if existing.entry_revision != entry.revision:
+            reasons.append(ReasonCode.REVISION_CHANGED)
+        previous = existing.semantic_identity
+        if previous is not None:
+            reasons.extend(
+                sorted(
+                    {
+                        INPUT_REASONS[name]
+                        for name in previous.changed_inputs(identity)
+                        if name in INPUT_REASONS
+                    },
+                    key=lambda reason: reason.value,
+                )
+            )
+            old_bindings = {binding.capability: binding for binding in previous.bindings}
+            for binding in identity.bindings:
+                old_binding = old_bindings.get(binding.capability)
+                if old_binding is None or old_binding.semantic_key() != binding.semantic_key():
+                    cause_capability = binding.capability
+                    cause_provider = binding.provider_entry_id
+                    break
+        if existing.state is not PluginState.ACTIVE:
+            reasons.append(ReasonCode.INSTANCE_INACTIVE)
+        return PlanAction(
+            action=ActionKind.REBUILD,
+            reasons=tuple(reasons),
+            cause_capability=cause_capability,
+            cause_provider=cause_provider,
+            generation_impact=GenerationImpact.NEW_GENERATION,
+            **common,
+        )
+
+    def _remove_action(self, entry_id: str, change: DesiredStateChange) -> PlanAction:
+        """An entry installed but no longer desired."""
+
+        entry = self._plugin_registry.entry(entry_id)
+        existing = self._plugin_registry.instance(entry_id)
+        active = existing is not None and existing.state is PluginState.ACTIVE
+        return PlanAction(
+            action=ActionKind.REMOVE,
+            reasons=(ReasonCode.ENTRY_REMOVED,),
+            entry_id=entry_id,
+            plugin=change.plugin if change.plugin is not None else change.entry_id,
+            scope="/" if entry is None else entry.scope,
+            instance_id=None if existing is None else existing.instance_id,
+            generation_impact=(
+                GenerationImpact.NEW_GENERATION if active else GenerationImpact.NONE
+            ),
+        )
+
+    def _reject_action(
+        self,
+        planned: PluginPlan,
+        entry: PluginEntry | None,
+        plan: ResolutionPlan,
+        preferences: Mapping[str, str],
+    ) -> PlanAction:
+        """An entry that cannot join the composition, with structured reasons."""
+
+        reasons: list[ReasonCode] = []
+        failures: list[ValidationFailure] = []
+        ambiguities: list[Ambiguity] = []
+        scope = planned.scope
+        consumer = planned.entry_id
+        for resolution in planned.requirements:
+            if resolution.status == "resolved":
+                continue
+            requirement = str(resolution.requirement)
+            if resolution.status == "ambiguous":
+                reasons.append(ReasonCode.REQUIREMENT_AMBIGUOUS)
+                candidates = tuple(
+                    dict.fromkeys(
+                        assessment.provider_entry_id
+                        for assessment in resolution.assessments
+                        if assessment.eligible and assessment.visible
+                    )
+                )
+                ambiguities.append(
+                    Ambiguity(
+                        consumer=consumer,
+                        capability=resolution.requirement.name,
+                        requirement=requirement,
+                        candidates=candidates,
+                        preference=preference_for(
+                            preferences, consumer, resolution.requirement.name, scope
+                        ),
+                    )
+                )
+                continue
+            if resolution.status == "provider_pending":
+                reasons.append(ReasonCode.PENDING_DEPENDENCY)
+            else:
+                reasons.append(ReasonCode.REQUIREMENT_UNSATISFIED)
+            failures.append(ValidationFailure(code=resolution.status, detail=requirement))
+
+        for cycle in plan.cycles:
+            if planned.entry_id in cycle:
+                reasons.append(ReasonCode.PLUGIN_CYCLE)
+                failures.append(
+                    ValidationFailure(code="plugin_cycle", detail=" -> ".join((*cycle, cycle[0])))
+                )
+
+        existing = self._plugin_registry.instance(planned.entry_id)
+        active = existing is not None and existing.state is PluginState.ACTIVE
+        return PlanAction(
+            action=ActionKind.REJECT,
+            reasons=tuple(dict.fromkeys(reasons)),
+            entry_id=planned.entry_id,
+            plugin=None if entry is None else entry.manifest.identity,
+            scope=scope,
+            config_keys=() if entry is None else tuple(sorted(entry.config)),
+            validation_failures=tuple(failures),
+            ambiguities=tuple(ambiguities),
+            generation_impact=(
+                GenerationImpact.NEW_GENERATION if active else GenerationImpact.NONE
+            ),
         )
 
     def entry(self, entry_id: str) -> PluginEntry | None:

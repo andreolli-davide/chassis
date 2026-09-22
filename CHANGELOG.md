@@ -9,6 +9,20 @@ that a minor release may break the documented surface.
 
 ### Added
 
+- **Stable machine-readable planning contract** (roadmap R030, new guarantee
+  G26). `chassis.planning` defines the versioned `PlanResult` document with a
+  closed action vocabulary (`add`, `remove`, `replace`, `reuse`, `rebuild`,
+  `publish`, `reject`, `no-op`), stable `ReasonCode`s, and per-action entry and
+  scope identity, configuration *keys* (never values), dependency/capability
+  cause, expected reuse and instance, generation impact, machine-readable
+  validation failures, and ambiguity/preference records. `Harness.preview()`
+  computes it with zero mutation — no revision bump, no dirty flag, no mount, no
+  publication, no setup or cleanup effect — over the full pipeline (parse,
+  migrate, validate, catalog-resolve, diff, resolve, reuse analysis, impact
+  prediction), for the current state or a declarative configuration. Deterministic
+  `to_dict()` declares `PLAN_FORMAT_VERSION`; preview parity with the subsequent
+  apply and preview purity are both tested (`tests/planning/`). Documented in
+  `docs/planning.md`.
 - **Deterministic lifecycle stress and opt-in soak coverage** (roadmap R029).
   `tests/concurrency/test_lifecycle_stress.py` runs bounded, seeded scenarios
   with real asyncio tasks — cancellation storms, replacement storms under
@@ -76,6 +90,15 @@ that a minor release may break the documented surface.
 
 ### Fixed
 
+- **A composition-identical reconcile no longer churns a generation** (found by
+  the roadmap R030 parity tests; present in every release with requirements).
+  The no-op comparison read resolution provenance object-wise, whose pre-mount
+  instance ids differ from post-mount ones, so the first re-reconcile after a
+  requirement resolved always published a spurious generation — violating the
+  documented "repeated reconciliation is a no-op". The comparison now uses
+  observable composition (`ScopeTree.same_observable_composition`: topology,
+  selection, and scope metadata), so revision metadata changes (which are
+  observable) still publish.
 - **Cancellation, draining, and shutdown hardened** (roadmap R029). A lifecycle
   audit found thirteen gaps; the material ones are closed. `stop()` is a
   barrier — every caller blocks until disposal finishes and observes its

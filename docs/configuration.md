@@ -113,6 +113,11 @@ desired state → diff → resolve → mount candidates → validate → publish
                                                     old generation drains
 ```
 
+The same decisions are available before applying anything, as stable
+structured data: `harness.preview(config)` computes the complete plan —
+including reuse, rebuild cascades, and generation impact — with zero mutation
+([planning.md](planning.md)).
+
 A failed candidate never becomes visible: the previously published generation stays
 current, and the candidate's effects are rolled back.
 

@@ -51,6 +51,7 @@ nav:
       - Writing a plugin: plugin-author-guide.md
       - LangGraph integration: langgraph.md
       - Configuration and reconciliation: configuration.md
+      - Planning and dry-run: planning.md
       - Observability and tracing: observability.md
       - Replay and evaluation: replay.md
   - Recipes: recipes.md

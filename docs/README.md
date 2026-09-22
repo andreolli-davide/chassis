@@ -27,6 +27,7 @@ below for task-oriented detail.
 | [security.md](security.md) | trust model, policy, secrets, and what Chassis is *not* |
 | [replay.md](replay.md) | record/replay boundaries and their explicit limitations |
 | [configuration.md](configuration.md) | declarative configuration, the catalog, reconciliation, drift |
+| [planning.md](planning.md) | the machine-readable planning contract and the zero-mutation preview |
 | [design.md](design.md) | guarantees, decisions, and deliberate absences |
 | [migration.md](migration.md) | every compatibility change from 0.1 through the current release and how to migrate |
 

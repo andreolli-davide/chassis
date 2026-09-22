@@ -36,6 +36,11 @@ changes to be aware of.
 
 ### Additive APIs
 
+- `chassis.planning` (`PlanResult`, `PlanAction`, `ActionKind`, `ReasonCode`,
+  `GenerationImpact`, `ValidationFailure`, `Ambiguity`) and `Harness.preview()`:
+  the zero-mutation machine-readable planning contract
+  ([planning.md](planning.md)). `ScopeTree.same_observable_composition()` is the
+  composition-identity comparison the no-op reconcile uses.
 - `chassis.compat` (`ChassisDeprecationWarning`, `deprecated`,
   `warn_deprecated`): typed deprecation machinery naming the API, replacement,
   deprecating version, and earliest removal version. Nothing is deprecated in
@@ -46,6 +51,10 @@ changes to be aware of.
 
 ### Lifecycle and shutdown behavior
 
+- A composition-identical reconcile is now genuinely a no-op: previously the
+  first re-reconcile after a requirement resolved churned a generation (the
+  comparison saw pre-mount resolution artifacts). Scope metadata changes — such
+  as an agent revision — remain observable and still publish a new generation.
 - `stop()` is now a barrier: every caller blocks until the shutdown finishes
   and observes its result (previously a second concurrent caller returned while
   disposal was still running). Cancelling one `stop()` caller no longer wedges

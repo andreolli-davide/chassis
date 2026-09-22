@@ -767,6 +767,21 @@ class ScopeTree:
             raise ConfigurationError("unknown composition scope in this generation", scope=path)
         return scope.visible.get(capability, ())
 
+    def same_observable_composition(self, other: ScopeTree) -> bool:
+        """Whether two trees are identical in everything a run can observe.
+
+        Scope topology and selection (the fingerprint) plus each scope's
+        metadata, which carries observable facts such as an agent revision.
+        Resolution provenance is deliberately excluded: its pre-mount instance
+        ids and assessment details record *how* resolution was computed, not
+        what the composition is, and comparing them would churn a generation for
+        an identical composition.
+        """
+
+        return self.fingerprint() == other.fingerprint() and [
+            (scope.path, dict(scope.metadata)) for scope in self
+        ] == [(scope.path, dict(scope.metadata)) for scope in other]
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "root": self.root,

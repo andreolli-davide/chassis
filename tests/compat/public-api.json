@@ -465,6 +465,29 @@
         "stability": "stable"
       }
     },
+    "chassis.planning": {
+      "ActionKind": {
+        "stability": "stable"
+      },
+      "Ambiguity": {
+        "stability": "stable"
+      },
+      "GenerationImpact": {
+        "stability": "stable"
+      },
+      "PlanAction": {
+        "stability": "stable"
+      },
+      "PlanResult": {
+        "stability": "stable"
+      },
+      "ReasonCode": {
+        "stability": "stable"
+      },
+      "ValidationFailure": {
+        "stability": "stable"
+      }
+    },
     "chassis.policy": {
       "AllowAllPolicy": {
         "stability": "stable"
