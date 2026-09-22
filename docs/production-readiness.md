@@ -21,7 +21,7 @@ last planned opportunity for deliberate pre-1.0 compatibility changes.
 
 Every item is **complete** with direct regression coverage, documentation,
 changelog entries, and migration notes (see the
-[roadmap](roadmap.md#090--production-confidence)):
+[roadmap](roadmap.md#090-production-confidence)):
 
 | Item | Delivered |
 | --- | --- |
@@ -102,7 +102,7 @@ resolution:
 
 | Gate | Command | Result |
 | --- | --- | --- |
-| Full suite, Python 3.12 | `uv run pytest` | pass (885 tests) |
+| Full suite, Python 3.12 | `uv run pytest` | pass (full collected suite) |
 | Full suite, Python 3.13 | `uv run --python 3.13 pytest` | pass |
 | Branch coverage and focused floors | `pytest --cov=src/chassis --cov-branch` + `scripts/coverage_gate.py` | pass (global 91.6%, every floor met) |
 | Ruff lint / format | `uv run ruff check .` / `uv run ruff format --check .` | pass |

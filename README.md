@@ -174,7 +174,8 @@ what Chassis refuses to promise.
 
 ## Status
 
-Pre-1.0 Beta (`0.9.0`) — production confidence. The surface covered by
+Pre-1.0 Beta (`0.9.1`) — production confidence with pre-1.0 documentation and
+release-plan hardening. The surface covered by
 `tests/test_public_api.py` is classified and baselined
 ([compatibility](docs/compatibility.md)); a minor release may still break it
 until 1.0, and every break is recorded in [CHANGELOG.md](CHANGELOG.md).
@@ -240,8 +241,9 @@ suite runs all of them.
   hot provider swaps, budgets, durable runs.
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) — symptom, cause, and the exact
   diagnostics output for each.
-- [`docs/roadmap.md`](docs/roadmap.md) — the ordered 0.5.1–0.9.0 audit-remediation and
-  production-confidence plan, with acceptance criteria, release gates, and traceability.
+- [`docs/roadmap.md`](docs/roadmap.md) — the ordered 0.5.1–1.0 audit-remediation,
+  production-confidence, and stable-release plan, with acceptance criteria, release gates,
+  and traceability.
 - [`docs/migration.md`](docs/migration.md) — every compatibility change from 0.1 through
   0.8 → 0.9 and how to migrate.
 - [`docs/agent-composition.md`](docs/agent-composition.md) — `AgentSpec`, immutable agent

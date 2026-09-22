@@ -7,6 +7,30 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-22
+
+Pre-1.0 documentation and release-plan hardening. This patch changes no runtime
+API or persisted format and requires no migration.
+
+### Fixed
+
+- **Internal documentation anchors are now verified** (roadmap R035).
+  `tests/test_docs_links.py` validates local Markdown fragments against the
+  headings MkDocs generates, closing the gap where file-only link checks and
+  `unrecognized_links: warn` let a broken production-readiness roadmap link pass
+  the strict documentation build. The broken 0.9.0 roadmap anchor is corrected.
+- **Release records are internally consistent.** The stale hard-coded test count
+  is removed from the production-readiness validation record, and the
+  intentionally unused R033 identifier is documented instead of appearing to be
+  missing work.
+
+### Documentation
+
+- **The 1.0.0 milestone is specified with auditable gates** (roadmap R036): a
+  permanent 1.0 API and persisted-format baseline, full release-workflow parity,
+  versioned documentation, post-publication package canaries, supported-Python
+  verification, and explicit release governance.
+
 ## [0.9.0] - 2026-09-22
 
 Production confidence: compatibility, operability, resilience, and scale. The

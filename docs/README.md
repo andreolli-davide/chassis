@@ -2,9 +2,9 @@
 
 Rendered at **https://andreolli-davide.github.io/chassis/**.
 
-Current release: **0.9.0**. Install it from
-[PyPI](https://pypi.org/project/chassis-harness/0.9.0/) or inspect the
-[GitHub Release](https://github.com/andreolli-davide/chassis/releases/tag/v0.9.0).
+Current release: **0.9.1**. Install it from
+[PyPI](https://pypi.org/project/chassis-harness/0.9.1/) or inspect the
+[GitHub Release](https://github.com/andreolli-davide/chassis/releases/tag/v0.9.1).
 
 New here? Start with [getting-started.md](getting-started.md), then use the guides
 below for task-oriented detail.
@@ -22,7 +22,7 @@ below for task-oriented detail.
 | [recipes.md](recipes.md) | behind a web service, per-tenant composition, hot provider swap, budgets, durability |
 | [troubleshooting.md](troubleshooting.md) | symptom → cause → fix, with the exact diagnostics output |
 | [performance.md](performance.md) | benchmark methodology, the 0.9.0 baseline, capacity, and known scaling limits |
-| [roadmap.md](roadmap.md) | ordered 0.5.1–0.9.0 audit remediation, acceptance criteria, release gates, and finding traceability |
+| [roadmap.md](roadmap.md) | ordered 0.5.1–1.0 plan, acceptance criteria, release gates, and finding traceability |
 | [compatibility.md](compatibility.md) | surface classes, the API baseline and compatibility check, deprecations, persisted format versions |
 | [production-readiness.md](production-readiness.md) | the 0.9.0 compatibility and operational review: domains, validation matrix, audit resolutions, limitations |
 | [observability.md](observability.md) | tracing, snapshots, canonical hashing, redaction, evaluation |

@@ -35,6 +35,7 @@ security and runtime-lifetime invariants are restored.
 | **0.7.0** | Data-plane consistency | Give invoke, stream, replay, hooks, budgets, and telemetry one coherent execution contract |
 | **0.8.0** | Beta-readiness hardening | Remove API sharp edges and add the compatibility, coverage, packaging, and supply-chain gates needed for Beta |
 | **0.9.0** | Production confidence | Compatibility, operability, resilience, and scale: an explicit compatibility contract, versioned persisted formats, hardened lifecycle behavior, stable planning and telemetry contracts, measured capacity, and a production reference application |
+| **0.9.1** | Pre-1.0 release-plan hardening | Close documentation-verification gaps and turn the 1.0 intent into auditable work with release gates |
 | **1.0.0** | Stable surface and release governance | Freeze the 1.0 public API and format baselines; versioned documentation hosting, post-publication PyPI smoke tests, and tag-protection and release-governance automation |
 
 0.9.0 is the production-confidence release and the last planned opportunity for
@@ -822,6 +823,11 @@ Non-goals:
   optimization without a measured bottleneck, and no trading of correctness,
   immutability, redaction, or deterministic ordering for benchmark gains.
 
+!!! note "Why there is no R033"
+    R033 was never assigned. The identifier remains unused rather than renumbering
+    R034 after 0.9.0 shipped: roadmap identifiers appear in the changelog, release
+    review, tests, and commit history and are therefore stable audit references.
+
 ### R034 — build a production reference application
 
 **Severity:** Low. **Affected guarantees:** the documented public workflow;
@@ -909,6 +915,167 @@ documentation system is introduced.
 | Documented benchmark command | `uv run python scripts/benchmark.py` (opt-in) |
 | Compatibility tests against sanitized 0.8.1 fixtures | `uv run pytest tests/test_format_compat.py tests/test_api_compat.py` |
 
+## 0.9.1 — pre-1.0 documentation and release-plan hardening
+
+**Status: complete.** This patch release changes no runtime API or persisted
+format. It closes the documentation-verification gap found after 0.9.0 and makes
+the already announced 1.0 milestone concrete before implementation begins.
+
+### R035 — verify internal documentation anchors
+
+**Severity:** Low. **Affected guarantees:** the documented public workflow.
+
+- Extend the source-tree documentation test from file existence to local
+  Markdown-fragment resolution.
+- Use the same implicit-heading normalization as MkDocs/Python-Markdown,
+  including duplicate heading suffixes and explicit ids.
+- Correct the broken production-readiness link to the 0.9.0 roadmap milestone.
+- Keep external URLs out of scope; their availability is not reproducible in the
+  offline test suite.
+
+Acceptance criteria:
+
+- Renaming or misspelling a linked heading makes `tests/test_docs_links.py` fail.
+- Every local anchor in README, CHANGELOG, CONTRIBUTING, SECURITY, and `docs/`
+  resolves.
+- `mkdocs build --strict` completes without a broken-link diagnostic.
+
+### R036 — specify the 1.0 release contract
+
+**Severity:** Release governance.
+
+- Add an ordered 1.0 milestone with explicit compatibility, publishing,
+  documentation, support-matrix, and governance deliverables.
+- Preserve R034 as a stable historical identifier and document that R033 was
+  never assigned rather than rewriting released audit references.
+- State which gates are repository automation and which require GitHub/PyPI
+  repository settings, with evidence recorded in the 1.0 release review.
+
+Acceptance criteria:
+
+- Every 1.0 deliverable below has a stable roadmap id and a measurable exit
+  criterion.
+- The release sequence, deferred-work record, README status, changelog, and
+  roadmap agree about the next milestone.
+- The package version and release documentation identify 0.9.1 consistently.
+
+### 0.9.1 validation matrix
+
+| Gate | Command |
+| --- | --- |
+| Full suite | `uv run pytest` |
+| Documentation links and anchors | `uv run pytest tests/test_docs_links.py` |
+| Ruff lint and format | `uv run ruff check .` / `uv run ruff format --check .` |
+| Pyright strict | `uv run pyright` |
+| MkDocs strict build | `uv run mkdocs build --strict` |
+| API compatibility | `uv run python scripts/api_compat.py check tests/compat/api-baseline-0.8.1.json` |
+
+## 1.0.0 — stable surface and release governance
+
+**Status: planned.** 1.0 freezes the reviewed runtime contract rather than adding
+a new execution framework. Feature work that does not directly establish the
+stable surface or its release safety moves to a later minor release.
+
+### R037 — freeze the 1.0 API and persisted-format baselines
+
+**Severity:** High. **Affected guarantees:** G25 and the documented public
+surface.
+
+- Review every stable public export and signature one final time; remove only an
+  API deprecated during the documented 0.9.x window.
+- Generate and check in an API baseline from the final 1.0.0 implementation.
+- Declare the first permanent baseline for snapshot, replay, planning,
+  configuration, reconciliation, and diagnostics formats.
+- Prove 1.0 reads every format version still inside the two-minor support horizon
+  and rejects unsupported input with the existing typed reason codes.
+- Publish a 0.9 → 1.0 migration section, including an explicit “no action” entry
+  for users unaffected by any deprecation.
+
+Acceptance criteria:
+
+- The compatibility checker passes against the 1.0 release candidate and a test
+  proves an incompatible mutation fails it.
+- Every documented persisted format has a permanent 1.0 baseline fixture and a
+  round-trip or migration test.
+- No stable API is removed without satisfying the documented deprecation window.
+
+### R038 — make the publication workflow enforce the full release matrix
+
+**Severity:** High. **Affected guarantees:** release provenance and artifact
+quality.
+
+- Refactor CI gates into reusable workflows or jobs so a tag cannot publish after
+  running only a subset of the main-branch matrix.
+- Require tests on every supported Python, branch/focused coverage, Ruff,
+  Pyright, strict documentation, minimum/latest dependencies, vulnerability
+  audit, wheel and sdist smokes, every optional extra, API/format compatibility,
+  and the production reference application before publication.
+- Build distributions once, verify those exact bytes, and promote the same
+  artifacts to PyPI and GitHub Releases with SBOM and provenance.
+- Keep the dry-run path capable of exercising the complete workflow without
+  publishing.
+
+Acceptance criteria:
+
+- Deliberately failing any required gate prevents the publish job from becoming
+  runnable.
+- The artifacts attached to the GitHub Release are byte-identical to the files
+  published to PyPI.
+- A workflow dry run exercises every pre-publication gate.
+
+### R039 — version documentation and verify the published package
+
+**Severity:** Medium. **Affected guarantees:** the documented public workflow.
+
+- Publish immutable documentation for `/1.0/` and a movable `/latest/` alias;
+  main-branch documentation must not overwrite the released 1.0 site.
+- After PyPI publication, create a clean environment, install
+  `chassis-harness==1.0.0` from the public index, and run the quickstart and
+  production reference application against the downloaded wheel.
+- Check the published project metadata, version, extras, SBOM, provenance, docs,
+  and GitHub Release links.
+- Record a typed, actionable failure when index propagation exceeds the retry
+  window; never silently treat an unverified publication as complete.
+
+Acceptance criteria:
+
+- Both versioned and latest documentation URLs serve the released tag.
+- The post-publication canary imports no source-tree code and completes from a
+  clean environment.
+- Release notes link to immutable versioned documentation.
+
+### R040 — declare and exercise the 1.0 support policy
+
+**Severity:** Medium. **Affected guarantees:** compatibility and operations.
+
+- Decide the supported Python versions at release-candidate time, list them in
+  package classifiers and documentation, and test each one.
+- Change the package development-status classifier only after the entire 1.0
+  matrix passes.
+- Configure protected tags and required checks for the release path; document
+  the GitHub/PyPI environment settings that cannot live in the repository.
+- Define security and bug-fix support for the 1.0 line, including who may approve
+  a release and the rollback/yank procedure for a bad publication.
+- Capture repository-setting evidence in a 1.0 release review without committing
+  credentials or sensitive identifiers.
+
+Acceptance criteria:
+
+- Package metadata, CI, README, compatibility policy, and security policy list
+  the same supported versions and support horizon.
+- An unprotected or mismatched tag cannot publish.
+- The 1.0 release review records every external governance control as verified or
+  blocks the release.
+
+### 1.0.0 exit criteria
+
+- R037–R040 are complete with tests, documentation, and release-review evidence.
+- The 1.0 API and persisted-format baselines are checked in and green.
+- The full publication matrix verifies the exact artifacts that are promoted.
+- Versioned documentation and the post-PyPI canary succeed from the released tag.
+- Protected-tag, trusted-publishing, approval, and rollback controls are verified.
+- The package advertises stable status only after every preceding gate passes.
+
 ## Traceability to the 0.5.0 audit
 
 The table ensures every audit finding has a destination. A row may map to more than
@@ -974,4 +1141,3 @@ one item where a cross-cutting fix is required.
    verification, and the release-specific gates pass.
 7. The traceability row is marked complete in the release pull request; it is not
    removed from this document, so the repair history remains auditable.
-
