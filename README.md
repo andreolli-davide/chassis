@@ -173,10 +173,11 @@ what Chassis refuses to promise.
 
 ## Status
 
-Pre-1.0 (`0.7.0`). The surface covered by `tests/test_public_api.py` may break in a
+Pre-1.0 Beta (`0.8.0`). The surface covered by `tests/test_public_api.py` may break in a
 minor release; every break is recorded in [CHANGELOG.md](CHANGELOG.md), and
 [migrations](docs/migration.md) lists the 0.1 → 0.2, 0.2 → 0.3, 0.3 → 0.4,
-0.4 → 0.5, 0.5 → 0.5.1, 0.5.1 → 0.6, and 0.6 → 0.7 changes.
+0.4 → 0.5, 0.5 → 0.5.1, 0.5.1 → 0.6, 0.6 → 0.7, and 0.7 → 0.8 changes. The Beta
+readiness review is recorded in [beta-readiness.md](docs/beta-readiness.md).
 
 ## Development
 

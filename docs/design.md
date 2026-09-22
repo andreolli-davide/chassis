@@ -3,15 +3,14 @@
 This page states what Chassis promises. It is short on purpose: every guarantee
 below is enforced by tests, and the tests are the specification of record.
 
-!!! warning "Known 0.5.0 audit gaps"
-    A repository audit found reproducible gaps in the enforcement of G3,
-    G4, G6, G11, G16, G23, and G24 in version 0.5.0. These guarantees remain the
-    target contracts, but must not be treated as fully established by version
-    0.5.0. The ordered fixes, regression requirements, and release gates are
-    tracked in the [release roadmap](roadmap.md). Version 0.5.1 closed the G3,
-    G6, and G11 gaps (R001–R005), 0.6.0 closed the remaining known gaps (G4,
-    G16, G23, G24, via R006–R012), and 0.7.0 unified the data plane (R013–R020);
-    the 0.8.0 roadmap work hardens the release gates.
+!!! note "The 0.5.0 audit is fully remediated"
+    A repository audit found reproducible gaps in the enforcement of G3, G4,
+    G6, G11, G16, G23, and G24 in version 0.5.0. Version 0.5.1 closed G3, G6,
+    and G11 (R001–R005), 0.6.0 closed G4, G16, G23, and G24 (R006–R012), 0.7.0
+    unified the data plane (R013–R020), and 0.8.0 completed the release gates
+    and the Beta readiness review (R021–R026) — see the
+    [release roadmap](roadmap.md) for the auditable history and
+    [beta-readiness](beta-readiness.md) for the release-candidate review.
 
 ## The proposition
 
