@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from chassis.core.collections import FrozenDict
+from chassis.core.collections import freeze
 
 __all__ = ["HarnessConfig", "PluginEntryConfig"]
 
@@ -51,12 +51,14 @@ class PluginEntryConfig(BaseModel):
     @model_validator(mode="after")
     def _freeze_configuration(self) -> PluginEntryConfig:
         # A frozen model blocks attribute assignment but not mutation of the
-        # containers it holds; desired state must be immutable in both senses.
+        # containers it holds; desired state must be immutable in both senses,
+        # so every stored container is deep-frozen and copied: no nested
+        # structure stays mutable or aliases the caller's input.
         declared = self.config.get("config_version")
         if declared is not None and (not isinstance(declared, int) or declared < 0):
             raise ValueError("config_version must be a non-negative integer")
-        object.__setattr__(self, "config", FrozenDict(self.config))
-        object.__setattr__(self, "provider_preference", FrozenDict(self.provider_preference))
+        object.__setattr__(self, "config", freeze(self.config))
+        object.__setattr__(self, "provider_preference", freeze(self.provider_preference))
         return self
 
     @property
@@ -94,7 +96,7 @@ class HarnessConfig(BaseModel):
 
     @model_validator(mode="after")
     def _freeze_preferences(self) -> HarnessConfig:
-        object.__setattr__(self, "provider_preferences", FrozenDict(self.provider_preferences))
+        object.__setattr__(self, "provider_preferences", freeze(self.provider_preferences))
         return self
 
     @field_validator("plugins")
