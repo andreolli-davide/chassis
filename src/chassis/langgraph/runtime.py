@@ -87,13 +87,17 @@ class LangGraphAgent:
 
         An explicitly requested backend or redactor is a documented override and
         stays; anything defaulted at construction binds to the harness so an
-        agent never runs with disconnected observability or redaction.
+        agent never runs with disconnected observability or redaction. The graph
+        cache follows the same rule through its own rebinding hook, so
+        ``graph.cache`` signals stay attached to the telemetry the agent runs
+        with instead of its ``NoopTelemetry`` default.
         """
 
         if not self._telemetry_explicit:
             self._telemetry = telemetry
         if not self._redactor_explicit:
             self._redactor = redactor
+        self._cache.bind_telemetry(self._telemetry)
 
     @property
     def name(self) -> str:

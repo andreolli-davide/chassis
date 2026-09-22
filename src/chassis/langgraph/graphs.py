@@ -195,8 +195,20 @@ class GraphCache:
         self._entries: OrderedDict[str, CompiledStateGraph[Any, Any, Any, Any]] = OrderedDict()
         self._keys: dict[str, GraphCacheKey] = {}
         self._max_entries = max_entries
+        self._telemetry_explicit = telemetry is not None
         self._telemetry = telemetry if telemetry is not None else NoopTelemetry()
         self.stats = GraphCacheStats()
+
+    def bind_telemetry(self, telemetry: Telemetry) -> None:
+        """Adopt the owning agent's telemetry for cache signals.
+
+        An explicitly requested backend is a documented override and stays; a
+        defaulted one follows the agent's wiring, so ``graph.cache`` signals are
+        never disconnected from the observability the agent runs with.
+        """
+
+        if not self._telemetry_explicit:
+            self._telemetry = telemetry
 
     def __len__(self) -> int:
         return len(self._entries)
