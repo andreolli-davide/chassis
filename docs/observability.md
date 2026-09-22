@@ -136,7 +136,7 @@ snapshot.physical_digest()   # runtime instance ids
 
 ```json
 {
-  "chassis_version": "0.5.1",
+  "chassis_version": "0.6.0",
   "generation_id": "gen_0004",
   "sequence": 4,
   "agent_runtime": "langgraph",
