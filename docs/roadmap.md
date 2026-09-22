@@ -22,7 +22,9 @@ security and runtime-lifetime invariants are restored.
   documentation, changelog, and migration notes (when needed) land together.
 - G1–G24 remain the intended contracts. The audit gaps affecting G3, G4, G6,
   G11, G16, G23, and G24 are tracked below and must not be treated as verified
-  properties of 0.5.0.
+  properties of 0.5.0. 0.9.0 extends the table with G25–G27 for the preview,
+  persisted-format, and telemetry-signal contracts; every guarantee keeps a real
+  collected test node.
 
 ## Release sequence
 
@@ -32,6 +34,15 @@ security and runtime-lifetime invariants are restored.
 | **0.6.0** | Transactional composition | Make publication, replacement, visibility, and immutable state correct across live generations |
 | **0.7.0** | Data-plane consistency | Give invoke, stream, replay, hooks, budgets, and telemetry one coherent execution contract |
 | **0.8.0** | Beta-readiness hardening | Remove API sharp edges and add the compatibility, coverage, packaging, and supply-chain gates needed for Beta |
+| **0.9.0** | Production confidence | Compatibility, operability, resilience, and scale: an explicit compatibility contract, versioned persisted formats, hardened lifecycle behavior, stable planning and telemetry contracts, measured capacity, and a production reference application |
+| **1.0.0** | Stable surface and release governance | Freeze the 1.0 public API and format baselines; versioned documentation hosting, post-publication PyPI smoke tests, and tag-protection and release-governance automation |
+
+0.9.0 is the production-confidence release and the last planned opportunity for
+deliberate pre-1.0 compatibility changes. Release *publication* work is
+deliberately deferred to 1.0.0: versioned documentation hosting,
+post-publication PyPI smoke tests, tag-protection and release-governance
+automation, and further GitHub Release, PyPI, SBOM, provenance, or publishing
+workflow changes are out of scope for this milestone.
 
 No release after 0.5.0 should introduce new runtime surface before the 0.5.1
 exit criteria are satisfied. Work may be developed in parallel, but the releases
@@ -446,6 +457,452 @@ actually meets every gate.
 - Minimum/latest dependency, wheel, sdist, core, and optional-extra jobs pass.
 - Dependency scanning has no untriaged applicable vulnerability.
 - The release candidate passes a fresh audit and has complete migration notes.
+
+## 0.9.0 — production confidence
+
+This milestone makes existing Chassis behavior explicitly versioned,
+backward-compatible where promised, diagnosable, safe under cancellation and
+prolonged concurrency, measurable at realistic scale, and supported by a
+complete reference application. It is deliberately not a feature release: the
+runtime-composition architecture and the G1–G24 guarantees are preserved
+unchanged, and every new contract extends them rather than replacing them.
+
+Three contracts are added to the guarantee table:
+
+- **G25** — a preview computes a complete plan — parsing, migration, validation,
+  catalog resolution, and resolution — without mutating any authoritative state.
+- **G26** — every persisted Chassis format carries an explicit format version;
+  future, malformed, or corrupted payloads are rejected with typed
+  machine-readable errors and their meaning is never guessed.
+- **G27** — operational telemetry follows one documented signal contract with
+  stable names, required correlation attributes, bounded cardinality, and no
+  secret material in any signal.
+
+### R027 — define the compatibility and deprecation contract
+
+**Severity:** Medium. **Affected guarantees:** the documented public surface
+(`docs/design.md` "What is public API"), G26.
+
+*Motivation.* 0.9.0 is the final planned opportunity for deliberate pre-1.0
+compatibility changes, so the surface must be classified before 1.0 freezes it.
+Today the public API is pinned by name only (`tests/test_public_api.py`): a
+signature change, an enum value change, or a moved class is invisible to CI, and
+there is no typed way to retire an API.
+
+Required behavior:
+
+- Classify every documented import path and top-level export as **stable public
+  API**, **provisional/experimental API**, **internal implementation API**, or
+  **persisted/externally serialized format**. The source of truth is the
+  documented surface: no internal module is exported to make tooling easier, and
+  no incidental importable object becomes public.
+- Add a machine-readable API baseline describing the 0.8.1 surface (names,
+  callable signatures, enum values, public dataclass/Pydantic fields, stability
+  class) in a form a test can diff deterministically.
+- Add a compatibility check — runnable in CI and locally — that reports removed
+  public names, moved public names (gone from one documented module, present in
+  another), incompatible callable signatures, changed enum values, and changed
+  public dataclass or model fields.
+- Add a typed `ChassisDeprecationWarning` and one small consistent
+  helper/deprecated decorator. Every warning names the deprecated API, its
+  replacement, the version that deprecated it, and the earliest version that may
+  remove it.
+- Extend the public API tests so accidental additions *and* removals against the
+  baseline stay detectable.
+- Document the compatibility policy and the intended 1.0 deprecation window in
+  [compatibility.md](compatibility.md).
+
+Acceptance criteria:
+
+- `python scripts/api_compat.py` exits non-zero on any incompatible change and
+  prints a machine-readable, deterministic report.
+- The baseline is regenerated only by an explicit, documented command.
+- Deprecation warnings carry the four required facts, use the typed category,
+  and point at the caller's frame.
+- No new public name is added without a stability classification.
+
+Regression tests:
+
+- `tests/test_api_compat.py` — baseline diffing: removed, moved, signature,
+  enum, and field changes are each detected; unchanged surface passes.
+- `tests/test_deprecation.py` — warning content, category, stack level,
+  replacement guidance, decorator behavior on functions, methods, and classes.
+
+Non-goals:
+
+- No runtime introspection of *callers*, no telemetry on deprecated usage, and
+  no automatic aliasing of moved names (a move is a migration note plus a
+  deprecation warning, not a shim).
+- Nothing is actually removed in 0.9.0; the deprecation machinery exists so that
+  1.0 can freeze a clean surface.
+
+### R028 — version and migrate persisted formats
+
+**Severity:** High. **Affected guarantees:** G11, G26.
+
+*Motivation.* Runtime snapshots, replay recordings, and configuration documents
+are written across process, test-run, deployment, and package-version
+boundaries, but none of them declares a serialization format version: a future
+release could silently misread an old payload, and an older release could
+silently misread a newer one. Misread persisted data is wrong attribution — a
+run explained by the wrong generation — which is a correctness failure, not a
+cosmetic one.
+
+Required behavior:
+
+- Inventory every format that crosses a boundary. The audited set is: runtime
+  snapshot records (`RuntimeSnapshot`), replay recordings (`ReplayRecord` /
+  `ReplaySession`), declarative configuration documents (`HarnessConfig`), and
+  the reconciliation, planning, and diagnostics export documents. In-process
+  diagnostic views that are never written out are documented as such and stay
+  unversioned.
+- Give each format family its own integer format version — never the package
+  version — and include it in serialized output. Configuration keeps its
+  existing schema `version: 1` and its explicit migration dispatcher.
+- Provide explicit readers or a migration dispatcher per format
+  (`RuntimeSnapshot.from_dict`, `ReplaySession.from_dict`/`load`, and readers
+  for the exported documents) that dispatch on the declared version.
+- Reject, with structured Chassis exceptions carrying machine-readable reasons
+  (`future_version`, `malformed_version`, `corrupted`, `unmigratable`):
+  unsupported future versions, malformed version values, corrupted payloads,
+  and payloads that cannot be migrated safely. Unknown fields and versions are
+  never silently reinterpreted.
+- Preserve semantic attribution across migration: generation identity and
+  sequence, agent identity and revision, capability versions, replay boundary
+  kind and key, redaction status, and tool/model result semantics.
+- Produce sanitized fixtures from the released 0.8.1 implementation — obtained
+  from the `v0.8.1` tag or an installed 0.8.1 distribution, never generated by
+  the new implementation — containing no secrets and no machine-specific data,
+  and prove 0.9.0 reads or explicitly migrates every one of them.
+
+Acceptance criteria:
+
+- Every serialized document carries its format version, and a v1 document
+  round-trips exactly (`to_dict` → reader → `to_dict` equality).
+- The 0.8.1 fixtures load successfully and their preserved attribution is
+  asserted field by field.
+- Future, malformed, corrupted, and unmigratable inputs raise the documented
+  typed error with the documented reason code.
+- The documentation states what remains backward-readable, what is migrated,
+  what cannot be migrated, and the support horizon for persisted formats.
+
+Regression tests:
+
+- `tests/test_format_versions.py` — round-trip, future-version rejection,
+  malformed-version rejection, corrupted-payload rejection, migration-chain
+  dispatch.
+- `tests/test_format_compat.py` — the sanitized 0.8.1 fixtures load and
+  preserve attribution.
+
+Non-goals:
+
+- No generic schema framework and no on-disk database; formats stay plain
+  JSON-compatible documents with explicit per-format readers.
+- The semantic scope tree was not persisted by 0.8.1 and cannot be recovered
+  exactly from an 0.8.1 snapshot; the migration reconstructs what the recorded
+  topology determines and says so instead of guessing provider identity.
+
+### R029 — harden long-running lifecycle behavior
+
+**Severity:** High. **Affected guarantees:** G1, G2, G5, G6, G7, G13, G22.
+
+*Motivation.* The lifecycle invariants are proven for ordinary transitions, but
+production sees cancellation in the middle of every boundary, shutdown while
+resources are still held, replacement storms against leased generations, and
+runs that never finish. Any of these can leak a scope, underflow a lease
+account, or produce a false "clean shutdown" report while work is still running.
+
+Required behavior — audit and strengthen cancellation during plugin setup,
+plugin cleanup, synchronous and asynchronous context entry, hook dispatch, tool
+execution, agent invoke, agent streaming, generation publication, and
+generation draining; and shutdown while runs hold leases, a replacement is being
+reconciled, a stream is partially consumed, cleanup is already failing, or a
+task ignores cancellation. The outcomes must hold in every scenario:
+
+- no lease underflow and no accounting change for unknown or duplicate release;
+- no early disposal of any reachable instance and no leaked scope ownership;
+- no hidden background tasks: every task is owned and observed;
+- no false "clean shutdown" report while work remains (`fully_disposed`,
+  `stragglers`, and the shutdown report must say so);
+- no loss of the original failure when rollback also fails (the original error
+  stays the documented cause);
+- deterministic terminal states;
+- structured diagnostics for anything that cannot drain or terminate.
+
+Add resource counters/diagnostics that prove resources return to baseline
+(owned effects, tasks, scopes, instances, leases, live generations), bounded
+deterministic stress tests with real asyncio tasks for the normal suite, and
+longer opt-in soak coverage excluded from the default fast suite.
+
+Acceptance criteria:
+
+- Every listed scenario has a real-task regression; mocked state transitions
+  alone are not evidence.
+- A stress run ends with resource counters at their pre-run baseline and
+  deterministic terminal states; violations name the leaked resource.
+- Shutdown with an un-stoppable task reports `fully_disposed: False` and the
+  straggler instead of a clean result.
+- A rollback failure never masks the failure that triggered it.
+
+Regression tests:
+
+- `tests/concurrency/test_lifecycle_stress.py` — bounded deterministic stress
+  over cancellation, replacement, and shutdown races with real tasks.
+- `tests/concurrency/test_resource_accounting.py` — counters return to baseline.
+- `scripts/soak.py` — opt-in long-running soak, documented, excluded from the
+  default suite.
+
+Non-goals:
+
+- No distributed scheduler, no forcibly killing trusted Python code, and no
+  wall-clock guarantee over code that ignores cancellation: Chassis reports what
+  it cannot stop.
+
+### R030 — create a stable machine-readable planning contract
+
+**Severity:** Medium. **Affected guarantees:** G17, G20, G25.
+
+*Motivation.* `Harness.plan()`, configuration diffing, resolver explanations,
+impact analysis, and diagnostics already answer "what would change and why", but
+as prose-carrying objects with no stable machine contract. CI and deployment
+tooling cannot gate on them, and there is no preview that provably mutates
+nothing.
+
+Required behavior:
+
+- Define a versioned planning result with stable structured fields and
+  deterministic `to_dict()`/JSON output.
+- Represent actions `add`, `remove`, `replace`, `reuse`, `rebuild`, `publish`,
+  `reject`, and `no-op`, each with stable reason codes rather than parsed prose,
+  and include: affected entry or registration identity, affected scope,
+  dependency or capability cause, expected reuse, expected generation impact,
+  validation failures, and ambiguity and preference information.
+- Add a dry-run/preview API that performs full parsing, migration, validation,
+  catalog resolution, and planning while performing zero mutation: no revision
+  bump, no dirty flag, no mounted plugins, no published generation, and no
+  setup or cleanup effect.
+- Represent sensitive configuration by key or redacted value only.
+- Cover planning, explain, diff, reconciliation, and generation-impact
+  information — the preview is the union of what an operator needs before an
+  apply.
+
+Acceptance criteria:
+
+- Preview output is deterministic and byte-identical across repeated calls on
+  unchanged state.
+- A test compares preview output with the subsequent real apply and shows the
+  same decisions.
+- A test proves every authoritative state object (registries, revisions, dirty
+  flag, generation manager, scopes) is unchanged by preview.
+- The contract is documented for CI, deployment tooling, and operator review.
+
+Regression tests:
+
+- `tests/planning/test_plan_contract.py` — action/reason-code schema, versioned
+  and deterministic output, sensitive-value redaction.
+- `tests/planning/test_preview_purity.py` — zero-mutation proof over every
+  authoritative state object.
+- `tests/planning/test_preview_parity.py` — preview decisions match apply
+  results.
+
+Non-goals:
+
+- No CLI framework: the contract is a library API. A thin script is acceptable
+  only if repository evidence shows a CLI is necessary, and it must call the
+  same library API.
+
+### R031 — define operational telemetry and add OpenTelemetry support
+
+**Severity:** Medium. **Affected guarantees:** G11, G27.
+
+*Motivation.* Chassis emits spans and events across the control and data planes,
+but their names and attributes are implicit. A second backend cannot be added
+safely until the signal contract is stable, and operators cannot alert on names
+that might change.
+
+Phase 1 — signal contract:
+
+- Inventory every existing span, event, and metric-like counter and define
+  stable names with required attributes for: reconcile start/result/failure;
+  candidate publication; generation creation, acquisition, release, draining,
+  and retirement; plugin setup and cleanup; tool execution; agent invoke and
+  stream; policy decisions; replay hit, miss, and exhaustion; graph cache hit,
+  miss, and eviction; budget exhaustion; and cleanup and telemetry-backend
+  failures.
+- Define correlation fields — run id, thread id, generation id, snapshot
+  digest, agent and revision, plugin entry and instance id, tool registration
+  id, scope — as required or optional attributes per signal.
+- Document attribute cardinality and forbid unbounded raw payloads in signals.
+- Ensure secret and sensitive-key values cannot enter any signal, and test the
+  signal contract independently of any backend SDK.
+
+Phase 2 — OpenTelemetry adapter:
+
+- Add OpenTelemetry as an optional integration behind a clearly named optional
+  extra, never a core dependency, with documented installation.
+- Implement it against the existing `Telemetry` protocol, preserving explicit
+  backend overrides and `SafeTelemetry`/`RedactingTelemetry` isolation, mapping
+  Chassis spans and events to OpenTelemetry without changing runtime semantics.
+- Keep backend failures isolated, and test with an in-memory exporter: exported
+  span names against the signal contract, parent/child relationships,
+  correlation attributes, and redaction before export.
+- Do not replace LangSmith: OpenTelemetry and LangSmith remain separate adapters
+  over the same core signal contract.
+
+Acceptance criteria:
+
+- A contract test asserts every emitted signal matches the declared name,
+  required attributes, and cardinality rules using the in-repo recording
+  backend only.
+- The adapter exports the same signal names and passes the same contract test
+  through an in-memory exporter, with secrets absent from exported attributes.
+- Observability documentation carries a complete setup example.
+
+Regression tests:
+
+- `tests/telemetry/test_signal_contract.py` — names, required attributes,
+  cardinality, redaction, backend independence.
+- `tests/telemetry/test_otel_adapter.py` — in-memory exporter span tree,
+  correlation attributes, redaction, failure isolation.
+
+Non-goals:
+
+- No metrics backend, no sampling policy, no context propagation across
+  processes, and no replacement of LangSmith support.
+
+### R032 — establish performance and capacity baselines
+
+**Severity:** Low. **Affected guarantees:** none directly; measurement only.
+
+*Motivation.* Nothing today says how large a composition Chassis handles or
+where time goes. Without a reproducible baseline, any optimization is a guess
+and any regression is invisible until production feels it.
+
+Required behavior:
+
+- Add a documented benchmark harness measuring at least: no-op reconciliation;
+  one-entry replacement; replacement with a dependency cascade; snapshot
+  construction and hashing; plan and diagnostics generation; tool snapshot
+  lookup; generation acquire/release; replay lookup with repeated keys;
+  graph-cache lookup; configurations with approximately 10, 100, and 1,000
+  relevant objects; and concurrent runs holding old generations during
+  replacement.
+- Separate deterministic complexity assertions from wall-clock benchmarks:
+  structural scaling tests run in the normal suite; wall-clock benchmarks are
+  opt-in and never assert brittle timings on shared runners.
+- Record Python version, platform, object counts, iterations, median and tail
+  latency where meaningful, and peak/retained memory where meaningful.
+- Establish and record the 0.9.0 baseline, add conservative regression
+  thresholds only where results are stable, and document expected capacity and
+  known scaling limits.
+- Optimize only where a measured bottleneck justifies it, in commits separate
+  from the baseline measurements.
+
+Acceptance criteria:
+
+- One documented command runs the benchmark suite and prints a reproducible
+  report including environment capture.
+- The recorded 0.9.0 baseline is checked in with its methodology.
+- Structural tests detect accidental quadratic behavior by counting work, not
+  by timing.
+
+Regression tests:
+
+- `tests/perf/test_scaling_structure.py` — deterministic work-count assertions
+  for reconciliation, planning, and lookup paths.
+
+Non-goals:
+
+- No continuous performance CI gate on wall-clock numbers, no performance
+  optimization without a measured bottleneck, and no trading of correctness,
+  immutability, redaction, or deterministic ordering for benchmark gains.
+
+### R034 — build a production reference application
+
+**Severity:** Low. **Affected guarantees:** the documented public workflow;
+exercises G4, G5, G11, G16, G21–G25 in one system.
+
+*Motivation.* The examples are small snippets; nothing shows how the pieces
+compose into one production-shaped application, so adopters cannot see the
+intended end-to-end workflow and CI does not prove the pieces work together.
+
+Required behavior:
+
+- Add one self-contained reference application under `examples/` that uses
+  deterministic local fakes and needs no credentials or external services.
+- Demonstrate, as one running system: declarative configuration; a plugin
+  catalog; scoped composition; `AgentSpec` materialization; capability
+  requirements and preferences; tool registration and policy; secret resolution
+  and redaction; agent invoke and streaming; replay recording and replay; hot
+  provider replacement; an old run remaining pinned to its generation; planning
+  or dry-run before applying a change; diagnostics and snapshot attribution;
+  graceful shutdown; and at least one controlled failure with rollback.
+- Execute its own assertions, be run by an integration test, and be part of a
+  package smoke or CI canary without external credentials.
+- Exercise only the public APIs users should adopt — no test-only internals —
+  and document its architecture, execution flow, and expected output, linked
+  from README.md and the documentation overview.
+
+Acceptance criteria:
+
+- `python -m examples.production_reference` exits zero on success and fails
+  loudly on any violated assertion.
+- The integration test and a CI canary both run it without credentials.
+- The documented expected output matches the actual output.
+
+Regression tests:
+
+- `tests/integration/test_reference_app.py` — runs the application and asserts
+  its self-checks pass and its documented outputs appear.
+
+Non-goals:
+
+- No new example framework, no external services, and no test-only escape
+  hatches in the application.
+
+### 0.9.0 exit criteria
+
+- R027, R028, R029, R030, R031, R032, and R034 are implemented with direct
+  regression coverage, documentation, changelog entries, and migration notes.
+- Compatibility with 0.8.1 persisted artifacts is demonstrated against fixtures
+  produced by the released 0.8.1 implementation.
+- Preview/planning performs zero mutation and matches a subsequent apply.
+- Lifecycle stress tests return resources to baseline and report what they
+  cannot stop.
+- Operational telemetry has a documented stable schema with a backend-independent
+  contract test; OpenTelemetry works as an optional adapter beside LangSmith.
+- Performance baselines are reproducible through one documented command.
+- The production reference application passes locally and in CI without
+  credentials.
+- Guarantees G25–G27 join the design table with real collected test nodes, and
+  the guarantee-to-test mapping test covers the expanded range.
+- The full validation matrix passes (see below), commits remain incremental and
+  reviewable, and nothing is published or tagged.
+
+### 0.9.0 validation matrix
+
+Run proportionately after every commit; every row must pass before 0.9.0
+implementation is declared complete. The repository's existing commands and
+scripts are used; no parallel package manager, test runner, formatter, or
+documentation system is introduced.
+
+| Gate | Command |
+| --- | --- |
+| Full suite, Python 3.12 | `uv run --python 3.12 pytest` |
+| Full suite, Python 3.13 | `uv run --python 3.13 pytest` |
+| Branch coverage and focused floors | `uv run pytest --cov=src/chassis --cov-branch` then `uv run python scripts/coverage_gate.py` |
+| Ruff lint | `uv run ruff check .` |
+| Ruff format check | `uv run ruff format --check .` |
+| Pyright strict | `uv run pyright` |
+| MkDocs strict build | `uv run mkdocs build --strict` |
+| Documentation-link and guarantee-mapping tests | `uv run pytest tests/test_docs_links.py` |
+| Wheel and sdist build | `uv build` |
+| Clean core-wheel import without optional integrations | CI `package` job smoke |
+| Independent smoke test per optional extra and combined extras | CI `package` job smokes |
+| Production reference application | `uv run python -m examples.production_reference` |
+| Deterministic stress suite | `uv run pytest tests/concurrency` |
+| Documented benchmark command | `uv run python scripts/benchmark.py` (opt-in) |
+| Compatibility tests against sanitized 0.8.1 fixtures | `uv run pytest tests/test_format_compat.py tests/test_api_compat.py` |
 
 ## Traceability to the 0.5.0 audit
 

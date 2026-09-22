@@ -171,7 +171,11 @@ listed in [docs/README.md](README.md) — is covered by `tests/test_public_api.p
 which fails if documentation references an API that no longer exists. Pre-1.0, the
 minor version may break that surface; every break is recorded in
 [CHANGELOG.md](https://github.com/andreolli-davide/chassis/blob/main/CHANGELOG.md) and
-[migration.md](migration.md). `chassis_version` and the runtime snapshot digest
+[migration.md](migration.md). Since 0.9.0 the surface is classified (stable,
+provisional, internal, persisted format) and checked against a machine-readable
+API baseline under the
+[compatibility policy](compatibility.md); 0.9.0 is the last release with
+deliberate pre-1.0 compatibility changes. `chassis_version` and the runtime snapshot digest
 identify exactly which version produced a run. Agent composition is reached through
 the `chassis.agents` namespace (`AgentSpec`, `AgentRevision`, `AgentRegistry`,
 `AgentNotFound`, `AgentRetired`) rather than `chassis.__all__`.

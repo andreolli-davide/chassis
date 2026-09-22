@@ -7,6 +7,19 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
+### Added
+
+- **The 0.9.0 roadmap and compatibility policy** (roadmap R027–R034).
+  `docs/roadmap.md` defines the production-confidence milestone — compatibility,
+  operability, resilience, and scale — with severity, motivation, acceptance
+  criteria, regression tests, and non-goals per requirement, and a validation
+  matrix for the release gates. `docs/compatibility.md` classifies the surface
+  (stable public API, provisional API, internal API, persisted formats),
+  documents the API baseline and compatibility check, the typed deprecation
+  window, and per-format persisted-data versioning. 0.9.0 is the last planned
+  release with deliberate pre-1.0 compatibility changes; release-publication
+  work is deferred to 1.0.0.
+
 ## [0.8.1] - 2026-09-22
 
 ### Fixed
