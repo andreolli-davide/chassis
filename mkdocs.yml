@@ -56,6 +56,7 @@ nav:
   - Recipes: recipes.md
   - Troubleshooting: troubleshooting.md
   - Release roadmap: roadmap.md
+  - Beta readiness review: beta-readiness.md
   - Design guarantees: design.md
   - Migration: migration.md
   - Security: security.md

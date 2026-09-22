@@ -64,7 +64,6 @@ from chassis.core.scope import EffectRecord, Scope, ScopeState
 from chassis.diagnostics import Diagnostics, GenerationPressureReport
 from chassis.harness import Harness, HarnessState, ReconcileResult
 from chassis.plugins import (
-    DependencyResolver,
     Plugin,
     PluginContext,
     PluginHealth,
@@ -117,7 +116,6 @@ __all__ = [
     "CleanupFailure",
     "CompositionScope",
     "ConfigurationError",
-    "DependencyResolver",
     "Diagnostics",
     "EffectCleanupError",
     "EffectRecord",

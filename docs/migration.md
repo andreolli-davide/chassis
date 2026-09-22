@@ -6,6 +6,8 @@ why it was made, and what to do instead. Lifecycle behaviour is unchanged across
 these releases: published generations are still immutable, publication is still
 transactional, and logical unload is still distinct from physical disposal.
 
+- [0.7 → 0.8](#07--08): strict canonical hashing, unambiguous request
+  arguments, the reviewed public surface
 - [0.6 → 0.7](#06--07): one run lifecycle, complete replay, hook semantics,
   validated budgets and tool contracts, isolated telemetry, truthful runtime
   identity
@@ -18,6 +20,32 @@ transactional, and logical unload is still distinct from physical disposal.
 - [0.3 → 0.4](#03-04): incremental composition, semantic identity, reuse diagnostics
 - [0.2 → 0.3](#02-03): composition scopes, explain and diff diagnostics
 - [0.1 → 0.2](#01-02): optional extras, tool protocol, lease identity, budgets
+
+## 0.7 → 0.8
+
+0.8.0 is Beta-readiness hardening: the sharp edges are gone and the release
+gates exist. Two API behaviors changed.
+
+### Canonical hashing is strict
+
+`stable_hash`/`canonical_json` require string mapping keys (non-string keys used
+to be stringified into collisions — convert them first), and `Decimal`-like
+values are rejected rather than guessed. Non-integral floats are rounded to 12
+decimals: values differing only beyond that share a digest.
+
+### Request arguments are never silently ignored
+
+Passing `thread_id`/`resume`/`checkpoint_id`/`metadata` alongside a complete
+`AgentRequest` raises `ConfigurationError`; put those fields in the request.
+`AgentResult.text` documents its shapes (string, mapping with `text`, text
+blocks), `ScopeTree.providers_of` raises for a missing scope, and `ReplayMismatch`    distinguishes exhaustion (`reason="exhausted"`) from absence (`"missing"`).
+
+### Additive APIs
+
+New in 0.8: `ReplaySession.bind_redactor` (0.5.1 lineage), the `scripts/`
+coverage gate, and the reviewed top-level surface pinned by
+`tests/test_public_api.py` (one accidental export, `DependencyResolver`, was
+removed — import it from `chassis.plugins`).
 
 ## 0.6 → 0.7
 

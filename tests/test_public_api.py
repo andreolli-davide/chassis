@@ -13,25 +13,26 @@ import pytest
 DOCUMENTED = {
     "chassis": [
         "ARTIFACTS",
+        "AgentEvent",
         "AgentExecutionError",
-        "DATABASE",
-        "MEMORY",
-        "MODEL",
-        "POLICY",
-        "SANDBOX",
-        "SCHEDULER",
-        "SECRETS",
-        "TOOLS",
+        "AgentRequest",
+        "AgentResult",
+        "AgentRuntime",
         "BudgetExceeded",
         "CapabilityAmbiguous",
         "CapabilityKey",
         "CapabilityNotFound",
+        "CapabilityRegistration",
         "CapabilityRegistry",
         "CapabilityRequirement",
         "CapabilitySnapshot",
         "CapabilityVersionMismatch",
         "ChassisError",
+        "CleanupFailure",
+        "CompositionScope",
         "ConfigurationError",
+        "DATABASE",
+        "Diagnostics",
         "EffectCleanupError",
         "EffectRecord",
         "GenerationConflictError",
@@ -45,25 +46,38 @@ DOCUMENTED = {
         "HarnessState",
         "HarnessStateError",
         "HookExecutionError",
+        "MEMORY",
+        "MODEL",
+        "POLICY",
         "Plugin",
         "PluginContext",
         "PluginContractError",
         "PluginCycleError",
+        "PluginDependencyError",
         "PluginHealth",
         "PluginInstance",
+        "PluginLoadError",
         "PluginManifest",
         "PluginSetupError",
         "PluginState",
         "PolicyDenied",
         "ReconcileResult",
         "ReplayMismatch",
+        "ResolutionPlan",
+        "RunEnvironment",
         "RuntimeGeneration",
+        "SANDBOX",
+        "SCHEDULER",
+        "SECRETS",
         "Scope",
         "ScopeClosedError",
         "ScopeState",
         "ScopedCapabilities",
+        "SecretResolutionError",
+        "TOOLS",
         "ToolExecutionError",
         "UnknownLeaseError",
+        "__version__",
         "plugin",
     ],
     "chassis.langgraph": [
@@ -232,6 +246,16 @@ def test_documented_names_are_exported(module_name: str) -> None:
     missing = [name for name in DOCUMENTED[module_name] if name not in exported]
 
     assert missing == [], f"{module_name}.__all__ is missing {missing}"
+
+
+def test_every_top_level_export_is_intentional() -> None:
+    """The reviewed public surface: anything beyond it is an accidental export."""
+
+    import chassis
+
+    allowed = set(DOCUMENTED["chassis"])
+    extras = sorted(set(chassis.__all__) - allowed)
+    assert extras == [], f"accidental exports (document them or remove them): {extras}"
 
 
 def test_core_does_not_import_langgraph() -> None:

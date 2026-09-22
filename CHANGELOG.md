@@ -63,6 +63,13 @@ that a minor release may break the documented surface.
   through the minimum/latest compatibility jobs; no upper bounds are needed
   today. Release artifacts ship with a CycloneDX SBOM and PyPI digital
   attestations.
+- **Beta readiness review completed** (roadmap R026). The release candidate was
+  re-audited across architecture, security, concurrency, packaging, and
+  documentation (recorded in `docs/beta-readiness.md`): every item R001–R026 is
+  complete with none deferred, the public API is reviewed and pinned (one
+  accidental export, `DependencyResolver`, removed), migration instructions
+  cover all pre-1.0 breaking changes since 0.5.0, and the package classifier is
+  now **Beta**.
 
 ## [0.7.0] - 2026-09-22
 
