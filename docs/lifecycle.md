@@ -295,6 +295,31 @@ Everything it counts except desired `entries` (which stay installed) must
 return to its pre-run value once the harness has stopped. The stress and soak
 suites use exactly this check.
 
+## Stress and soak coverage
+
+`tests/concurrency/test_lifecycle_stress.py` is the always-on half: bounded,
+seeded, deterministic scenarios with real asyncio tasks — cancellation at
+unpredictable points, replacement storms while runs hold leases, shutdown
+racing runs and replacements, repeated start/stop cycles, and bounded history
+under a long lease. Every scenario ends by proving resources returned to
+baseline. It runs in the normal suite:
+
+```bash
+uv run pytest tests/concurrency
+```
+
+`scripts/soak.py` is the opt-in half — the same scenario classes for a
+wall-clock budget, excluded from the default fast suite:
+
+```bash
+uv run python scripts/soak.py --seconds 120
+uv run python scripts/soak.py --cycles 200 --seed 7
+```
+
+It makes no timing claims: it reports cycles completed and exits non-zero if
+any invariant (pinning, no disposal under a lease, resource baseline, terminal
+state) is violated.
+
 ## Diagnostics
 
 ```python

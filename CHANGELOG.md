@@ -9,6 +9,13 @@ that a minor release may break the documented surface.
 
 ### Added
 
+- **Deterministic lifecycle stress and opt-in soak coverage** (roadmap R029).
+  `tests/concurrency/test_lifecycle_stress.py` runs bounded, seeded scenarios
+  with real asyncio tasks — cancellation storms, replacement storms under
+  lease, shutdown races, repeated cycles, bounded history under a long lease —
+  each proving resources return to baseline. `scripts/soak.py` runs the same
+  scenario classes for a wall-clock budget (opt-in, excluded from the default
+  fast suite) and fails on any violated invariant.
 - **Resource counters for lifecycle baselines** (roadmap R029).
   `Diagnostics.resource_counts()` (and `ResourceCounts`) aggregates instances,
   owned scopes, effects, tasks, stragglers, cleanup failures, leases, and
