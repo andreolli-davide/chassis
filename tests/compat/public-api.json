@@ -1,0 +1,595 @@
+{
+  "description": "The documented Chassis public import paths and their stability class. Source of truth for tests/test_public_api.py and scripts/api_compat.py; see docs/compatibility.md. Every name is 'stable' unless marked 'provisional'. Names absent from this file are internal by default.",
+  "format_version": 1,
+  "modules": {
+    "chassis": {
+      "ARTIFACTS": {
+        "stability": "stable"
+      },
+      "AgentEvent": {
+        "stability": "stable"
+      },
+      "AgentExecutionError": {
+        "stability": "stable"
+      },
+      "AgentRequest": {
+        "stability": "stable"
+      },
+      "AgentResult": {
+        "stability": "stable"
+      },
+      "AgentRuntime": {
+        "stability": "stable"
+      },
+      "BudgetExceeded": {
+        "stability": "stable"
+      },
+      "CapabilityAmbiguous": {
+        "stability": "stable"
+      },
+      "CapabilityKey": {
+        "stability": "stable"
+      },
+      "CapabilityNotFound": {
+        "stability": "stable"
+      },
+      "CapabilityRegistration": {
+        "stability": "stable"
+      },
+      "CapabilityRegistry": {
+        "stability": "stable"
+      },
+      "CapabilityRequirement": {
+        "stability": "stable"
+      },
+      "CapabilitySnapshot": {
+        "stability": "stable"
+      },
+      "CapabilityVersionMismatch": {
+        "stability": "stable"
+      },
+      "ChassisError": {
+        "stability": "stable"
+      },
+      "CleanupFailure": {
+        "stability": "stable"
+      },
+      "CompositionScope": {
+        "stability": "stable"
+      },
+      "ConfigurationError": {
+        "stability": "stable"
+      },
+      "DATABASE": {
+        "stability": "stable"
+      },
+      "Diagnostics": {
+        "stability": "stable"
+      },
+      "EffectCleanupError": {
+        "stability": "stable"
+      },
+      "EffectRecord": {
+        "stability": "stable"
+      },
+      "GenerationConflictError": {
+        "stability": "stable"
+      },
+      "GenerationLease": {
+        "stability": "stable"
+      },
+      "GenerationManager": {
+        "stability": "stable"
+      },
+      "GenerationPressureReport": {
+        "stability": "stable"
+      },
+      "GenerationState": {
+        "stability": "stable"
+      },
+      "GraphBuildError": {
+        "stability": "stable"
+      },
+      "Harness": {
+        "stability": "stable"
+      },
+      "HarnessRunContext": {
+        "stability": "stable"
+      },
+      "HarnessState": {
+        "stability": "stable"
+      },
+      "HarnessStateError": {
+        "stability": "stable"
+      },
+      "HookExecutionError": {
+        "stability": "stable"
+      },
+      "MEMORY": {
+        "stability": "stable"
+      },
+      "MODEL": {
+        "stability": "stable"
+      },
+      "POLICY": {
+        "stability": "stable"
+      },
+      "Plugin": {
+        "stability": "stable"
+      },
+      "PluginContext": {
+        "stability": "stable"
+      },
+      "PluginContractError": {
+        "stability": "stable"
+      },
+      "PluginCycleError": {
+        "stability": "stable"
+      },
+      "PluginDependencyError": {
+        "stability": "stable"
+      },
+      "PluginHealth": {
+        "stability": "stable"
+      },
+      "PluginInstance": {
+        "stability": "stable"
+      },
+      "PluginLoadError": {
+        "stability": "stable"
+      },
+      "PluginManifest": {
+        "stability": "stable"
+      },
+      "PluginSetupError": {
+        "stability": "stable"
+      },
+      "PluginState": {
+        "stability": "stable"
+      },
+      "PolicyDenied": {
+        "stability": "stable"
+      },
+      "ReconcileResult": {
+        "stability": "stable"
+      },
+      "ReplayMismatch": {
+        "stability": "stable"
+      },
+      "ResolutionPlan": {
+        "stability": "stable"
+      },
+      "RunEnvironment": {
+        "stability": "stable"
+      },
+      "RuntimeGeneration": {
+        "stability": "stable"
+      },
+      "SANDBOX": {
+        "stability": "stable"
+      },
+      "SCHEDULER": {
+        "stability": "stable"
+      },
+      "SECRETS": {
+        "stability": "stable"
+      },
+      "Scope": {
+        "stability": "stable"
+      },
+      "ScopeClosedError": {
+        "stability": "stable"
+      },
+      "ScopeState": {
+        "stability": "stable"
+      },
+      "ScopedCapabilities": {
+        "stability": "stable"
+      },
+      "SecretResolutionError": {
+        "stability": "stable"
+      },
+      "TOOLS": {
+        "stability": "stable"
+      },
+      "ToolExecutionError": {
+        "stability": "stable"
+      },
+      "UnknownLeaseError": {
+        "stability": "stable"
+      },
+      "__version__": {
+        "stability": "stable"
+      },
+      "plugin": {
+        "stability": "stable"
+      }
+    },
+    "chassis.agents": {
+      "AgentNotFound": {
+        "stability": "stable"
+      },
+      "AgentRegistry": {
+        "stability": "stable"
+      },
+      "AgentRetired": {
+        "stability": "stable"
+      },
+      "AgentRevision": {
+        "stability": "stable"
+      },
+      "AgentSpec": {
+        "stability": "stable"
+      }
+    },
+    "chassis.budget": {
+      "BudgetDimension": {
+        "stability": "stable"
+      },
+      "BudgetEnforcement": {
+        "stability": "stable"
+      },
+      "BudgetGovernor": {
+        "stability": "stable"
+      },
+      "BudgetLimit": {
+        "stability": "stable"
+      },
+      "BudgetLimits": {
+        "stability": "stable"
+      },
+      "BudgetUsage": {
+        "stability": "stable"
+      }
+    },
+    "chassis.composition": {
+      "CompositionScope": {
+        "stability": "stable"
+      },
+      "CompositionTree": {
+        "stability": "stable"
+      },
+      "DependencyBinding": {
+        "stability": "stable"
+      },
+      "ImpactAnalysis": {
+        "stability": "stable"
+      },
+      "NodeImpact": {
+        "stability": "stable"
+      },
+      "ROOT_NAME": {
+        "stability": "stable"
+      },
+      "ROOT_PATH": {
+        "stability": "stable"
+      },
+      "ResolvedScope": {
+        "stability": "stable"
+      },
+      "ReuseDecision": {
+        "stability": "stable"
+      },
+      "ReuseReason": {
+        "stability": "stable"
+      },
+      "ScopeSpec": {
+        "stability": "stable"
+      },
+      "ScopeTree": {
+        "stability": "stable"
+      },
+      "SemanticIdentity": {
+        "stability": "stable"
+      },
+      "build_scope_tree": {
+        "stability": "stable"
+      }
+    },
+    "chassis.config": {
+      "DesiredStateAction": {
+        "stability": "stable"
+      },
+      "DesiredStateChange": {
+        "stability": "stable"
+      },
+      "HarnessConfig": {
+        "stability": "stable"
+      },
+      "InstalledEntry": {
+        "stability": "stable"
+      },
+      "PluginCatalog": {
+        "stability": "stable"
+      },
+      "PluginEntryConfig": {
+        "stability": "stable"
+      },
+      "diff_desired_state": {
+        "stability": "stable"
+      },
+      "load_config": {
+        "stability": "stable"
+      },
+      "parse_config": {
+        "stability": "stable"
+      }
+    },
+    "chassis.diagnostics": {
+      "AgentDiff": {
+        "stability": "stable"
+      },
+      "AgentExplanation": {
+        "stability": "stable"
+      },
+      "CompositionChange": {
+        "stability": "stable"
+      },
+      "Diagnostics": {
+        "stability": "stable"
+      },
+      "GenerationDiff": {
+        "stability": "stable"
+      },
+      "GenerationPressureEntry": {
+        "stability": "stable"
+      },
+      "GenerationPressureReport": {
+        "stability": "stable"
+      },
+      "RequirementExplanation": {
+        "stability": "stable"
+      },
+      "ResourceReachability": {
+        "stability": "stable"
+      },
+      "ReuseExplanation": {
+        "stability": "stable"
+      },
+      "ScopeExplanation": {
+        "stability": "stable"
+      }
+    },
+    "chassis.evaluation": {
+      "agent_target": {
+        "stability": "stable"
+      },
+      "composition_metadata": {
+        "stability": "stable"
+      },
+      "evaluate_agent": {
+        "stability": "stable"
+      }
+    },
+    "chassis.hooks": {
+      "HookErrorPolicy": {
+        "stability": "stable"
+      },
+      "HookEvent": {
+        "stability": "stable"
+      },
+      "HookMode": {
+        "stability": "stable"
+      },
+      "HookRegistry": {
+        "stability": "stable"
+      },
+      "HookResult": {
+        "stability": "stable"
+      },
+      "HookSnapshot": {
+        "stability": "stable"
+      }
+    },
+    "chassis.langgraph": {
+      "AgentDefinition": {
+        "stability": "stable"
+      },
+      "GraphBuildInputs": {
+        "stability": "stable"
+      },
+      "GraphCache": {
+        "stability": "stable"
+      },
+      "GraphCacheKey": {
+        "stability": "stable"
+      },
+      "LangGraphAgent": {
+        "stability": "stable"
+      },
+      "harness_tool_node": {
+        "stability": "stable"
+      }
+    },
+    "chassis.persistence": {
+      "RuntimeSnapshot": {
+        "stability": "stable"
+      },
+      "canonical_json": {
+        "stability": "stable"
+      },
+      "chassis_version": {
+        "stability": "stable"
+      },
+      "hash_text": {
+        "stability": "stable"
+      },
+      "prompt_hash": {
+        "stability": "stable"
+      },
+      "schema_hash": {
+        "stability": "stable"
+      },
+      "stable_hash": {
+        "stability": "stable"
+      },
+      "tool_schema_hash": {
+        "stability": "stable"
+      }
+    },
+    "chassis.policy": {
+      "AllowAllPolicy": {
+        "stability": "stable"
+      },
+      "DenyAllPolicy": {
+        "stability": "stable"
+      },
+      "GrantPolicy": {
+        "stability": "stable"
+      },
+      "Permission": {
+        "stability": "stable"
+      },
+      "PermissionGrant": {
+        "stability": "stable"
+      },
+      "PolicyRequest": {
+        "stability": "stable"
+      },
+      "PolicyResult": {
+        "stability": "stable"
+      }
+    },
+    "chassis.replay": {
+      "BoundaryKind": {
+        "stability": "stable"
+      },
+      "ReplayChatModel": {
+        "stability": "stable"
+      },
+      "ReplayFallback": {
+        "stability": "stable"
+      },
+      "ReplayMode": {
+        "stability": "stable"
+      },
+      "ReplayRecord": {
+        "stability": "stable"
+      },
+      "ReplaySession": {
+        "stability": "stable"
+      },
+      "boundary_key": {
+        "stability": "stable"
+      }
+    },
+    "chassis.runtime": {
+      "AgentEvent": {
+        "stability": "stable"
+      },
+      "AgentRequest": {
+        "stability": "stable"
+      },
+      "AgentResult": {
+        "stability": "stable"
+      },
+      "AgentRuntime": {
+        "stability": "stable"
+      },
+      "HarnessRunContext": {
+        "stability": "stable"
+      },
+      "RunEnvironment": {
+        "stability": "stable"
+      }
+    },
+    "chassis.secrets": {
+      "EnvSecretProvider": {
+        "stability": "stable"
+      },
+      "RedactingSecretProvider": {
+        "stability": "stable"
+      },
+      "SecretProvider": {
+        "stability": "stable"
+      },
+      "SecretRedactor": {
+        "stability": "stable"
+      },
+      "SecretValue": {
+        "stability": "stable"
+      },
+      "StaticSecretProvider": {
+        "stability": "stable"
+      },
+      "redact": {
+        "stability": "stable"
+      }
+    },
+    "chassis.telemetry": {
+      "LangSmithTelemetry": {
+        "stability": "stable"
+      },
+      "NoopTelemetry": {
+        "stability": "stable"
+      },
+      "RecordedSpan": {
+        "stability": "stable"
+      },
+      "RecordingTelemetry": {
+        "stability": "stable"
+      },
+      "Span": {
+        "stability": "stable"
+      },
+      "TeeTelemetry": {
+        "stability": "stable"
+      },
+      "Telemetry": {
+        "stability": "stable"
+      }
+    },
+    "chassis.testing": {
+      "FakeChatModel": {
+        "stability": "stable"
+      },
+      "FakePolicy": {
+        "stability": "stable"
+      },
+      "FakeSecrets": {
+        "stability": "stable"
+      },
+      "FakeTelemetry": {
+        "stability": "stable"
+      },
+      "TestHarness": {
+        "stability": "stable"
+      },
+      "fake_tool": {
+        "stability": "stable"
+      }
+    },
+    "chassis.tools": {
+      "RegisteredTool": {
+        "stability": "stable"
+      },
+      "ScopedTools": {
+        "stability": "stable"
+      },
+      "Tool": {
+        "stability": "stable"
+      },
+      "ToolExecutionResult": {
+        "stability": "stable"
+      },
+      "ToolExecutor": {
+        "stability": "stable"
+      },
+      "ToolNotFound": {
+        "stability": "stable"
+      },
+      "ToolPolicy": {
+        "stability": "stable"
+      },
+      "ToolRegistry": {
+        "stability": "stable"
+      },
+      "ToolRequest": {
+        "stability": "stable"
+      },
+      "ToolSnapshot": {
+        "stability": "stable"
+      }
+    }
+  }
+}

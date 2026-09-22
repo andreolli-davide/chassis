@@ -9,6 +9,17 @@ that a minor release may break the documented surface.
 
 ### Added
 
+- **Classified public API and compatibility checking** (roadmap R027). The
+  documented surface — every top-level export and documented import path — is
+  audited in `tests/compat/public-api.json` with a stability class per name
+  (stable public API, provisional API; anything unlisted is internal), and
+  `tests/compat/api-baseline-0.8.1.json` records how the released 0.8.1 surface
+  is shaped (kinds, signatures, enum values, public dataclass/Pydantic fields),
+  generated from the `v0.8.1` distribution. `scripts/api_compat.py` compares the
+  installed surface with a baseline and reports removed names, moved names,
+  incompatible signatures, changed enum values, and changed public fields
+  deterministically, exiting non-zero on any of them; `tests/test_api_compat.py`
+  covers each detection class and pins the current surface as compatible.
 - **The 0.9.0 roadmap and compatibility policy** (roadmap R027–R034).
   `docs/roadmap.md` defines the production-confidence milestone — compatibility,
   operability, resilience, and scale — with severity, motivation, acceptance

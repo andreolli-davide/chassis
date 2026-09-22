@@ -23,26 +23,34 @@ not covered: `chassis.plugins.registry` internals, helper modules, and
 `_`-prefixed names are free to change. Tooling is never made public to simplify
 its own implementation.
 
-Provisional names are listed explicitly in the machine-readable API baseline
-(`tests/compat/api-baseline-0.8.1.json` and successors) with
-`"stability": "provisional"`. Everything not marked stable or provisional is
-internal by default.
+The documented surface — the audit of every top-level export and documented
+import path — is `tests/compat/public-api.json`, a machine-readable map of
+module to name to stability class. It is the single source of truth: it drives
+the public API tests (so an accidental addition to `__all__` or removal from a
+documented module fails the suite) and the compatibility checker below.
+
+Provisional names are listed there with `"stability": "provisional"`.
+Everything not listed is internal by default. As of 0.9.0 every documented name
+is stable; provisional is reserved for surface that must ship before it can
+settle.
 
 ## The API baseline and the compatibility check
 
 The API baseline is a machine-readable description of a released surface:
 documented module, name, callable signature, enum values, and public dataclass
 or Pydantic fields, each with its stability class. It is generated from the
-released implementation — never hand-edited — by:
+released implementation — never hand-edited — by running `describe` in an
+environment where that release is installed:
 
 ```bash
-uv run python scripts/api_compat.py --write tests/compat/api-baseline-0.8.1.json
+# in an environment with chassis-harness 0.8.1 installed
+python scripts/api_compat.py describe --write tests/compat/api-baseline-0.8.1.json
 ```
 
 The same tool checks the current tree against a baseline:
 
 ```bash
-uv run python scripts/api_compat.py tests/compat/api-baseline-0.8.1.json
+uv run python scripts/api_compat.py check tests/compat/api-baseline-0.8.1.json
 ```
 
 It exits non-zero and prints a deterministic, machine-readable report when it

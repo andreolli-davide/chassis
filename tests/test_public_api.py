@@ -2,231 +2,25 @@
 
 Documentation that references an API which no longer exists is a defect; this test
 is what keeps the two in step.
+
+The surface itself is the machine-readable map in ``tests/compat/public-api.json``
+— the same source of truth ``scripts/api_compat.py`` classifies and compares — so
+an accidental addition to ``__all__`` or removal from a documented module is
+detected here, and the API baseline records how each name is shaped.
 """
 
 from __future__ import annotations
 
 import importlib
+import json
+from pathlib import Path
 
 import pytest
 
-DOCUMENTED = {
-    "chassis": [
-        "ARTIFACTS",
-        "AgentEvent",
-        "AgentExecutionError",
-        "AgentRequest",
-        "AgentResult",
-        "AgentRuntime",
-        "BudgetExceeded",
-        "CapabilityAmbiguous",
-        "CapabilityKey",
-        "CapabilityNotFound",
-        "CapabilityRegistration",
-        "CapabilityRegistry",
-        "CapabilityRequirement",
-        "CapabilitySnapshot",
-        "CapabilityVersionMismatch",
-        "ChassisError",
-        "CleanupFailure",
-        "CompositionScope",
-        "ConfigurationError",
-        "DATABASE",
-        "Diagnostics",
-        "EffectCleanupError",
-        "EffectRecord",
-        "GenerationConflictError",
-        "GenerationLease",
-        "GenerationManager",
-        "GenerationPressureReport",
-        "GenerationState",
-        "GraphBuildError",
-        "Harness",
-        "HarnessRunContext",
-        "HarnessState",
-        "HarnessStateError",
-        "HookExecutionError",
-        "MEMORY",
-        "MODEL",
-        "POLICY",
-        "Plugin",
-        "PluginContext",
-        "PluginContractError",
-        "PluginCycleError",
-        "PluginDependencyError",
-        "PluginHealth",
-        "PluginInstance",
-        "PluginLoadError",
-        "PluginManifest",
-        "PluginSetupError",
-        "PluginState",
-        "PolicyDenied",
-        "ReconcileResult",
-        "ReplayMismatch",
-        "ResolutionPlan",
-        "RunEnvironment",
-        "RuntimeGeneration",
-        "SANDBOX",
-        "SCHEDULER",
-        "SECRETS",
-        "Scope",
-        "ScopeClosedError",
-        "ScopeState",
-        "ScopedCapabilities",
-        "SecretResolutionError",
-        "TOOLS",
-        "ToolExecutionError",
-        "UnknownLeaseError",
-        "__version__",
-        "plugin",
-    ],
-    "chassis.langgraph": [
-        "AgentDefinition",
-        "GraphBuildInputs",
-        "GraphCache",
-        "GraphCacheKey",
-        "LangGraphAgent",
-        "harness_tool_node",
-    ],
-    "chassis.runtime": [
-        "AgentEvent",
-        "AgentRequest",
-        "AgentResult",
-        "AgentRuntime",
-        "HarnessRunContext",
-        "RunEnvironment",
-    ],
-    "chassis.agents": [
-        "AgentNotFound",
-        "AgentRegistry",
-        "AgentRetired",
-        "AgentRevision",
-        "AgentSpec",
-    ],
-    "chassis.tools": [
-        "RegisteredTool",
-        "ScopedTools",
-        "Tool",
-        "ToolExecutionResult",
-        "ToolExecutor",
-        "ToolNotFound",
-        "ToolPolicy",
-        "ToolRegistry",
-        "ToolRequest",
-        "ToolSnapshot",
-    ],
-    "chassis.policy": [
-        "AllowAllPolicy",
-        "DenyAllPolicy",
-        "GrantPolicy",
-        "Permission",
-        "PermissionGrant",
-        "PolicyRequest",
-        "PolicyResult",
-    ],
-    "chassis.hooks": [
-        "HookErrorPolicy",
-        "HookEvent",
-        "HookMode",
-        "HookRegistry",
-        "HookResult",
-        "HookSnapshot",
-    ],
-    "chassis.budget": [
-        "BudgetDimension",
-        "BudgetEnforcement",
-        "BudgetGovernor",
-        "BudgetLimit",
-        "BudgetLimits",
-        "BudgetUsage",
-    ],
-    "chassis.secrets": [
-        "EnvSecretProvider",
-        "RedactingSecretProvider",
-        "SecretProvider",
-        "SecretRedactor",
-        "SecretValue",
-        "StaticSecretProvider",
-        "redact",
-    ],
-    "chassis.telemetry": [
-        "LangSmithTelemetry",
-        "NoopTelemetry",
-        "RecordedSpan",
-        "RecordingTelemetry",
-        "Span",
-        "TeeTelemetry",
-        "Telemetry",
-    ],
-    "chassis.persistence": [
-        "RuntimeSnapshot",
-        "canonical_json",
-        "chassis_version",
-        "hash_text",
-        "prompt_hash",
-        "schema_hash",
-        "stable_hash",
-        "tool_schema_hash",
-    ],
-    "chassis.replay": [
-        "BoundaryKind",
-        "ReplayChatModel",
-        "ReplayFallback",
-        "ReplayMode",
-        "ReplayRecord",
-        "ReplaySession",
-        "boundary_key",
-    ],
-    "chassis.config": [
-        "DesiredStateAction",
-        "DesiredStateChange",
-        "HarnessConfig",
-        "InstalledEntry",
-        "PluginCatalog",
-        "PluginEntryConfig",
-        "diff_desired_state",
-        "load_config",
-        "parse_config",
-    ],
-    "chassis.composition": [
-        "ROOT_NAME",
-        "ROOT_PATH",
-        "CompositionScope",
-        "CompositionTree",
-        "DependencyBinding",
-        "ImpactAnalysis",
-        "NodeImpact",
-        "ResolvedScope",
-        "ReuseDecision",
-        "ReuseReason",
-        "ScopeSpec",
-        "ScopeTree",
-        "SemanticIdentity",
-        "build_scope_tree",
-    ],
-    "chassis.diagnostics": [
-        "AgentDiff",
-        "AgentExplanation",
-        "CompositionChange",
-        "Diagnostics",
-        "GenerationDiff",
-        "GenerationPressureEntry",
-        "GenerationPressureReport",
-        "RequirementExplanation",
-        "ResourceReachability",
-        "ReuseExplanation",
-        "ScopeExplanation",
-    ],
-    "chassis.evaluation": ["agent_target", "composition_metadata", "evaluate_agent"],
-    "chassis.testing": [
-        "FakeChatModel",
-        "FakePolicy",
-        "FakeSecrets",
-        "FakeTelemetry",
-        "TestHarness",
-        "fake_tool",
-    ],
-}
+SURFACE = json.loads(
+    (Path(__file__).resolve().parent / "compat" / "public-api.json").read_text(encoding="utf-8")
+)
+DOCUMENTED = {module: sorted(names) for module, names in SURFACE["modules"].items()}
 
 
 @pytest.mark.parametrize("module_name", sorted(DOCUMENTED))
@@ -256,6 +50,17 @@ def test_every_top_level_export_is_intentional() -> None:
     allowed = set(DOCUMENTED["chassis"])
     extras = sorted(set(chassis.__all__) - allowed)
     assert extras == [], f"accidental exports (document them or remove them): {extras}"
+
+
+def test_every_documented_module_is_part_of_the_reviewed_surface() -> None:
+    """The surface map names only reviewed modules; a new one needs a review."""
+
+    reviewed = set(DOCUMENTED)
+    assert "chassis" in reviewed, "the top-level module must be classified"
+
+    for module_name in sorted(reviewed):
+        names = DOCUMENTED[module_name]
+        assert names, f"{module_name} is classified with no public names"
 
 
 def test_core_does_not_import_langgraph() -> None:
