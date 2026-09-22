@@ -40,6 +40,19 @@ that a minor release may break the documented surface.
   and result metadata from their keys — re-record them for exact matching.
   Code that relied on `has()` implying an unconsumed record should use
   `has_remaining()`.
+- **Replayed tool calls follow the live boundary** (roadmap R016). A replayed
+  call runs the identical boundary sequence — before hook, authorization,
+  approval, budget, and the `tool.execute` span (now tagged `replayed`) — fires
+  the after hook for a successful recorded result, and follows the live failure
+  shape (error hook, no after hook) for a recorded failure. Replay reuses only
+  the recorded semantic result (`content`/`artifact`/`error` stay historical);
+  `duration_seconds`, `tool_call_id`, `generation_id`, and the new
+  `ToolExecutionResult.run_id` are stamped with the current run's attribution,
+  and replaying in a different generation works cleanly.
+- **Migration note:** `ToolExecutionResult` gained `run_id` (round-tripped
+  through replay payloads). Code that assumed replayed results carried the
+  recording's generation/call ids or its recorded duration should read the
+  current attribution instead — only the semantic result is historical.
 
 ## [0.6.0] - 2026-09-22
 

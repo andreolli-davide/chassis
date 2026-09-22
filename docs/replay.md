@@ -64,6 +64,14 @@ cursor-aware (`has_remaining()`/`peek()`): repeated keys replay in recording
 order and exhaust cleanly, and once a key's records are gone the call falls back
 to live execution (or fails) instead of re-answering.
 
+A replayed tool call follows the live boundary exactly: before hook,
+authorization, approval, budget, and the same `tool.execute` span (tagged
+`replayed`) all run, and the after hook observes the result. What is
+*historical* in a replayed result is the semantic outcome — `content`,
+`artifact`, `error`, and the recorded `redacted` flag. What is *current* is the
+attribution — `duration_seconds`, `tool_call_id`, `generation_id`, and `run_id` —
+stamped fresh from the call being served.
+
 Unrecorded operations follow an explicit policy:
 
 ```python

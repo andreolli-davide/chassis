@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from chassis import DATABASE, Harness, PluginContext, plugin
-from chassis.core.errors import ReplayMismatch
+from chassis.core.errors import PolicyDenied, ReplayMismatch
 from chassis.replay import (
     BoundaryKind,
     ReplayChatModel,
@@ -24,7 +24,7 @@ from chassis.runtime import (
     HarnessRunContext,
 )
 from chassis.testing import FakeChatModel, TestHarness, fake_tool
-from chassis.tools import ToolRequest
+from chassis.tools import ToolPolicy, ToolRequest
 
 SECRET = "sk-live-abcdef123456"
 
@@ -497,3 +497,136 @@ async def test_replay_presence_is_cursor_aware() -> None:
 
     second = live_model._generate(messages())  # type: ignore[call-arg]
     assert second.generations[0].message.content == "second"
+
+
+# --------------------------------------------------------------------------
+# The live boundary (R016): replayed calls run it identically.
+# --------------------------------------------------------------------------
+
+
+async def record_one_call(
+    recording: ReplaySession,
+    *,
+    generation_id: str = "gen-old",
+    run_id: str = "run-old",
+    tool_call_id: str = "call-old",
+    calls: list[Any] | None = None,
+) -> Any:
+    from chassis.testing import fake_tool
+
+    async with TestHarness(replay=recording) as harness:
+        harness.install_tools(
+            fake_tool("echo", result="echoed", parameters={"text": (str, ...)}, calls=calls)
+        )
+        await harness.reconcile()
+        generation = harness.current_generation
+        assert generation is not None
+        return await harness.tool_executor.execute(
+            ToolRequest(
+                name="echo",
+                args={"text": "hi"},
+                generation_id=generation_id,
+                run_id=run_id,
+                tool_call_id=tool_call_id,
+            ),
+            snapshot=harness.tool_snapshot(generation),
+        )
+
+
+async def test_denial_after_recording_applies_to_replayed_calls() -> None:
+    recording = session(ReplayMode.RECORD)
+    await record_one_call(recording)
+    recording.mode = ReplayMode.REPLAY
+
+    from chassis.policy import DenyAllPolicy
+
+    async with TestHarness(replay=recording) as harness:
+        harness.install_tools(
+            fake_tool("echo", result="live", parameters={"text": (str, ...)}),
+            policies={"echo": ToolPolicy(permissions=("network.fetch",))},
+        )
+        await harness.reconcile()
+        generation = harness.current_generation
+        assert generation is not None
+
+        with pytest.raises(PolicyDenied):
+            await harness.tool_executor.execute(
+                ToolRequest(name="echo", args={"text": "hi"}),
+                snapshot=harness.tool_snapshot(generation),
+                policy=DenyAllPolicy(),
+            )
+
+
+async def test_replayed_calls_fire_the_after_hook_and_span() -> None:
+    from chassis.hooks import HookEvent
+    from chassis.telemetry import RecordingTelemetry
+
+    recording = session(ReplayMode.RECORD)
+    await record_one_call(recording)
+    recording.mode = ReplayMode.REPLAY
+
+    seen: list[str] = []
+    telemetry = RecordingTelemetry()
+
+    async with TestHarness(replay=recording, telemetry=telemetry) as harness:
+        harness.install_tools(fake_tool("echo", result="live", parameters={"text": (str, ...)}))
+
+        async def watcher(payload: Mapping[str, Any]) -> None:
+            seen.append(str(payload.get("status")))
+
+        @plugin(name="watch", version="1.0.0")
+        async def watch(ctx: PluginContext) -> None:
+            ctx.hooks.register(HookEvent.AFTER_TOOL_EXECUTE, watcher)
+
+        harness.install(watch, entry_id="watch")
+        await harness.reconcile()
+        generation = harness.current_generation
+        assert generation is not None
+
+        result = await harness.tool_executor.execute(
+            ToolRequest(name="echo", args={"text": "hi"}),
+            snapshot=harness.tool_snapshot(generation),
+        )
+
+        assert result.content == "echoed"  # the recorded semantic result
+        assert seen == ["ok"]  # the live after-hook observed it
+
+        span = telemetry.spans_named("tool.execute")[0]
+        assert span.attributes["replayed"] is True
+        assert span.attributes["tool"] == "echo"
+
+
+async def test_replay_stamps_current_attribution() -> None:
+    recording = session(ReplayMode.RECORD)
+    recorded = await record_one_call(recording)
+    recording.mode = ReplayMode.REPLAY
+
+    calls: list[Any] = []
+    async with TestHarness(replay=recording) as harness:
+        harness.install_tools(
+            fake_tool("echo", result="live", parameters={"text": (str, ...)}, calls=calls)
+        )
+        await harness.reconcile()
+        generation = harness.current_generation
+        assert generation is not None
+
+        result = await harness.tool_executor.execute(
+            ToolRequest(
+                name="echo",
+                args={"text": "hi"},
+                generation_id="gen-new",
+                run_id="run-new",
+                tool_call_id="call-new",
+            ),
+            snapshot=harness.tool_snapshot(generation),
+        )
+
+        # The semantic result is historical; the attribution is current.
+        assert result.content == "echoed"
+        assert calls == []  # the live tool never ran
+        assert result.generation_id == "gen-new"
+        assert result.run_id == "run-new"
+        assert result.tool_call_id == "call-new"
+        assert result.duration_seconds >= 0.0
+        assert recorded.generation_id == "gen-old"
+        assert recorded.run_id == "run-old"
