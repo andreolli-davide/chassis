@@ -66,6 +66,21 @@ that a minor release may break the documented surface.
   partial mapping merged over the old payload) must now return the complete
   replacement payload — omitted keys are removed. Handlers that mutate nested
   payload containers must copy them first.
+- **Budgets and tool contracts validate at construction** (roadmap R018).
+  `BudgetLimits` rejects negative and non-finite values and requires integers
+  for count dimensions; consumption amounts are validated the same way at every
+  charge — fractions on count dimensions raise instead of being truncated
+  silently (zero remains a valid boundary). `ToolPolicy` normalizes its
+  sequences to tuples, deep-freezes metadata, and requires a positive finite
+  `timeout_seconds` when present. An obviously synchronous `ainvoke`
+  implementation is rejected at registration, and the executor verifies
+  awaitability at the boundary with a typed `ToolExecutionError`. Wall-clock
+  enforcement is documented as cooperative — a hard deadline needs a cancellable
+  boundary of your own.
+- **Migration note:** code that passed fractional/negative/non-finite budget
+  amounts or limits, or a non-positive `ToolPolicy.timeout_seconds`, now raises
+  `ConfigurationError`; tools with a synchronous `ainvoke` must become
+  `async def`.
 
 ## [0.6.0] - 2026-09-22
 

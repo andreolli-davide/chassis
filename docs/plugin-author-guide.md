@@ -138,6 +138,12 @@ the control plane it aggregates into the transition's report.
 Ordering is priority first, then registration order. Error semantics are per
 registration: record and continue, or fail loudly with `HookExecutionError`.
 
+Budget limits are validated at construction: non-negative and finite, with
+integer amounts for count dimensions (fractions are rejected, never truncated).
+Wall-clock enforcement is cooperative — it is checked at harness boundaries and
+is a guarantee there, but the harness does not preempt a running tool or model
+call; a hard deadline needs a cancellable boundary of your own.
+
 Every declared event is dispatched at a real boundary:
 
 | Boundary | Events | Refusable |

@@ -260,3 +260,71 @@ async def test_plugin_without_a_secrets_capability_uses_the_harness_provider() -
         assert seen == ["harness-value"]
     finally:
         await harness.stop()
+
+
+# --------------------------------------------------------------------------
+# Construction-time validation (R018): tool contracts and policy inputs.
+# --------------------------------------------------------------------------
+
+
+def test_tool_policy_normalizes_and_validates_at_construction() -> None:
+    from chassis.core.errors import ConfigurationError
+
+    policy = ToolPolicy(permissions=["network.fetch"], side_effects=["writes"])  # type: ignore[arg-type]
+    assert isinstance(policy.permissions, tuple)
+    assert isinstance(policy.side_effects, tuple)
+
+    metadata = {"note": {"deep": 1}}
+    frozen = ToolPolicy(metadata=metadata)
+    metadata["note"]["deep"] = 9  # type: ignore[index]
+    assert frozen.metadata["note"]["deep"] == 1  # type: ignore[index]
+
+    for bad in (0, -1.0, float("inf"), float("nan")):
+        with pytest.raises(ConfigurationError):
+            ToolPolicy(timeout_seconds=bad)
+    assert ToolPolicy(timeout_seconds=1).timeout_seconds == 1.0
+
+
+def test_synchronously_implemented_ainvoke_is_rejected() -> None:
+    from chassis.core.errors import ConfigurationError
+
+    class SyncTool:
+        name = "sync-tool"
+        description = "pretends to be a tool"
+
+        def ainvoke(self, input, config=None, **kwargs):  # type: ignore[no-untyped-def]
+            return "not awaitable"
+
+    registry = ToolRegistry()
+    scope = Scope("owner")
+    with pytest.raises(ConfigurationError):
+        registry.register(scope=scope, tool=SyncTool())  # type: ignore[arg-type]
+
+
+async def test_a_non_awaitable_result_is_a_typed_boundary_error() -> None:
+    from chassis.core.errors import ToolExecutionError
+
+    registry = ToolRegistry()
+    scope = Scope("owner")
+    entry = registry.register(scope=scope, tool=echo)
+
+    class SneakyTool:
+        name = "echo"
+        description = "swapped after registration"
+
+        def ainvoke(self, input, config=None, **kwargs):  # type: ignore[no-untyped-def]
+            return "not awaitable"
+
+    entry.tool = SneakyTool()  # type: ignore[assignment]
+    snapshot = registry.snapshot("gen")
+
+    from chassis.tools.executor import ToolExecutor, ToolRequest
+
+    with pytest.raises(ToolExecutionError) as excinfo:
+        await ToolExecutor().execute(
+            ToolRequest(name="echo", args={"text": "hi"}),
+            snapshot=snapshot,
+            raise_on_error=True,
+        )
+
+    assert excinfo.value.context["tool"] == "echo"

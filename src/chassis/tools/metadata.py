@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from chassis.core.collections import frozen_mapping
+from chassis.core.errors import ConfigurationError
 from chassis.policy.permissions import Permission
 
 __all__ = ["ToolPolicy"]
@@ -47,7 +48,22 @@ class ToolPolicy:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        """Normalize sequences and validate the policy at construction."""
+
+        object.__setattr__(self, "permissions", tuple(self.permissions))
+        object.__setattr__(self, "side_effects", tuple(self.side_effects))
         object.__setattr__(self, "metadata", frozen_mapping(self.metadata))
+        timeout = self.timeout_seconds
+        if timeout is not None:
+            if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+                raise ConfigurationError(
+                    "timeout_seconds must be a positive finite number", timeout=timeout
+                )
+            if timeout <= 0 or timeout != timeout or timeout == float("inf"):
+                raise ConfigurationError(
+                    "timeout_seconds must be a positive finite number", timeout=timeout
+                )
+            object.__setattr__(self, "timeout_seconds", float(timeout))
 
     @property
     def permission_objects(self) -> tuple[Permission, ...]:

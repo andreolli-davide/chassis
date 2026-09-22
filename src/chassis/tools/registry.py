@@ -17,6 +17,7 @@ registry.
 
 from __future__ import annotations
 
+import inspect
 import uuid
 from collections.abc import Iterable, Mapping
 from typing import Any, Protocol
@@ -228,6 +229,15 @@ class ToolRegistry:
         if not _is_tool(tool) or not tool.name:
             raise ConfigurationError(
                 "registered tools must expose a non-empty name and an awaitable ainvoke",
+                tool=type(tool).__name__,
+            )
+        ainvoke = getattr(tool, "ainvoke", None)
+        # The dunder probe detects callable instances with an async __call__;
+        # it is a coroutine-function test, not a callability test.
+        bound_call = getattr(type(ainvoke), "__call__", None)  # noqa: B004
+        if not inspect.iscoroutinefunction(ainvoke) and not inspect.iscoroutinefunction(bound_call):
+            raise ConfigurationError(
+                "registered tools must implement ainvoke asynchronously",
                 tool=type(tool).__name__,
             )
         entry = RegisteredTool(

@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from chassis.core.errors import ConfigurationError
+
 __all__ = [
     "BudgetDimension",
     "BudgetEnforcement",
@@ -125,6 +127,42 @@ class BudgetLimits:
     tokens: int | None = None
     estimated_cost: float | None = None
     child_runs: int | None = None
+
+    def __post_init__(self) -> None:
+        """Reject invalid limits at construction.
+
+        Limits must be non-negative and finite; count dimensions must be
+        integers — fractions are rejected rather than truncated silently.
+        """
+
+        for dimension in BudgetDimension:
+            limit = self.limit_for(dimension)
+            if limit is None:
+                continue
+            if dimension in (
+                BudgetDimension.MODEL_CALLS,
+                BudgetDimension.TOOL_CALLS,
+                BudgetDimension.TOKENS,
+                BudgetDimension.CHILD_RUNS,
+            ):
+                if isinstance(limit, bool) or not isinstance(limit, int):
+                    raise ConfigurationError(
+                        "count budget limits must be integers",
+                        dimension=dimension.value,
+                        limit=limit,
+                    )
+            elif isinstance(limit, bool) or not isinstance(limit, (int, float)):
+                raise ConfigurationError(
+                    "budget limits must be numbers",
+                    dimension=dimension.value,
+                    limit=limit,
+                )
+            if limit < 0 or (isinstance(limit, float) and limit != limit) or limit == float("inf"):
+                raise ConfigurationError(
+                    "budget limits must be non-negative and finite",
+                    dimension=dimension.value,
+                    limit=limit,
+                )
 
     def limit_for(self, dimension: BudgetDimension) -> float | None:
         match dimension:

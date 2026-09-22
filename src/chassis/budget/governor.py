@@ -34,7 +34,7 @@ from chassis.budget.models import (
     BudgetLimits,
     BudgetUsage,
 )
-from chassis.core.errors import BudgetExceeded
+from chassis.core.errors import BudgetExceeded, ConfigurationError
 
 __all__ = ["BudgetGovernor", "budget_scope", "current_budget"]
 
@@ -160,8 +160,15 @@ class BudgetGovernor:
         return own if parent_remaining is None else min(own, parent_remaining)
 
     def check(self, dimension: BudgetDimension, *, amount: float = 1.0) -> None:
-        """Raise :class:`BudgetExceeded` if ``amount`` would exceed the budget."""
+        """Raise :class:`BudgetExceeded` if ``amount`` would exceed the budget.
 
+        Raises:
+            ConfigurationError: the amount is negative, non-finite, or a
+                fraction on a count dimension (fractions are rejected, never
+                truncated silently).
+        """
+
+        self._validate_amount(dimension, amount)
         limit = self._limits.limit_for(dimension)
         if limit is not None:
             used = self._usage.consumed(dimension, now=self._clock())
@@ -175,6 +182,36 @@ class BudgetGovernor:
                 )
         if self._parent is not None:
             self._parent.check(dimension, amount=amount)
+
+    @staticmethod
+    def _validate_amount(dimension: BudgetDimension, amount: float) -> None:
+        if isinstance(amount, bool) or not isinstance(amount, (int, float)):
+            raise ConfigurationError(
+                "consumption amounts must be numbers",
+                dimension=dimension.value,
+                amount=amount,
+            )
+        if amount < 0 or amount != amount or amount == float("inf"):
+            raise ConfigurationError(
+                "consumption amounts must be non-negative and finite",
+                dimension=dimension.value,
+                amount=amount,
+            )
+        if (
+            dimension
+            in (
+                BudgetDimension.MODEL_CALLS,
+                BudgetDimension.TOOL_CALLS,
+                BudgetDimension.TOKENS,
+                BudgetDimension.CHILD_RUNS,
+            )
+            and not float(amount).is_integer()
+        ):
+            raise ConfigurationError(
+                "count dimensions require integer amounts",
+                dimension=dimension.value,
+                amount=amount,
+            )
 
     def consume(self, dimension: BudgetDimension, *, amount: float = 1.0) -> None:
         """Check then record consumption. Raises if the budget is exhausted.

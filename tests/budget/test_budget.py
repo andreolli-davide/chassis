@@ -156,3 +156,53 @@ def test_limits_serialization_is_complete() -> None:
     payload = BudgetLimits(tool_calls=1).to_dict()
 
     assert set(payload) == {dimension.value for dimension in BudgetDimension}
+
+
+# --------------------------------------------------------------------------
+# Construction-time validation (R018): reject invalid limits and amounts.
+# --------------------------------------------------------------------------
+
+
+def test_limits_reject_negative_and_non_finite_values() -> None:
+    from chassis.core.errors import ConfigurationError
+
+    for bad in (-1, float("inf"), float("-inf"), float("nan")):
+        with pytest.raises(ConfigurationError):
+            BudgetLimits(wall_clock_seconds=bad)
+        with pytest.raises(ConfigurationError):
+            BudgetLimits(estimated_cost=bad)
+
+    # Zero is a valid boundary.
+    assert BudgetLimits(wall_clock_seconds=0.0, tool_calls=0).tool_calls == 0
+
+
+def test_count_limits_require_integers() -> None:
+    from chassis.core.errors import ConfigurationError
+
+    for dimension in ("model_calls", "tool_calls", "tokens", "child_runs"):
+        with pytest.raises(ConfigurationError):
+            BudgetLimits(**{dimension: 1.5})  # type: ignore[arg-type]
+        with pytest.raises(ConfigurationError):
+            BudgetLimits(**{dimension: -2})
+        assert BudgetLimits(**{dimension: 0}) is not None
+
+
+def test_consumption_amounts_are_validated() -> None:
+    from chassis.core.errors import ConfigurationError
+
+    governor = BudgetGovernor(BudgetLimits(tool_calls=3, tokens=10, estimated_cost=1.0))
+
+    governor.consume(BudgetDimension.TOOL_CALLS, amount=0)  # zero is a valid boundary
+    for bad in (-1, float("inf"), float("nan")):
+        with pytest.raises(ConfigurationError):
+            governor.consume(BudgetDimension.TOOL_CALLS, amount=bad)
+        with pytest.raises(ConfigurationError):
+            governor.consume(BudgetDimension.ESTIMATED_COST, amount=bad)
+
+    # Count dimensions never truncate fractions silently.
+    with pytest.raises(ConfigurationError):
+        governor.consume(BudgetDimension.TOKENS, amount=1.5)
+    with pytest.raises(ConfigurationError):
+        governor.record(tokens=2.5)  # type: ignore[arg-type]
+    governor.record(tokens=2)
+    assert governor.consumed(BudgetDimension.TOKENS) == 2

@@ -18,6 +18,7 @@ result instead, so an agent loop can react to it.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -646,11 +647,24 @@ class ToolExecutor:
         config = self._runnable_config(entry, request)
         payload: str | dict[str, Any] = args if isinstance(args, str) else dict(args)
         timeout = self._timeout_for(entry)
+
+        async def call() -> Any:
+            result = entry.tool.ainvoke(payload, config=config)
+            # Awaitability is verified at the boundary with a typed error: a
+            # tool that lied about its contract must not crash the normalizer.
+            if not inspect.isawaitable(result):
+                raise ToolExecutionError(
+                    f"tool {entry.name!r} did not return an awaitable result",
+                    tool=entry.name,
+                    status="error",
+                )
+            return await result
+
         if timeout is None:
-            output = await entry.tool.ainvoke(payload, config=config)
+            output = await call()
         else:
             async with asyncio.timeout(timeout):
-                output = await entry.tool.ainvoke(payload, config=config)
+                output = await call()
         return _split_output(output)
 
     def _runnable_config(self, entry: RegisteredTool, request: ToolRequest) -> dict[str, Any]:
