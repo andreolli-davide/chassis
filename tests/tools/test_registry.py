@@ -89,9 +89,12 @@ async def test_same_named_registrations_coexist_and_release_by_identity() -> Non
     assert old.registration_id != new.registration_id
     assert registry.get("echo") is new  # live lookups see the newest
 
-    # Generation views select by owner identity, not by name.
-    assert registry.snapshot("gen", owner_ids=["plugin_old"]).require("echo") is old
-    assert registry.snapshot("gen", owner_ids=["plugin_new"]).require("echo") is new
+    # Generation views select by owner identity, not by name (the snapshot
+    # exposes detached frozen copies, so selection is compared by identity).
+    old_view = registry.snapshot("gen", owner_ids=["plugin_old"]).require("echo")
+    new_view = registry.snapshot("gen", owner_ids=["plugin_new"]).require("echo")
+    assert old_view.registration_id == old.registration_id
+    assert new_view.registration_id == new.registration_id
 
     # Closing the old scope must not remove its successor.
     assert old_scope.effects[0].kind == "tool"

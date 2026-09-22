@@ -20,6 +20,7 @@ from __future__ import annotations
 import inspect
 import uuid
 from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from typing import Any, Protocol
 
 from chassis.core.collections import frozen_mapping
@@ -61,7 +62,11 @@ class Tool(Protocol):
 def _is_tool(tool: object) -> bool:
     """Whether ``tool`` satisfies the structural contract, without importing one."""
 
-    return callable(getattr(tool, "ainvoke", None)) and isinstance(getattr(tool, "name", None), str)
+    return (
+        callable(getattr(tool, "ainvoke", None))
+        and isinstance(getattr(tool, "name", None), str)
+        and isinstance(getattr(tool, "description", None), str)
+    )
 
 
 class ToolNotFound(ConfigurationError):
@@ -71,9 +76,18 @@ class ToolNotFound(ConfigurationError):
 
 
 class RegisteredTool:
-    """A tool plus the harness semantics attached to it."""
+    """A tool plus the harness semantics attached to it.
+
+    The live registration is mutable so a plugin can finish wiring it before it
+    is published; :meth:`frozen_copy` produces the immutable copy a snapshot
+    holds, so publication never aliases this object.
+    """
 
     __slots__ = (
+        "_description",
+        "_frozen",
+        "_name",
+        "_publication",
         "metadata",
         "owner_id",
         "owner_name",
@@ -94,21 +108,64 @@ class RegisteredTool:
         scope_id: str,
         metadata: Mapping[str, Any] | None = None,
     ) -> None:
+        self._frozen = False
+        self._publication: RegisteredTool | None = None
         self.registration_id = registration_id
         self.tool = tool
         self.policy = policy
         self.owner_id = owner_id
         self.owner_name = owner_name
         self.scope_id = scope_id
+        self._name = tool.name
+        self._description = tool.description
         self.metadata: Mapping[str, Any] = frozen_mapping(metadata)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_frozen", False):
+            raise TypeError("this tool registration is immutable")
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if getattr(self, "_frozen", False):
+            raise TypeError("this tool registration is immutable")
+        object.__delattr__(self, name)
 
     @property
     def name(self) -> str:
-        return self.tool.name
+        return self._name
 
     @property
     def description(self) -> str:
-        return self.tool.description
+        return self._description
+
+    def frozen_copy(self) -> RegisteredTool:
+        """The immutable copy of this registration that snapshots publish.
+
+        Created once, at first publication, and shared by every snapshot that
+        selects this registration: each published generation holds a deep copy
+        of the registration -- name, description, policy, and metadata captured
+        and frozen -- and never the mutable live object. The tool itself is
+        shared deliberately: Chassis wraps the plugin's tool rather than
+        replacing it, so execution runs the registered object.
+        """
+
+        publication = self._publication
+        if publication is not None:
+            return publication
+        if self._frozen:
+            return self
+        publication = RegisteredTool(
+            registration_id=self.registration_id,
+            tool=self.tool,
+            policy=replace(self.policy),
+            owner_id=self.owner_id,
+            owner_name=self.owner_name,
+            scope_id=self.scope_id,
+            metadata=self.metadata,
+        )
+        publication._frozen = True
+        self._publication = publication
+        return publication
 
     def __repr__(self) -> str:
         return (
@@ -136,7 +193,9 @@ class ToolSnapshot:
 
     def __init__(self, generation_id: str, entries: Iterable[RegisteredTool]) -> None:
         self._generation_id = generation_id
-        self._entries = tuple(sorted(entries, key=lambda entry: entry.name))
+        self._entries = tuple(
+            sorted((entry.frozen_copy() for entry in entries), key=lambda entry: entry.name)
+        )
 
     @property
     def generation_id(self) -> str:
@@ -222,13 +281,15 @@ class ToolRegistry:
 
         Raises:
             ConfigurationError: the object does not satisfy the tool contract
-                (no non-empty ``name`` or no awaitable ``ainvoke``).
+                (no non-empty ``name``, no non-empty ``description``, or no
+                awaitable ``ainvoke``).
         """
 
         scope.assert_open(f"register tool {getattr(tool, 'name', '?')}")
-        if not _is_tool(tool) or not tool.name:
+        if not _is_tool(tool) or not tool.name or not tool.description:
             raise ConfigurationError(
-                "registered tools must expose a non-empty name and an awaitable ainvoke",
+                "registered tools must expose a non-empty name, a non-empty "
+                "description, and an awaitable ainvoke",
                 tool=type(tool).__name__,
             )
         ainvoke = getattr(tool, "ainvoke", None)
