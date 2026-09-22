@@ -6,6 +6,9 @@ why it was made, and what to do instead. Lifecycle behaviour is unchanged across
 these releases: published generations are still immutable, publication is still
 transactional, and logical unload is still distinct from physical disposal.
 
+- [0.6 → 0.7](#06--07): one run lifecycle, complete replay, hook semantics,
+  validated budgets and tool contracts, isolated telemetry, truthful runtime
+  identity
 - [0.5.1 → 0.6](#051--06): identity-keyed registries, exact contract binding,
   runtime composition visibility, deep immutability, transactional
   materialization and configuration
@@ -15,6 +18,61 @@ transactional, and logical unload is still distinct from physical disposal.
 - [0.3 → 0.4](#03-04): incremental composition, semantic identity, reuse diagnostics
 - [0.2 → 0.3](#02-03): composition scopes, explain and diff diagnostics
 - [0.1 → 0.2](#01-02): optional extras, tool protocol, lease identity, budgets
+
+## 0.6 → 0.7
+
+0.7.0 gives invoke, stream, replay, hooks, budgets, and telemetry one coherent
+execution contract. Pre-1.0 minor releases may break the documented surface;
+everything that can break a caller from 0.6 is listed here.
+
+### One run lifecycle for invoke and stream
+
+Both paths share readiness, generation acquisition, agent resolution, budget
+scope, hooks, telemetry, snapshot attribution, and cleanup: the same
+`agent.run` span and snapshot digest are emitted, the parent budget stays active
+through before/after hooks, and every streamed event is stamped with the run's
+attribution (`AgentEvent` gained `thread_id`) instead of trusting a custom
+runtime. Hook failures, agent errors, and cancellation behave identically on
+both paths.
+
+### Replay is semantically complete
+
+Model keys include normalized stop sequences and every invocation option
+(temperature, tools, structured output, provider options); non-canonicalizable
+values raise `ReplayMismatch` instead of being omitted. Recorded results carry
+`llm_output` and generation metadata. `ReplaySession` gained cursor-aware
+`has_remaining()`/`peek()` with per-key consumption. Replayed tool calls run the
+live boundary (hooks, policy, approval, budget, span) and are re-attributed;
+only the semantic result is historical (`ToolExecutionResult` gained `run_id`).
+
+### Hook semantics
+
+`TRANSFORM` replaces the payload (omitted keys are removed — return the complete
+mapping); hook payloads are deeply frozen; data-plane `RECORD` failures surface
+as `hook.failure` telemetry events without failing the operation.
+
+### Budgets, tool contracts, and telemetry validate and isolate
+
+`BudgetLimits` and consumption amounts are validated (non-negative, finite;
+integers for count dimensions — fractions raise). `ToolPolicy` normalizes
+sequences and requires a positive finite `timeout_seconds`. Synchronous
+`ainvoke` implementations are rejected at registration. `SafeTelemetry` contains
+backend failures (`TeeTelemetry` isolates every backend; `failures` counters
+are exposed), and registered runtimes exposing `bind_harness_services` adopt
+harness telemetry/redaction unless explicitly overridden.
+
+### Runtime identity is truthful
+
+`RuntimeSnapshot.agent_runtime` reports the selected runtime's identity
+(`runtime_kind` or class name) — custom runtimes are no longer labelled
+`langgraph`, and runtime-less snapshots report `unknown`.
+
+### Additive APIs
+
+New in 0.7: `SafeTelemetry`, `ReplaySession.has_remaining`/`peek`,
+`ToolExecutionResult.run_id`, `AgentEvent.thread_id`,
+`RuntimeSnapshot` truthful `agent_runtime`, and `GraphCache` capacity
+validation (`max_entries=0` disables caching).
 
 ## 0.5.1 → 0.6.0
 

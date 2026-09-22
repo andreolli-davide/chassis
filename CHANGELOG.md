@@ -7,6 +7,16 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-22
+
+Gives invoke, stream, replay, hooks, budgets, and telemetry one coherent
+execution contract: a shared run lifecycle with full attribution on both agent
+paths, semantically complete replay keys and results, replayed tool calls that
+follow the live boundary, settled hook semantics with surfaced failures,
+validated budgets and tool contracts, isolated telemetry failures, and truthful
+runtime identity. Every change that can break a caller from 0.6 is listed in
+[migrations](https://github.com/andreolli-davide/chassis/blob/main/docs/migration.md).
+
 ### Fixed
 
 - **Agent lookup runs after readiness reconciliation** (roadmap R013).
@@ -180,7 +190,9 @@ caller from 0.5.1 is listed in
   every depth.
 - **AgentSpec materialization is transactional and owner-safe** (roadmap R010).
   Contributions are staged and validated before any desired state is mutated,
-  and a failed materialization restores the exact previous scope and registry    state — including entries a replacement had swapped. A revision that moves to    a new scope withdraws the old one only after the new one materialized, so a
+  and a failed materialization restores the exact previous scope and registry
+  state — including entries a replacement had swapped. A revision that moves to
+  a new scope withdraws the old one only after the new one materialized, so a
   failed replacement never destroys the active revision. `install` now refuses
   to take over a pre-existing user-owned composition scope instead of rewriting
   it, an agent-owned entry id squatted by a foreign entry is rejected, reserved
