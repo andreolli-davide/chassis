@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import AsyncIterator, Callable, Mapping
-from contextlib import AbstractContextManager, nullcontext
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping
+from contextlib import AbstractContextManager, asynccontextmanager, nullcontext
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from chassis.composition import CompositionScope
     from chassis.core.generation import RuntimeGeneration
     from chassis.harness import Harness
+    from chassis.persistence.snapshots import RuntimeSnapshot
 
 __all__ = [
     "AgentNotFound",
@@ -630,6 +631,141 @@ class AgentRegistry:
 
     # -------------------------------------------------------------- invocation
 
+    @asynccontextmanager
+    async def _run(
+        self,
+        agent: str,
+        *,
+        request: AgentRequest | None,
+        input: Any,
+        user_id: str | None,
+        tenant_id: str | None,
+        thread_id: str | None,
+        resume: Any,
+        checkpoint_id: str | None,
+        metadata: Mapping[str, Any] | None,
+        limits: BudgetLimits | None,
+    ) -> AsyncGenerator[tuple[_RunPlan, _RunOutcome], None]:
+        """One run lifecycle shared by invoke and stream.
+
+        Readiness, generation acquisition, agent resolution, budget scope,
+        hooks, telemetry, snapshot attribution, and cleanup run identically for
+        both paths: the only difference is how the runtime is driven. The parent
+        budget stays active through the before/after hooks and any child-agent
+        call they make.
+        """
+
+        harness = self._require_harness()
+        # Readiness first: an agent installed after `start()` has not mounted
+        # its contributions yet, and its runtime may only exist once they do.
+        await harness.ensure_ready()
+        runtime, selected = self._resolve_agent(agent)
+        agent_request = self._build_request(
+            request,
+            input=input,
+            thread_id=thread_id,
+            resume=resume,
+            checkpoint_id=checkpoint_id,
+            metadata=metadata,
+        )
+
+        async with harness.acquire() as generation:
+            pinned = self._pin_revision(agent, selected, generation)
+            agent_revision = None if pinned is None else pinned.revision
+            environment = self._budgeted_environment(
+                harness,
+                generation,
+                limits,
+                scope=None if pinned is None else pinned.scope,
+            )
+            context = HarnessRunContext.new(
+                generation=generation,
+                environment=environment,
+                agent=agent,
+                agent_revision=agent_revision,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                thread_id=agent_request.thread_id,
+                metadata=agent_request.metadata,
+            )
+            hooks = harness.hook_snapshot(generation)
+            payload: dict[str, Any] = {
+                "agent": agent,
+                "agent_revision": agent_revision,
+                "generation_id": generation.generation_id,
+                "thread_id": agent_request.thread_id,
+                "user_id": user_id,
+                "tenant_id": tenant_id,
+            }
+            graph_digest = _definition_digest(runtime, context)
+            snapshot = harness.snapshot_for(
+                generation,
+                agent=agent,
+                agent_revision=agent_revision,
+                graph_definition_hash=graph_digest,
+            )
+            outcome = _RunOutcome()
+            plan = _RunPlan(
+                harness=harness,
+                runtime=runtime,
+                request=agent_request,
+                context=context,
+                hooks=hooks,
+                payload=payload,
+                snapshot=snapshot,
+                agent_revision=agent_revision,
+                outcome=outcome,
+            )
+            with _budget_scope(environment):
+                async with harness.telemetry.span(
+                    "agent.run",
+                    {
+                        "agent": agent,
+                        "agent_revision": agent_revision,
+                        "generation_id": generation.generation_id,
+                        "thread_id": agent_request.thread_id,
+                        "chassis_version": snapshot.chassis_version,
+                        "snapshot_digest": snapshot.digest(),
+                        "plugin_graph_hash": snapshot.plugin_graph_hash,
+                        "graph_definition_hash": graph_digest,
+                        "tool_schema_hash": snapshot.tool_schema_hash,
+                    },
+                ):
+                    await self._dispatch_agent(
+                        harness, HookEvent.BEFORE_AGENT_RUN, payload, hooks, refusable=True
+                    )
+                    try:
+                        yield plan, outcome
+                    except Exception as error:
+                        await self._dispatch_agent(
+                            harness,
+                            HookEvent.AGENT_ERROR,
+                            {
+                                **payload,
+                                "error": harness.redactor.redact_and_report(str(error))[0],
+                                "error_type": type(error).__name__,
+                            },
+                            hooks,
+                        )
+                        if isinstance(error, ChassisError):
+                            raise
+                        message, _ = harness.redactor.redact_and_report(
+                            f"agent {agent!r} failed: {error}"
+                        )
+                        raise AgentExecutionError(
+                            message, agent=agent, error_type=type(error).__name__
+                        ) from error
+                    await self._dispatch_agent(
+                        harness,
+                        HookEvent.AFTER_AGENT_RUN,
+                        {
+                            **payload,
+                            "status": outcome.status,
+                            "duration_seconds": outcome.duration_seconds,
+                        },
+                        hooks,
+                    )
+
     async def invoke(
         self,
         agent: str,
@@ -649,111 +785,28 @@ class AgentRegistry:
         Either ``input`` or a fully formed ``request`` may be supplied, not both.
         """
 
-        harness = self._require_harness()
-        # Readiness first: an agent installed after `start()` has not mounted
-        # its contributions yet, and its runtime may only exist once they do.
-        await harness.ensure_ready()
-        runtime, selected = self._resolve_agent(agent)
-        agent_request = self._build_request(
-            request,
+        started = time.monotonic()
+        async with self._run(
+            agent,
+            request=request,
             input=input,
+            user_id=user_id,
+            tenant_id=tenant_id,
             thread_id=thread_id,
             resume=resume,
             checkpoint_id=checkpoint_id,
             metadata=metadata,
+            limits=limits,
+        ) as (plan, outcome):
+            result = await plan.runtime.invoke(plan.request, plan.context)
+            if result.interrupted:
+                _record_interrupts(plan.harness, agent, plan.request.thread_id, result)
+                outcome.status = "interrupted"
+            outcome.duration_seconds = result.duration_seconds
+        return _with_duration(
+            _with_attribution(result, agent, plan.agent_revision, plan.snapshot.digest()),
+            time.monotonic() - started,
         )
-
-        async with harness.acquire() as generation:
-            pinned = self._pin_revision(agent, selected, generation)
-            agent_revision = None if pinned is None else pinned.revision
-            environment = self._budgeted_environment(
-                harness,
-                generation,
-                limits,
-                scope=None if pinned is None else pinned.scope,
-            )
-            run_context = HarnessRunContext.new(
-                generation=generation,
-                environment=environment,
-                agent=agent,
-                agent_revision=agent_revision,
-                user_id=user_id,
-                tenant_id=tenant_id,
-                thread_id=agent_request.thread_id,
-                metadata=agent_request.metadata,
-            )
-            graph_digest = _definition_digest(runtime, run_context)
-            snapshot = harness.snapshot_for(
-                generation,
-                agent=agent,
-                agent_revision=agent_revision,
-                graph_definition_hash=graph_digest,
-            )
-            hooks = harness.hook_snapshot(generation)
-            run_payload: dict[str, Any] = {
-                "agent": agent,
-                "agent_revision": agent_revision,
-                "generation_id": generation.generation_id,
-                "thread_id": agent_request.thread_id,
-                "user_id": user_id,
-                "tenant_id": tenant_id,
-            }
-            started = time.monotonic()
-            with _budget_scope(environment):
-                async with harness.telemetry.span(
-                    "agent.run",
-                    {
-                        "agent": agent,
-                        "agent_revision": agent_revision,
-                        "generation_id": generation.generation_id,
-                        "thread_id": agent_request.thread_id,
-                        "chassis_version": snapshot.chassis_version,
-                        "snapshot_digest": snapshot.digest(),
-                        "plugin_graph_hash": snapshot.plugin_graph_hash,
-                        "graph_definition_hash": graph_digest,
-                        "tool_schema_hash": snapshot.tool_schema_hash,
-                    },
-                ):
-                    await self._dispatch_agent(
-                        harness, HookEvent.BEFORE_AGENT_RUN, run_payload, hooks, refusable=True
-                    )
-                    try:
-                        result = await runtime.invoke(agent_request, run_context)
-                    except Exception as error:
-                        await self._dispatch_agent(
-                            harness,
-                            HookEvent.AGENT_ERROR,
-                            {
-                                **run_payload,
-                                "error": harness.redactor.redact_and_report(str(error))[0],
-                                "error_type": type(error).__name__,
-                            },
-                            hooks,
-                        )
-                        if isinstance(error, ChassisError):
-                            raise
-                        message, _ = harness.redactor.redact_and_report(
-                            f"agent {agent!r} failed: {error}"
-                        )
-                        raise AgentExecutionError(
-                            message, agent=agent, error_type=type(error).__name__
-                        ) from error
-                    if result.interrupted:
-                        _record_interrupts(harness, agent, agent_request.thread_id, result)
-                    await self._dispatch_agent(
-                        harness,
-                        HookEvent.AFTER_AGENT_RUN,
-                        {
-                            **run_payload,
-                            "status": "interrupted" if result.interrupted else "ok",
-                            "duration_seconds": result.duration_seconds,
-                        },
-                        hooks,
-                    )
-            return _with_duration(
-                _with_attribution(result, agent, agent_revision, snapshot.digest()),
-                time.monotonic() - started,
-            )
 
     async def stream(
         self,
@@ -771,78 +824,34 @@ class AgentRegistry:
     ) -> AsyncIterator[AgentEvent]:
         """Execute ``agent`` and yield events as they occur.
 
-        The generation is leased for as long as the stream is consumed.
+        The generation is leased for as long as the stream is consumed. Every
+        event is stamped with the run's attribution, so a custom runtime cannot
+        misattribute (or fail to attribute) its own events.
         """
 
-        harness = self._require_harness()
-        # Readiness first: an agent installed after `start()` has not mounted
-        # its contributions yet, and its runtime may only exist once they do.
-        await harness.ensure_ready()
-        runtime, selected = self._resolve_agent(agent)
-        agent_request = self._build_request(
-            request,
+        started = time.monotonic()
+        async with self._run(
+            agent,
+            request=request,
             input=input,
+            user_id=user_id,
+            tenant_id=tenant_id,
             thread_id=thread_id,
             resume=resume,
             checkpoint_id=checkpoint_id,
             metadata=metadata,
-        )
-
-        async with harness.acquire() as generation:
-            pinned = self._pin_revision(agent, selected, generation)
-            agent_revision = None if pinned is None else pinned.revision
-            environment = self._budgeted_environment(
-                harness,
-                generation,
-                limits,
-                scope=None if pinned is None else pinned.scope,
-            )
-            run_context = HarnessRunContext.new(
-                generation=generation,
-                environment=environment,
-                agent=agent,
-                agent_revision=agent_revision,
-                user_id=user_id,
-                tenant_id=tenant_id,
-                thread_id=agent_request.thread_id,
-                metadata=agent_request.metadata,
-            )
-            hooks = harness.hook_snapshot(generation)
-            run_payload: dict[str, Any] = {
-                "agent": agent,
-                "agent_revision": agent_revision,
-                "generation_id": generation.generation_id,
-                "thread_id": agent_request.thread_id,
-                "user_id": user_id,
-                "tenant_id": tenant_id,
-            }
-            await self._dispatch_agent(
-                harness, HookEvent.BEFORE_AGENT_RUN, run_payload, hooks, refusable=True
-            )
-            try:
-                with _budget_scope(environment):
-                    async for event in runtime.stream(agent_request, run_context):
-                        yield event
-            except Exception as error:
-                await self._dispatch_agent(
-                    harness,
-                    HookEvent.AGENT_ERROR,
-                    {
-                        **run_payload,
-                        "error": harness.redactor.redact_and_report(str(error))[0],
-                        "error_type": type(error).__name__,
-                    },
-                    hooks,
+            limits=limits,
+        ) as (plan, outcome):
+            async for event in plan.runtime.stream(plan.request, plan.context):
+                yield replace(
+                    event,
+                    agent=agent,
+                    agent_revision=plan.agent_revision,
+                    generation_id=plan.context.generation_id,
+                    run_id=plan.context.run_id,
+                    thread_id=plan.request.thread_id,
                 )
-                if isinstance(error, ChassisError):
-                    raise
-                message, _ = harness.redactor.redact_and_report(f"agent {agent!r} failed: {error}")
-                raise AgentExecutionError(
-                    message, agent=agent, error_type=type(error).__name__
-                ) from error
-            await self._dispatch_agent(
-                harness, HookEvent.AFTER_AGENT_RUN, {**run_payload, "status": "ok"}, hooks
-            )
+            outcome.duration_seconds = time.monotonic() - started
 
     # -------------------------------------------------------------- internals
 
@@ -921,6 +930,29 @@ class AgentRegistry:
             checkpoint_id=checkpoint_id,
             metadata=dict(metadata or {}),
         )
+
+
+@dataclass(slots=True)
+class _RunOutcome:
+    """Mutable outcome the shared lifecycle reports in its after hook."""
+
+    status: str = "ok"
+    duration_seconds: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class _RunPlan:
+    """Everything one run needs, resolved once by the shared lifecycle."""
+
+    harness: Harness
+    runtime: AgentRuntime
+    request: AgentRequest
+    context: HarnessRunContext
+    hooks: HookSnapshot
+    payload: Mapping[str, Any]
+    snapshot: RuntimeSnapshot
+    agent_revision: str | None
+    outcome: _RunOutcome
 
 
 class ScopedAgents:

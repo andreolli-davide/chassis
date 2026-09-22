@@ -16,6 +16,15 @@ that a minor release may break the documented surface.
   runtime they register exists) before lookup. Generation-owned registrations
   are still selected only after the generation is acquired. Evaluation targets
   resolve logical `AgentSpec` names as well as raw runtime names.
+- **Invoke and stream share one run lifecycle** (roadmap R014). Readiness,
+  generation acquisition, agent resolution, budget scope, hooks, telemetry,
+  snapshot attribution, and cleanup run identically for both paths: the same
+  `agent.run` span and snapshot digest are emitted, the parent budget stays
+  active through before/after hooks and any child-agent call they make, and
+  every streamed event is stamped with the run's logical agent, revision,
+  generation, run, and thread attribution (`AgentEvent` gained `thread_id`)
+  instead of trusting a custom runtime to attribute its own events. Hook
+  failures, agent errors, and cancellation behave identically on both paths.
 
 ## [0.6.0] - 2026-09-22
 

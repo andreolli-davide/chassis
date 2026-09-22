@@ -300,6 +300,7 @@ class AgentEvent:
     kind: str
     data: Any = None
     agent_revision: str | None = None
+    thread_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -308,6 +309,7 @@ class AgentEvent:
             "generation_id": self.generation_id,
             "run_id": self.run_id,
             "kind": self.kind,
+            "thread_id": self.thread_id,
         }
 
 
