@@ -9,9 +9,9 @@ below is enforced by tests, and the tests are the specification of record.
     target contracts, but must not be treated as fully established by version
     0.5.0. The ordered fixes, regression requirements, and release gates are
     tracked in the [release roadmap](roadmap.md). Version 0.5.1 closed the G3,
-    G6, and G11 gaps (R001–R005), and 0.6.0 closed the remaining known gaps
-    (G4, G16, G23, G24, via R006–R012); the 0.7.0 and 0.8.0 roadmap work hardens
-    the data plane and the release gates.
+    G6, and G11 gaps (R001–R005), 0.6.0 closed the remaining known gaps (G4,
+    G16, G23, G24, via R006–R012), and 0.7.0 unified the data plane (R013–R020);
+    the 0.8.0 roadmap work hardens the release gates.
 
 ## The proposition
 
