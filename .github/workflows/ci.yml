@@ -168,6 +168,9 @@ jobs:
       - name: Run the quickstart against the installed package
         run: .smoke/bin/python examples/quickstart.py
 
+      - name: Run the production reference application against the installed package
+        run: .smoke/bin/python -m examples.production_reference.app
+
       - name: Install and import the sdist in a clean environment
         run: |
           uv venv .smoke-sdist

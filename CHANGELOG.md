@@ -9,6 +9,20 @@ that a minor release may break the documented surface.
 
 ### Added
 
+- **Production reference application** (roadmap R034).
+  `examples/production_reference/` is one self-contained support-desk system on
+  deterministic local fakes (no credentials, no external services) composing
+  every documented capability: declarative configuration, a plugin catalog,
+  scoped composition, `AgentSpec` materialization, capability requirements and
+  preferences, tool registration and policy (including a denial), secret
+  resolution and redaction, agent invoke and streaming, replay recording and
+  replay with zero live calls, hot provider replacement with an old run pinned
+  to its generation, `Harness.preview()` before every change, diagnostics and
+  snapshot attribution, a controlled failure with full rollback, and graceful
+  shutdown to resource baseline. It executes its own assertions, prints a
+  deterministic documented transcript (`examples/production_reference/README.md`),
+  runs in `tests/integration/test_reference_app.py`, and is a package-smoke
+  canary in CI.
 - **Reproducible performance and capacity baselines** (roadmap R032).
   `scripts/benchmark.py` measures no-op reconciliation, one-entry replacement,
   dependency cascades, snapshot construction and hashing, plan/preview and

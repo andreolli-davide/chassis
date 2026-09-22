@@ -228,6 +228,10 @@ suite runs all of them.
 ## Documentation
 
 - Rendered docs: **https://andreolli-davide.github.io/chassis/**
+- [`examples/production_reference/`](examples/production_reference/README.md) — the production
+  reference application: one self-contained support-desk system composing configuration, catalog,
+  scopes, `AgentSpec`, policy, secrets, invoke and streaming, replay, hot replacement with pinned
+  runs, planning, diagnostics, rollback, and graceful shutdown — executing its own assertions.
 - [`docs/getting-started.md`](docs/getting-started.md) — install and first run.
 - [`docs/recipes.md`](docs/recipes.md) — behind a web service, per-tenant composition,
   hot provider swaps, budgets, durable runs.
