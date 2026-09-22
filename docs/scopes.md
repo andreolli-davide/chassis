@@ -172,7 +172,11 @@ async with harness:
 `None` (the default) exposes every tool visible from the lineage, so an ordinary
 scope behaves exactly as before. Tool visibility is composition visibility, not
 authorization: it decides which tools a run may *see*, not which actions a user is
-allowed to take. Tool registrations are identity-keyed, so two scopes (or two
+allowed to take. Scope paths are canonical and absolute everywhere — one shared
+validator covers the tree, the harness, and `AgentSpec`: no relative forms, no
+empty or untrimmed segments, no `.`/`..`, and no trailing slash beyond the root.
+A parent scope must belong to the same `CompositionTree`. Tool registrations are
+identity-keyed, so two scopes (or two
 generations) may contribute the same tool name; within one generation names are
 unique, and a candidate that would expose a duplicate name is rejected at
 publication.

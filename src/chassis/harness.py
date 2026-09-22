@@ -82,6 +82,7 @@ from chassis.core.identity import (
     build_semantic_identity,
     observations_from,
 )
+from chassis.core.paths import canonical_scope_path
 from chassis.core.scope import Scope
 from chassis.diagnostics import Diagnostics
 from chassis.hooks.registry import HookRegistry, HookSnapshot
@@ -600,7 +601,7 @@ class Harness:
 
         if scope is None:
             return self._composition.root.path
-        path = scope.path if isinstance(scope, CompositionScope) else scope
+        path = canonical_scope_path(scope.path if isinstance(scope, CompositionScope) else scope)
         if self._composition.get(path) is None:
             raise ConfigurationError(
                 "cannot install into an undeclared composition scope", path=path

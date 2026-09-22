@@ -63,8 +63,10 @@ class CapabilityKey:
     api_version: str = "1"
 
     def __post_init__(self) -> None:
-        if not self.name:
-            raise ConfigurationError("capability name must not be empty")
+        if not self.name or self.name != self.name.strip():
+            raise ConfigurationError(
+                "capability name must be a non-empty, trimmed string", capability=self.name
+            )
         if self.api_version and not self.api_version.isdigit():
             raise ConfigurationError(
                 "capability api_version must be a numeric contract generation",

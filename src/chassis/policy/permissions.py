@@ -29,8 +29,8 @@ class Permission:
     resource: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.name:
-            raise ConfigurationError("permission name must not be empty")
+        if not self.name or self.name != self.name.strip():
+            raise ConfigurationError("permission name must be a non-empty, trimmed string")
         if self.name.startswith(":") or self.name.endswith(":"):
             raise ConfigurationError(
                 "permission name must not contain an empty segment", permission=self.name

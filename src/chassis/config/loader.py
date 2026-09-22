@@ -34,8 +34,8 @@ class PluginCatalog:
     def register(self, name: str, plugin_type: type[Plugin], *, replace: bool = False) -> None:
         """Register an implementation under ``name``."""
 
-        if not name:
-            raise ConfigurationError("plugin catalog name must not be empty")
+        if not name or name != name.strip():
+            raise ConfigurationError("plugin catalog name must be a non-empty, trimmed string")
         if not isinstance(plugin_type, type):
             raise ConfigurationError(
                 "catalog entries must be plugin classes",

@@ -40,6 +40,7 @@ from typing import Any
 from chassis.capabilities.keys import CapabilityRequirement
 from chassis.core.collections import FrozenDict, freeze
 from chassis.core.errors import ConfigurationError
+from chassis.core.paths import canonical_scope_path
 
 __all__ = [
     "AGENT_METADATA_KEY",
@@ -72,16 +73,7 @@ def _validate_identifier(value: str, *, field_name: str) -> str:
 
 
 def _validate_scope_path(path: str) -> str:
-    if not path.startswith("/"):
-        raise ConfigurationError("agent scope must be an absolute path", scope=path)
-    if path != "/" and path.endswith("/"):
-        raise ConfigurationError("agent scope must not end with '/'", scope=path)
-    if "//" in path:
-        raise ConfigurationError("agent scope must not contain empty segments", scope=path)
-    for segment in path.split("/")[1:]:
-        if segment in (".", ".."):
-            raise ConfigurationError("agent scope must not contain '.' or '..'", scope=path)
-    return path
+    return canonical_scope_path(path)
 
 
 def _names(values: Iterable[str], *, field_name: str) -> frozenset[str]:

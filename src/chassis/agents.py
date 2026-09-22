@@ -173,9 +173,10 @@ class AgentRegistry:
         """
 
         name = getattr(runtime, "name", "")
-        if not name:
+        if not isinstance(name, str) or not name or name != name.strip():
             raise ConfigurationError(
-                "agent runtime must declare a name", runtime=type(runtime).__name__
+                "agent runtime must declare a non-empty, trimmed name",
+                runtime=type(runtime).__name__,
             )
         if scope is not None:
             scope.assert_open(f"register agent {name!r}")

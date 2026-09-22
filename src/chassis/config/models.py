@@ -52,6 +52,9 @@ class PluginEntryConfig(BaseModel):
     def _freeze_configuration(self) -> PluginEntryConfig:
         # A frozen model blocks attribute assignment but not mutation of the
         # containers it holds; desired state must be immutable in both senses.
+        declared = self.config.get("config_version")
+        if declared is not None and (not isinstance(declared, int) or declared < 0):
+            raise ValueError("config_version must be a non-negative integer")
         object.__setattr__(self, "config", FrozenDict(self.config))
         object.__setattr__(self, "provider_preference", FrozenDict(self.provider_preference))
         return self

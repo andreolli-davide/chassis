@@ -61,6 +61,7 @@ from chassis.core.identity import (
     ReuseReason,
     SemanticIdentity,
 )
+from chassis.core.paths import canonical_scope_path
 from chassis.plugins.lifecycle import PluginInstance
 from chassis.plugins.resolver import (
     ROOT_SCOPE,
@@ -210,6 +211,12 @@ class CompositionScope:
     ) -> None:
         self._tree = tree
         self._name = _validate_name(name)
+        if parent is not None and parent.tree is not tree:
+            raise ConfigurationError(
+                "parent scope belongs to another composition tree",
+                name=name,
+                parent=parent.path,
+            )
         self._parent = parent
         self._capabilities = _view_from(capabilities)
         self._tools = _tool_view_from(tools)
@@ -539,8 +546,13 @@ class CompositionTree:
         return parent_scope.child(name, capabilities=capabilities, tools=tools, metadata=metadata)
 
     def ensure(self, path: str) -> CompositionScope:
-        """Return the scope at ``path``, creating it (and ancestors) when absent."""
+        """Return the scope at ``path``, creating it (and ancestors) when absent.
 
+        ``path`` must be canonical (see
+        :func:`~chassis.core.paths.canonical_scope_path`).
+        """
+
+        path = canonical_scope_path(path)
         existing = self.get(path)
         if existing is not None:
             return existing
@@ -552,9 +564,13 @@ class CompositionTree:
         return parent.child(name)
 
     def get(self, path: str) -> CompositionScope | None:
-        """The scope at ``path``, or ``None``."""
+        """The scope at ``path``, or ``None``.
 
-        return self._scopes.get(path)
+        ``path`` must be canonical (see
+        :func:`~chassis.core.paths.canonical_scope_path`).
+        """
+
+        return self._scopes.get(canonical_scope_path(path))
 
     def paths(self) -> tuple[str, ...]:
         """Every scope path, in deterministic pre-order."""
@@ -586,6 +602,7 @@ class CompositionTree:
 
         if path == ROOT_PATH:
             raise ConfigurationError("the root composition scope cannot be removed", path=path)
+        path = canonical_scope_path(path)
         scope = self._scopes.get(path)
         if scope is None:
             return ()

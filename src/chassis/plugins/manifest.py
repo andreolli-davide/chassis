@@ -83,6 +83,13 @@ class PluginManifest(BaseModel):
     def _freeze_permissions(cls, value: Sequence[str]) -> Sequence[str]:
         return tuple(value)
 
+    @field_validator("config_version")
+    @classmethod
+    def _validate_config_version(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("config_version must be non-negative")
+        return value
+
     @model_validator(mode="after")
     def _validate_capabilities(self) -> PluginManifest:
         """Reject unparseable capability declarations when the manifest is built."""

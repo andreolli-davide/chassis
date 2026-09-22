@@ -22,6 +22,7 @@ from chassis.capabilities.registry import CapabilityRegistration, CapabilityRegi
 from chassis.core.collections import freeze
 from chassis.core.errors import (
     CleanupFailure,
+    ConfigurationError,
     EffectCleanupError,
     PluginLoadError,
     PluginSetupError,
@@ -58,6 +59,12 @@ class PluginEntry:
     config: Mapping[str, object] = field(default_factory=dict, repr=False)
     revision: int = 1
     scope: str = ROOT_SCOPE
+
+    def __post_init__(self) -> None:
+        if not self.entry_id or self.entry_id != self.entry_id.strip():
+            raise ConfigurationError(
+                "entry id must be a non-empty, trimmed string", entry=self.entry_id
+            )
 
 
 class PluginRegistry:
@@ -118,6 +125,8 @@ class PluginRegistry:
                 "plugin does not declare a PluginManifest",
                 plugin=type(plugin_instance).__name__,
             )
+        if entry_id is not None and (not entry_id.strip() or entry_id != entry_id.strip()):
+            raise ConfigurationError("entry id must be a non-empty, trimmed string", entry=entry_id)
         resolved_entry_id = entry_id or self._default_entry_id(manifest)
         if resolved_entry_id in self._entries and not replace:
             raise PluginLoadError(

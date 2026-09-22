@@ -98,6 +98,15 @@ that a minor release may break the documented surface.
   (re-declare it, or set it programmatically with `prefer_provider`, which now
   outranks the document). Configurations with a schema `version` other than `1`
   are rejected instead of being accepted silently.
+- **Composition-tree ownership and naming are validated** (roadmap R012). A
+  parent scope belonging to another `CompositionTree` is rejected, and every
+  tree/`AgentSpec`/harness API accepts the same canonical absolute scope paths    (no relative forms, empty or untrimmed segments, `.`/`..`, or trailing
+  slashes) via one shared `chassis.core.paths.canonical_scope_path`. Whitespace-    only or untrimmed capability, permission, catalog, entry, and agent-runtime
+  names are rejected, and config/manifest schema versions must be non-negative.
+- **Migration note:** non-canonical scope paths (relative, `"//"-containing`,
+  untrimmed, or trailing-slash forms) and whitespace-padded names that were
+  previously accepted silently now raise `ConfigurationError`; trim and
+  canonicalize before calling. Negative `config_version` values are rejected.
 
 ## [0.5.1] - 2026-09-22
 
