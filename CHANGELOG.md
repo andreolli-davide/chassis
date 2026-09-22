@@ -7,6 +7,53 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
+### Fixed
+
+Post-review regression fixes (found reviewing v0.5.0..v0.8.0):
+
+- **Composition-provided secret providers no longer bypass the shared
+  redactor** (R003/G11). Providers handed to plugins through the system
+  requirement lookup and `PluginContext.secrets` are wrapped in
+  `RedactingSecretProvider`, so every resolved secret is learned by the redactor
+  and cannot appear in telemetry, replay records, or error strings.
+- **A published tool policy is immutable** (R009/G4). `ToolSnapshot` publishes
+  deep frozen copies of the registrations — mutating the live registry's tool
+  policy after publication can no longer alter acquired generations (which
+  would have allowed skipping authorization without publishing a generation).
+- **Replay keys reject non-string mapping keys** (R015/R021). The replay key
+  builder raises `ConfigurationError` instead of stringifying keys, which could
+  silently collapse `{1: ..., "1": ...}` into one value and one key.
+- **`apply_config()` and AgentSpec rollback restore the exact prior state**
+  (R010/R011). Rollback no longer reinstalls entries through `install(...,
+  replace=True)` (which bumped revisions and re-dirtied the config) and no
+  longer reinstalls entries that were never removed; revisions and the dirty
+  flag are restored exactly, and a rejected configuration can no longer be
+  rebuilt and published by the next reconcile.
+- **`raise_on_error=True` applies to replayed tool errors** (R016). Recorded
+  error and timeout results raise `ToolExecutionError` exactly like the live
+  path instead of returning the error result.
+- **`CompositionTree.child()` rejects a parent from another tree** (R012). The
+  constructor's cross-tree rule is enforced at the public entry point too.
+- **Declarative config is deeply frozen and de-aliased** (R009/R011).
+  `HarnessConfig` recursively freezes nested dicts/lists/sets and copies the
+  caller's input; neither the input nor direct mutation can change a stored
+  configuration.
+- **`AgentResult.text` supports mapping-messages** (R022). Messages that are
+  plain mappings (`{"content": ...}`) are read like their attribute-based
+  equivalents, matching the documented shapes and the migration notes.
+- **The tool contract validates `description` at registration** (R018). A
+  missing, empty, or non-string description is rejected at registration with a
+  typed error instead of failing later inside `to_dict()` or snapshotting.
+- **Replay boundaries report the missing/exhausted reason** (R022). The tool
+  executor and replay chat-model boundaries forward the session's
+  `reason="missing"`/`"exhausted"` instead of raising a reason-less mismatch.
+- **Graph cache telemetry binds to the harness** (R019). A defaulted
+  `LangGraphAgent` forwards its effective telemetry to its `GraphCache`, so
+  `graph.cache` events reach harness telemetry (explicit overrides stay).
+- **The guarantee-to-test gate requires real collected test nodes** (R023).
+  Every G1–G24 row must name `file::test_name` nodes that pytest actually
+  collects; the design table now names one per enforcement reference.
+
 ## [0.8.0] - 2026-09-22
 
 Beta readiness: strict canonicalization, an unambiguous public API, aligned

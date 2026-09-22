@@ -21,6 +21,15 @@ transactional, and logical unload is still distinct from physical disposal.
 - [0.2 → 0.3](#02-03): composition scopes, explain and diff diagnostics
 - [0.1 → 0.2](#01-02): optional extras, tool protocol, lease identity, budgets
 
+## Unreleased
+
+Post-0.8.0 fixes tighten four behaviors: replay key building rejects
+non-string mapping keys (convert keys to strings first), tool registration
+requires a non-empty `description`, published tool snapshots expose detached
+frozen copies (compare registrations by `registration_id`, not object
+identity), and `raise_on_error=True` raises for replayed tool errors exactly
+like live ones.
+
 ## 0.7 → 0.8
 
 0.8.0 is Beta-readiness hardening: the sharp edges are gone and the release
