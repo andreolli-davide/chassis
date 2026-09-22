@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
 import pytest
@@ -259,3 +259,166 @@ async def test_diagnostics_describe_handlers_without_payloads() -> None:
     assert payload["event"] == "policy_decision"
     assert payload["owner_id"] == "plugin_audit"
     assert "secret" not in str(payload)
+
+
+# --------------------------------------------------------------------------
+# Hook semantics (R017): TRANSFORM replaces, payloads freeze, failures surface.
+# --------------------------------------------------------------------------
+
+
+async def test_transform_replaces_the_payload_and_can_remove_keys() -> None:
+    registry = HookRegistry()
+    scope = Scope("owner")
+
+    async def replace(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        return {"kept": 2}
+
+    registry.register(
+        scope=scope,
+        event=HookEvent.BEFORE_TOOL_EXECUTE,
+        handler=replace,
+        mode=HookMode.TRANSFORM,
+    )
+    result = await registry.dispatch(HookEvent.BEFORE_TOOL_EXECUTE, {"kept": 1, "removed": "gone"})
+
+    # Replacement semantics: a key the transform does not carry is removed.
+    assert dict(result.payload) == {"kept": 2}
+
+
+async def test_chained_transforms_each_replace_the_payload() -> None:
+    registry = HookRegistry()
+    scope = Scope("owner")
+    seen: list[dict[str, Any]] = []
+
+    async def first(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        return {"a": 1, "b": 2}
+
+    async def second(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        seen.append(dict(payload))
+        return {"a": 9}
+
+    registry.register(
+        scope=scope,
+        event=HookEvent.BEFORE_TOOL_EXECUTE,
+        handler=first,
+        mode=HookMode.TRANSFORM,
+        priority=-10,
+    )
+    registry.register(
+        scope=scope,
+        event=HookEvent.BEFORE_TOOL_EXECUTE,
+        handler=second,
+        mode=HookMode.TRANSFORM,
+    )
+    result = await registry.dispatch(HookEvent.BEFORE_TOOL_EXECUTE, {"a": 0, "z": 3})
+
+    assert seen == [{"a": 1, "b": 2}]
+    assert dict(result.payload) == {"a": 9}
+
+
+async def test_hook_payloads_are_deeply_frozen() -> None:
+    registry = HookRegistry()
+    scope = Scope("owner")
+
+    async def observe(payload: Mapping[str, Any]) -> None:
+        with pytest.raises(TypeError):
+            payload["nested"]["x"] = 1  # type: ignore[index]
+        return None
+
+    registry.register(
+        scope=scope,
+        event=HookEvent.BEFORE_TOOL_EXECUTE,
+        handler=observe,
+        mode=HookMode.OBSERVE,
+    )
+    result = await registry.dispatch(
+        HookEvent.BEFORE_TOOL_EXECUTE, {"nested": {"x": 0, "rows": [{"y": 1}]}}
+    )
+
+    with pytest.raises(TypeError):
+        result.payload["nested"]["rows"][0]["y"] = 2  # type: ignore[index]
+
+
+async def test_recorded_control_plane_failures_do_not_abort_the_transition() -> None:
+    from chassis import Harness, PluginContext, plugin
+
+    async def boom(payload: Mapping[str, Any]) -> None:
+        raise RuntimeError("observer exploded")
+
+    @plugin(name="observer", version="1.0.0")
+    async def observer(ctx: PluginContext) -> None:
+        ctx.hooks.register(HookEvent.PLUGIN_MOUNTED, boom)
+
+    harness = Harness()
+    harness.install(observer, entry_id="observer")
+    result = await harness.reconcile()
+    try:
+        assert any("boom" in failure.description for failure in result.failures)
+    finally:
+        await harness.stop()
+
+
+async def test_recorded_data_plane_failures_surface_without_failing_the_operation() -> None:
+    from chassis import PluginContext, plugin
+    from chassis.runtime import AgentEvent, AgentRequest, AgentResult, HarnessRunContext
+    from chassis.telemetry import RecordingTelemetry
+    from chassis.testing import TestHarness, fake_tool
+    from chassis.tools import ToolRequest
+
+    telemetry = RecordingTelemetry()
+
+    async def boom(payload: Mapping[str, Any]) -> None:
+        raise RuntimeError("observer exploded")
+
+    @plugin(name="observer", version="1.0.0")
+    async def observer(ctx: PluginContext) -> None:
+        ctx.hooks.register(HookEvent.BEFORE_TOOL_EXECUTE, boom)
+        ctx.hooks.register(HookEvent.BEFORE_AGENT_RUN, boom)
+
+    class TinyRuntime:
+        @property
+        def name(self) -> str:
+            return "tiny"
+
+        async def invoke(
+            self, request: AgentRequest, run_context: HarnessRunContext
+        ) -> AgentResult:
+            return AgentResult(
+                agent="tiny",
+                generation_id=run_context.generation_id,
+                run_id=run_context.run_id,
+            )
+
+        async def stream(
+            self, request: AgentRequest, run_context: HarnessRunContext
+        ) -> AsyncIterator[AgentEvent]:
+            yield AgentEvent(
+                agent="tiny",
+                generation_id=run_context.generation_id,
+                run_id=run_context.run_id,
+                kind="end",
+            )
+
+    async with TestHarness(telemetry=telemetry) as harness:
+        harness.install_tools(fake_tool("echo", result="ok", parameters={"text": (str, ...)}))
+        harness.install(observer, entry_id="observer")
+        harness.register_agent(TinyRuntime())
+        await harness.reconcile()
+        generation = harness.current_generation
+        assert generation is not None
+
+        result = await harness.tool_executor.execute(
+            ToolRequest(name="echo", args={"text": "hi"}),
+            snapshot=harness.tool_snapshot(generation),
+        )
+        run = await harness.agents.invoke("tiny", {"messages": []})
+
+        # Neither operation failed on the observer's account.
+        assert result.ok
+        assert run.agent == "tiny"
+
+        failures = [event for event in harness.telemetry.events if event.name == "hook.failure"]
+        assert len(failures) == 2
+        for failure in failures:
+            assert failure.attributes["error_type"] == "RuntimeError"
+            assert "exploded" not in str(failure.attributes)

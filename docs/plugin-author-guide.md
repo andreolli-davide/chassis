@@ -125,9 +125,15 @@ ctx.hooks.register(HookEvent.BEFORE_TOOL_EXECUTE, refuse_dangerous, mode=HookMod
 ```
 
 - `OBSERVE`: return value ignored; use for logging, metrics, audit.
-- `TRANSFORM`: a returned mapping replaces the payload for the rest of the chain.
+- `TRANSFORM`: a returned mapping *replaces* the payload for the rest of the
+  chain — keys it does not carry are removed, so return the complete payload.
 - `BAIL`: a truthy return stops the chain; at the tool and before-agent boundaries
   that refuses the operation.
+
+Payloads are deeply frozen: nested mutation raises `TypeError` (copy first if you
+need to transform). A `RECORD` handler failure never fails the operation — on the
+data plane it is surfaced as a structured `hook.failure` telemetry event, and on
+the control plane it aggregates into the transition's report.
 
 Ordering is priority first, then registration order. Error semantics are per
 registration: record and continue, or fail loudly with `HookExecutionError`.

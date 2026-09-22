@@ -686,7 +686,19 @@ class ToolExecutor:
     ) -> HookResult:
         if self._hooks is None:
             return HookResult(event=event, payload=payload)
-        return await self._hooks.dispatch(event, payload, hooks=hooks)
+        result = await self._hooks.dispatch(event, payload, hooks=hooks)
+        # Recorded handler failures are surfaced, never swallowed: the operation
+        # proceeds, and the failure is visible as structured telemetry.
+        for failure in result.failures:
+            self._telemetry.event(
+                "hook.failure",
+                {
+                    "event": event.value,
+                    "description": failure.description,
+                    "error_type": type(failure.error).__name__,
+                },
+            )
+        return result
 
 
 def _split_output(output: Any) -> tuple[Any, Any]:

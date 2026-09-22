@@ -121,7 +121,7 @@ async def test_lifecycle_events_fire_on_mount_and_unmount() -> None:
 
         assert events(seen) == [HookEvent.PLUGIN_MOUNTING, HookEvent.PLUGIN_MOUNTED]
         assert seen[0][1]["plugin"] == "db"
-        assert seen[0][1]["requirements"] == []
+        assert seen[0][1]["requirements"] == ()
         assert seen[1][1]["instance_id"].startswith("plugin_")
 
         seen.clear()

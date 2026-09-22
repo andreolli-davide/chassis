@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable, Mapping
-from types import MappingProxyType
 from typing import Any
 
+from chassis.core.collections import frozen_mapping
 from chassis.core.errors import CleanupFailure, HookExecutionError
 from chassis.core.scope import Scope
 from chassis.hooks.types import (
@@ -188,7 +188,7 @@ class HookRegistry:
         """
 
         registrations = self.handlers(event) if hooks is None else hooks.handlers(event)
-        current: Mapping[str, Any] = MappingProxyType(dict(payload or {}))
+        current: Mapping[str, Any] = frozen_mapping(payload)
         failures = []
         stopped = False
 
@@ -220,7 +220,10 @@ class HookRegistry:
                         event=event.value,
                         handler=registration.handler_name,
                     )
-                current = MappingProxyType({**current, **result})
+                # TRANSFORM replaces the payload, exactly as documented: keys the
+                # mapping does not carry are removed, and the replacement is
+                # deep-frozen like the initial payload.
+                current = frozen_mapping(result)
                 continue
             if registration.mode is HookMode.BAIL and result:
                 stopped = True

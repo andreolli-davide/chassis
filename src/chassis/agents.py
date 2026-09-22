@@ -897,6 +897,17 @@ class AgentRegistry:
         """
 
         result = await harness.hooks.dispatch(event, payload, hooks=hooks)
+        # Recorded handler failures are surfaced, never swallowed: the operation
+        # proceeds, and the failure is visible as structured telemetry.
+        for failure in result.failures:
+            harness.telemetry.event(
+                "hook.failure",
+                {
+                    "event": event.value,
+                    "description": failure.description,
+                    "error_type": type(failure.error).__name__,
+                },
+            )
         if refusable and result.stopped:
             raise PolicyDenied(
                 f"agent {payload['agent']!r} was refused by a hook",

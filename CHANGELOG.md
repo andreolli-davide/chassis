@@ -53,6 +53,19 @@ that a minor release may break the documented surface.
   through replay payloads). Code that assumed replayed results carried the
   recording's generation/call ids or its recorded duration should read the
   current attribution instead — only the semantic result is historical.
+- **Hook semantics settled and failures surfaced** (roadmap R017). `TRANSFORM`
+  now *replaces* the payload exactly as documented — keys the returned mapping
+  does not carry are removed — and chained transforms each replace the payload
+  for the remaining handlers. Hook payloads are deep-frozen (nested mutation
+  raises `TypeError` at every depth). `RECORD` handler failures on the tool and
+  agent data-plane are surfaced as structured `hook.failure` telemetry events
+  (event, handler description, error type — never error text) without failing
+  the operation; control-plane failures continue to aggregate into the
+  transition's report.
+- **Migration note:** a `TRANSFORM` handler that relied on patch semantics (a
+  partial mapping merged over the old payload) must now return the complete
+  replacement payload — omitted keys are removed. Handlers that mutate nested
+  payload containers must copy them first.
 
 ## [0.6.0] - 2026-09-22
 
