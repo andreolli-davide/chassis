@@ -9,6 +9,79 @@
     {
       "created_at": 1760000000.0,
       "generation_id": null,
+      "key": "07705eb2e4c605f80e39a12f2be34ba9",
+      "kind": "lifecycle",
+      "request": {
+        "entry_id": "orders-db",
+        "event": "plugin.mount",
+        "instance_id": "plugin_fixture_0",
+        "plugin": "orders-db"
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 0
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "07705eb2e4c605f80e39a12f2be34ba9",
+      "kind": "lifecycle",
+      "request": {
+        "entry_id": "toolbox",
+        "event": "plugin.mount",
+        "instance_id": "plugin_fixture_1",
+        "plugin": "chassis-toolbox"
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 1
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "1577378f17156e7d0fed9e44b968401e",
+      "kind": "lifecycle",
+      "request": {
+        "event": "generation.retired",
+        "generation_id": "gen_0001"
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 2
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "a24a5aaba06fde94589fb383655bc536",
+      "kind": "lifecycle",
+      "request": {
+        "entry_id": "orders-db",
+        "event": "plugin.unmount",
+        "instance_id": "plugin_fixture_0",
+        "plugin": "orders-db"
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 3
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "a24a5aaba06fde94589fb383655bc536",
+      "kind": "lifecycle",
+      "request": {
+        "entry_id": "toolbox",
+        "event": "plugin.unmount",
+        "instance_id": "plugin_fixture_1",
+        "plugin": "chassis-toolbox"
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 4
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
       "key": "e68bc44571edfd3cf1a5dbb92d9c0add",
       "kind": "lifecycle",
       "request": {
@@ -20,7 +93,94 @@
       },
       "response": null,
       "run_id": null,
-      "sequence": 0
+      "sequence": 5
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "e68bc44571edfd3cf1a5dbb92d9c0add",
+      "kind": "lifecycle",
+      "request": {
+        "event": "generation.publish",
+        "generation_id": "gen_0002",
+        "plugins": 2,
+        "previous": "gen_0001",
+        "sequence": 2
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 6
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "e843c914fb43a1ce0d96d66dc460c266",
+      "kind": "lifecycle",
+      "request": {
+        "event": "harness.shutdown",
+        "generation_id": "gen_0002",
+        "leases": 0
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 7
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "ebb1d101b8b27233dc82b0efc5f0dbb6",
+      "kind": "lifecycle",
+      "request": {
+        "event": "generation.draining",
+        "generation_id": "gen_0001",
+        "successor": "gen_0002"
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 8
+    },
+    {
+      "created_at": 1760000000.0,
+      "generation_id": null,
+      "key": "4f7155b57e38e3baf6309dfd5c7b5930",
+      "kind": "model",
+      "request": {
+        "messages": [
+          {
+            "additional_kwargs": {},
+            "content": "where is order A-1?",
+            "id": null,
+            "name": null,
+            "response_metadata": {},
+            "type": "human"
+          }
+        ],
+        "model": "fake-model",
+        "options": {
+          "stop": null
+        }
+      },
+      "response": {
+        "generations": [
+          {
+            "generation_info": null,
+            "message": {
+              "additional_kwargs": {},
+              "content": "Order A-1 shipped.",
+              "id": null,
+              "invalid_tool_calls": [],
+              "name": null,
+              "response_metadata": {},
+              "tool_calls": [],
+              "type": "ai",
+              "usage_metadata": null
+            }
+          }
+        ],
+        "llm_output": null
+      },
+      "run_id": null,
+      "sequence": 9
     },
     {
       "created_at": 1760000000.0,
@@ -62,67 +222,7 @@
         "tool_schema_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
       },
       "run_id": null,
-      "sequence": 1
-    },
-    {
-      "created_at": 1760000000.0,
-      "generation_id": null,
-      "key": "07705eb2e4c605f80e39a12f2be34ba9",
-      "kind": "lifecycle",
-      "request": {
-        "entry_id": "orders-db",
-        "event": "plugin.mount",
-        "instance_id": "plugin_fixture_0",
-        "plugin": "orders-db"
-      },
-      "response": null,
-      "run_id": null,
-      "sequence": 2
-    },
-    {
-      "created_at": 1760000000.0,
-      "generation_id": null,
-      "key": "07705eb2e4c605f80e39a12f2be34ba9",
-      "kind": "lifecycle",
-      "request": {
-        "entry_id": "toolbox",
-        "event": "plugin.mount",
-        "instance_id": "plugin_fixture_1",
-        "plugin": "chassis-toolbox"
-      },
-      "response": null,
-      "run_id": null,
-      "sequence": 3
-    },
-    {
-      "created_at": 1760000000.0,
-      "generation_id": null,
-      "key": "ebb1d101b8b27233dc82b0efc5f0dbb6",
-      "kind": "lifecycle",
-      "request": {
-        "event": "generation.draining",
-        "generation_id": "gen_0001",
-        "successor": "gen_0002"
-      },
-      "response": null,
-      "run_id": null,
-      "sequence": 4
-    },
-    {
-      "created_at": 1760000000.0,
-      "generation_id": null,
-      "key": "e68bc44571edfd3cf1a5dbb92d9c0add",
-      "kind": "lifecycle",
-      "request": {
-        "event": "generation.publish",
-        "generation_id": "gen_0002",
-        "plugins": 2,
-        "previous": "gen_0001",
-        "sequence": 2
-      },
-      "response": null,
-      "run_id": null,
-      "sequence": 5
+      "sequence": 10
     },
     {
       "created_at": 1760000000.0,
@@ -189,20 +289,7 @@
         "tool_schema_hash": "0b45ff8bbd03e626cf78ddd77accf163dd6c6f94ccf0a20b995fef74399d2087"
       },
       "run_id": null,
-      "sequence": 6
-    },
-    {
-      "created_at": 1760000000.0,
-      "generation_id": null,
-      "key": "1577378f17156e7d0fed9e44b968401e",
-      "kind": "lifecycle",
-      "request": {
-        "event": "generation.retired",
-        "generation_id": "gen_0001"
-      },
-      "response": null,
-      "run_id": null,
-      "sequence": 7
+      "sequence": 11
     },
     {
       "created_at": 1760000000.0,
@@ -230,93 +317,6 @@
         "status": "ok",
         "tool_call_id": null
       },
-      "run_id": null,
-      "sequence": 8
-    },
-    {
-      "created_at": 1760000000.0,
-      "generation_id": null,
-      "key": "4f7155b57e38e3baf6309dfd5c7b5930",
-      "kind": "model",
-      "request": {
-        "messages": [
-          {
-            "additional_kwargs": {},
-            "content": "where is order A-1?",
-            "id": null,
-            "name": null,
-            "response_metadata": {},
-            "type": "human"
-          }
-        ],
-        "model": "fake-model",
-        "options": {
-          "stop": null
-        }
-      },
-      "response": {
-        "generations": [
-          {
-            "generation_info": null,
-            "message": {
-              "additional_kwargs": {},
-              "content": "Order A-1 shipped.",
-              "id": null,
-              "invalid_tool_calls": [],
-              "name": null,
-              "response_metadata": {},
-              "tool_calls": [],
-              "type": "ai",
-              "usage_metadata": null
-            }
-          }
-        ],
-        "llm_output": null
-      },
-      "run_id": null,
-      "sequence": 9
-    },
-    {
-      "created_at": 1760000000.0,
-      "generation_id": null,
-      "key": "e843c914fb43a1ce0d96d66dc460c266",
-      "kind": "lifecycle",
-      "request": {
-        "event": "harness.shutdown",
-        "generation_id": "gen_0002",
-        "leases": 0
-      },
-      "response": null,
-      "run_id": null,
-      "sequence": 10
-    },
-    {
-      "created_at": 1760000000.0,
-      "generation_id": null,
-      "key": "a24a5aaba06fde94589fb383655bc536",
-      "kind": "lifecycle",
-      "request": {
-        "entry_id": "toolbox",
-        "event": "plugin.unmount",
-        "instance_id": "plugin_fixture_1",
-        "plugin": "chassis-toolbox"
-      },
-      "response": null,
-      "run_id": null,
-      "sequence": 11
-    },
-    {
-      "created_at": 1760000000.0,
-      "generation_id": null,
-      "key": "a24a5aaba06fde94589fb383655bc536",
-      "kind": "lifecycle",
-      "request": {
-        "entry_id": "orders-db",
-        "event": "plugin.unmount",
-        "instance_id": "plugin_fixture_0",
-        "plugin": "orders-db"
-      },
-      "response": null,
       "run_id": null,
       "sequence": 12
     }

@@ -73,11 +73,17 @@ async def memory_plugin(ctx: PluginContext) -> None:
 
 
 def _scrub(value: Any, rename: dict[str, str], uuids: dict[str, str]) -> Any:
-    """Deterministic stand-ins for volatile identity and timing, recursively."""
+    """Deterministic stand-ins for volatile identity and timing, recursively.
+
+    ``rename`` is always supplied from the live registry's entry-to-instance
+    pairing and keyed by entry name, so a regeneration names the same fixture
+    ids regardless of mount order.
+    """
 
     if isinstance(value, str):
         if _INSTANCE_ID.match(value):
-            return rename.setdefault(value, f"plugin_fixture_{len(rename)}")
+            assert value in rename, f"unpaired instance id {value}"
+            return rename[value]
         if _UUID.match(value):
             return uuids.setdefault(value, f"id_fixture_{len(uuids)}")
         return value
@@ -96,10 +102,51 @@ def _scrub(value: Any, rename: dict[str, str], uuids: dict[str, str]) -> Any:
     return value
 
 
-def _sanitize(payload: dict[str, Any]) -> dict[str, Any]:
-    """Replace volatile identity and timing values; verify nothing remains."""
+def _rename_map(harness: Any) -> dict[str, str]:
+    """Fixture id per instance, ordered by entry name — not by mount order.
 
-    document = _scrub(payload, {}, {})
+    The pairing comes from the live registry (entry id per instance id), so no
+    identity is guessed; sorting by entry name makes the assignment immune to
+    the resolver's tie-breaking between simultaneously mounted plugins.
+    """
+
+    pairing = {
+        instance.instance_id: instance.entry_id for instance in harness.plugin_registry.instances()
+    }
+    return {
+        instance_id: f"plugin_fixture_{index}"
+        for index, instance_id in enumerate(sorted(pairing, key=lambda item: pairing[item]))
+    }
+
+
+def _record_sort_key(record: dict[str, Any]) -> tuple[str, ...]:
+    """Canonical record order: semantic fields only, never volatile ids."""
+
+    request = record.get("request") or {}
+    return (
+        str(record.get("kind", "")),
+        str(record.get("key", "")),
+        str(request.get("event", "")),
+        str(request.get("entry_id", "")),
+        str(request.get("tool", "")),
+        json.dumps(request.get("args") or {}, sort_keys=True),
+    )
+
+
+def _sanitize(payload: dict[str, Any], rename: dict[str, str]) -> dict[str, Any]:
+    """Replace volatile identity and timing values; verify nothing remains.
+
+    Record order and sequence numbers are canonicalised too: replay consumption
+    is per boundary key, so the order of independent records carries no
+    semantics, and a canonical order keeps regeneration byte-stable.
+    """
+
+    document = _scrub(payload, rename, {})
+    records = document.get("records")
+    if isinstance(records, list):
+        records.sort(key=_record_sort_key)
+        for index, record in enumerate(records):
+            record["sequence"] = index
     rendered = json.dumps(document, sort_keys=True)
     assert not _LEFTOVER_INSTANCE_ID.search(rendered), rendered[:200]
     assert not _LEFTOVER_UUID.search(rendered), rendered[:200]
@@ -118,7 +165,7 @@ async def _build_snapshot() -> dict[str, Any]:
         snapshot = harness.snapshot_for(
             generation, agent="support-agent", metadata={"dataset": "compat-fixtures"}
         )
-        document = _sanitize(snapshot.to_dict())
+        document = _sanitize(snapshot.to_dict(), _rename_map(harness))
     return document
 
 
@@ -127,6 +174,7 @@ async def _build_recording() -> dict[str, Any]:
         mode=ReplayMode.RECORD,
         metadata={"dataset": "compat-fixtures", "produced_by": "chassis-harness 0.8.1"},
     )
+    rename: dict[str, str] = {}
     async with TestHarness(replay=recording) as harness:
         harness.install(orders_db, entry_id="orders-db")
         harness.install_tools(
@@ -152,8 +200,9 @@ async def _build_recording() -> dict[str, Any]:
             model_name="fake-model",
         )
         await model.ainvoke([HumanMessage("where is order A-1?")])
+        rename = _rename_map(harness)
 
-    document = _sanitize(recording.to_dict())
+    document = _sanitize(recording.to_dict(), rename)
     kinds = {entry["kind"] for entry in document["records"]}
     assert kinds >= {"tool", "model", "snapshot", "lifecycle"}, kinds
     return document

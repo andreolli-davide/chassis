@@ -15,14 +15,20 @@ what proves that 0.9.0 can read what 0.8.1 wrote. They are regenerated only from
   snapshot records — through the public 0.8.1 serialization (`to_dict()`/`save()`).
 - Sanitization (applied by the generator, verified by assertions in it): fixed
   timestamps (`created_at` = 1760000000.0, `duration_seconds` = 0.25),
-  deterministic stand-ins for runtime instance ids (`plugin_fixture_N`), UUIDs
-  (`id_fixture_N`), run ids (`run_fixture_1`), and tool call ids
-  (`call_fixture_1`). No secrets, paths, hostnames, or machine-specific data.
+  deterministic stand-ins for runtime instance ids (`plugin_fixture_N`, assigned
+  from the live registry's entry pairing and ordered by entry name — never by
+  mount order), UUIDs (`id_fixture_N`), run ids (`run_fixture_1`), and tool call
+  ids (`call_fixture_1`). Replay records are canonicalised (ordered by their
+  semantic fields and renumbered — replay consumption is per boundary key, so
+  independent record order carries no semantics) and instance ids are paired
+  from the live registry rather than guessed. Regeneration is byte-deterministic:
+  running the generator twice produces identical documents. No secrets, paths,
+  hostnames, or machine-specific data.
 
 | File | SHA-256 |
 | --- | --- |
-| `runtime-snapshot.json` | `fe9d048740f8fb3931f6dfb05f8cb3c373a64b727835c6b27d54c60220fc3a8c` |
-| `replay-recording.json` | `c8b276ada30b9a57d3078ce406b7c37232b52aa3c97f30aaea12f817a6a1d751` |
+| `runtime-snapshot.json` | `ab97f82710ed3b6d2b80bb48811c34c1119c2fa453ce4f3bc398087ab16e965e` |
+| `replay-recording.json` | `68ee380e7386c882203080db355916f167fd14f0131c5b0e31e5af745ed5f2af` |
 | `configuration.yaml` | `5839c987aa7cce30612d2767ea5b3298eb1f313982f41bd5dba8079a7a7dbf72` |
 
 ## What each fixture exercises

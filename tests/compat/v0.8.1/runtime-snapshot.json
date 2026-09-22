@@ -24,8 +24,8 @@
   },
   "prompt_hash": null,
   "runtime_instance_ids": [
-    "plugin_fixture_0",
-    "plugin_fixture_1"
+    "plugin_fixture_1",
+    "plugin_fixture_0"
   ],
   "scopes": {
     "root": "/",
@@ -41,10 +41,10 @@
         "path": "/",
         "providers": {
           "database": [
-            "plugin_fixture_0"
+            "plugin_fixture_1"
           ],
           "memory": [
-            "plugin_fixture_1"
+            "plugin_fixture_0"
           ]
         },
         "selections": [

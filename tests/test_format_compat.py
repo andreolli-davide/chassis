@@ -68,14 +68,14 @@ def test_the_0_8_1_snapshot_migrates_without_losing_attribution() -> None:
     assert snapshot.plugin_graph_hash == document["plugin_graph_hash"]
     assert snapshot.tool_schema_hash == document["tool_schema_hash"]
     assert dict(snapshot.metadata) == {"dataset": "compat-fixtures"}
-    assert snapshot.runtime_instance_ids == ("plugin_fixture_0", "plugin_fixture_1")
+    assert snapshot.runtime_instance_ids == ("plugin_fixture_1", "plugin_fixture_0")
 
     # The physical scope tree is preserved one-for-one.
     assert record["scopes"] == document["scopes"]
     recorded_scope = document["scopes"]["scopes"][0]
     assert recorded_scope["providers"] == {
-        "database": ["plugin_fixture_0"],
-        "memory": ["plugin_fixture_1"],
+        "database": ["plugin_fixture_1"],
+        "memory": ["plugin_fixture_0"],
     }
     selection = recorded_scope["selections"][0]
     assert selection == {
@@ -110,7 +110,7 @@ def test_the_migrated_snapshot_declares_the_current_format() -> None:
 
     assert payload["format_version"] == 1
     assert payload["generation_id"] == "gen_0002"
-    assert payload["runtime_instance_ids"] == ["plugin_fixture_0", "plugin_fixture_1"]
+    assert payload["runtime_instance_ids"] == ["plugin_fixture_1", "plugin_fixture_0"]
 
 
 def test_the_0_8_1_recording_migrates_without_losing_attribution() -> None:
