@@ -94,5 +94,8 @@ def test_main_verifies_docs_but_only_a_release_can_deploy_them() -> None:
     assert docs["deploy"]["if"] == "inputs.deploy == true"
     assert _step(docs["build"], "Configure Pages")["if"] == "inputs.deploy == true"
     assert _step(docs["build"], "Upload the site")["if"] == "inputs.deploy == true"
-    assert ci["documentation"]["uses"] == "./.github/workflows/docs.yml"
-    assert ci["documentation"]["with"]["deploy"] is False
+    documentation = ci["documentation"]
+    assert documentation["runs-on"] == "ubuntu-latest"
+    docs_commands = "\n".join(step.get("run", "") for step in documentation["steps"])
+    assert "uv sync --locked --no-dev --group docs" in docs_commands
+    assert "uv run mkdocs build --strict" in docs_commands
