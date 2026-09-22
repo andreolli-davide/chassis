@@ -81,6 +81,16 @@ that a minor release may break the documented surface.
   amounts or limits, or a non-positive `ToolPolicy.timeout_seconds`, now raises
   `ConfigurationError`; tools with a synchronous `ainvoke` must become
   `async def`.
+- **Telemetry failures are isolated and adapter wiring unified** (roadmap R019).
+  The new `SafeTelemetry` wrapper contains any backend failure at span enter,
+  update, error, exit, and event time — observability can never break runtime
+  correctness or suppress another backend — with failures kept visible through
+  a `failures` counter and the `chassis.telemetry` logger. `TeeTelemetry` runs
+  every backend through it and exposes a `failures` total; the harness wires one
+  `SafeTelemetry(RedactingTelemetry(...))` chain around every configured
+  backend. Registered runtimes that expose `bind_harness_services` (such as
+  `LangGraphAgent`) adopt the harness telemetry and redaction at registration
+  unless they were constructed with an explicit override.
 
 ## [0.6.0] - 2026-09-22
 

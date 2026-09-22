@@ -195,6 +195,13 @@ class AgentRegistry:
             scope.cleanup(
                 f"agent {name}", self._release, registration.registration_id, kind="agent"
             )
+        # A runtime that accepts harness services (LangGraph agents do) binds
+        # this harness's telemetry and redaction unless it was built with an
+        # explicit override.
+        if self._harness is not None:
+            binder = getattr(runtime, "bind_harness_services", None)
+            if callable(binder):
+                binder(self._harness.telemetry, self._harness.redactor)
         return runtime
 
     def _release(self, registration_id: str) -> bool:

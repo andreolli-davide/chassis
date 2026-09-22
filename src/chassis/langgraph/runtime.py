@@ -72,6 +72,8 @@ class LangGraphAgent:
         self._cache = cache if cache is not None else GraphCache(telemetry=telemetry)
         self._checkpointer = checkpointer
         self._store = store
+        self._telemetry_explicit = telemetry is not None
+        self._redactor_explicit = redactor is not None
         self._telemetry = telemetry if telemetry is not None else NoopTelemetry()
         self._redactor = redactor if redactor is not None else SecretRedactor()
         self._stream_mode: list[StreamMode] = (
@@ -79,6 +81,19 @@ class LangGraphAgent:
         )
 
     # ------------------------------------------------------------------ identity
+
+    def bind_harness_services(self, telemetry: Telemetry, redactor: SecretRedactor) -> None:
+        """Adopt harness telemetry and redaction when registered on a harness.
+
+        An explicitly requested backend or redactor is a documented override and
+        stays; anything defaulted at construction binds to the harness so an
+        agent never runs with disconnected observability or redaction.
+        """
+
+        if not self._telemetry_explicit:
+            self._telemetry = telemetry
+        if not self._redactor_explicit:
+            self._redactor = redactor
 
     @property
     def name(self) -> str:

@@ -12,16 +12,20 @@ implementations must not be trusted to remove secrets themselves.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncGenerator, Mapping
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from typing import Any, Protocol, runtime_checkable
 
 from chassis.secrets.redaction import SecretRedactor
 
+_LOGGER = logging.getLogger("chassis.telemetry")
+
 __all__ = [
     "NoopSpan",
     "NoopTelemetry",
     "RedactingTelemetry",
+    "SafeTelemetry",
     "Span",
     "TeeTelemetry",
     "Telemetry",
@@ -92,26 +96,29 @@ class TeeTelemetry:
         if not backends:
             raise ValueError("TeeTelemetry requires at least one backend")
         self._backends = backends
+        self._safe = tuple(SafeTelemetry(backend) for backend in backends)
 
     @property
     def backends(self) -> tuple[Telemetry, ...]:
         return self._backends
 
+    @property
+    def failures(self) -> int:
+        """Backend failures contained across every tee'd backend."""
+
+        return sum(safe.failures for safe in self._safe)
+
     @asynccontextmanager
     async def span(self, name: str, attributes: Mapping[str, Any] | None = None):  # type: ignore[no-untyped-def]
         async with AsyncExitStack() as stack:
             spans = [
-                await stack.enter_async_context(backend.span(name, attributes))
-                for backend in self._backends
+                await stack.enter_async_context(safe.span(name, attributes)) for safe in self._safe
             ]
             yield _FanOutSpan(tuple(spans))
 
     def event(self, name: str, attributes: Mapping[str, Any] | None = None) -> None:
-        for backend in self._backends:
-            try:
-                backend.event(name, attributes)
-            except Exception:
-                continue
+        for safe in self._safe:
+            safe.event(name, attributes)
 
 
 class _FanOutSpan:
@@ -138,6 +145,93 @@ class _FanOutSpan:
                 span.record_error(error)
             except Exception:
                 continue
+
+
+class SafeTelemetry:
+    """Failure-isolating wrapper for an arbitrary telemetry backend.
+
+    Every call runs inside its own guard: a backend that raises can neither
+    break the operation being observed nor suppress other backends. Failures
+    stay visible through :attr:`failures` (a diagnostic counter) and the
+    ``chassis.telemetry`` logger.
+    """
+
+    def __init__(self, inner: Telemetry) -> None:
+        self._inner = inner
+        self._failures = 0
+
+    @property
+    def inner(self) -> Telemetry:
+        return self._inner
+
+    @property
+    def failures(self) -> int:
+        """How many backend calls failed and were contained."""
+
+        return self._failures
+
+    def _note(self, phase: str, name: str) -> None:
+        self._failures += 1
+        _LOGGER.warning("telemetry backend failed during %s of %r", phase, name, exc_info=True)
+
+    @asynccontextmanager
+    async def span(
+        self, name: str, attributes: Mapping[str, Any] | None = None
+    ) -> AsyncGenerator[Span]:
+        entered: Any = None
+        try:
+            entered = self._inner.span(name, attributes)
+            inner_span = await entered.__aenter__()
+        except Exception:
+            self._note("span enter", name)
+            yield NoopSpan()
+            return
+        safe = _SafeSpan(inner_span, self._note, name)
+        try:
+            yield safe
+        except BaseException as error:
+            try:
+                await entered.__aexit__(type(error), error, error.__traceback__)
+            except Exception:
+                self._note("span exit", name)
+            raise
+        else:
+            try:
+                await entered.__aexit__(None, None, None)
+            except Exception:
+                self._note("span exit", name)
+
+    def event(self, name: str, attributes: Mapping[str, Any] | None = None) -> None:
+        try:
+            self._inner.event(name, attributes)
+        except Exception:
+            self._note("event", name)
+
+
+class _SafeSpan:
+    """Span that contains every backend failure instead of propagating it."""
+
+    __slots__ = ("_inner", "_name", "_note")
+
+    def __init__(self, inner: Span, note: Any, name: str) -> None:
+        self._inner = inner
+        self._note = note
+        self._name = name
+
+    def set_attribute(self, key: str, value: Any) -> None:
+        self.set_attributes({key: value})
+
+    def set_attributes(self, attributes: Mapping[str, Any]) -> None:
+        try:
+            self._inner.set_attributes(attributes)
+        except Exception:
+            self._note("span update", self._name)
+
+    def record_error(self, error: BaseException) -> None:
+        try:
+            self._inner.record_error(error)
+        except Exception:
+            self._note("span error", self._name)
 
 
 class RedactingTelemetry:

@@ -48,6 +48,17 @@ gets Chassis spans for free.
 
 ## Fan-out
 
+Telemetry can never break what it observes: every backend runs inside a safe
+wrapper (`SafeTelemetry`) that contains failures at span enter, update, error,
+exit, and event time — one backend can neither abort the operation nor suppress
+another backend in a `TeeTelemetry` fan-out. Contained failures stay visible
+through the wrapper's `failures` counter and the `chassis.telemetry` logger, and
+the harness wires this chain (`SafeTelemetry(RedactingTelemetry(...))`) around
+every configured backend. A registered runtime that accepts harness services
+(`bind_harness_services`, e.g. `LangGraphAgent`) adopts the harness telemetry
+and redaction at registration unless it was constructed with an explicit
+override.
+
 `TeeTelemetry` sends one signal to several backends, which is how an OpenTelemetry
 exporter, a recording sink, and LangSmith can coexist:
 

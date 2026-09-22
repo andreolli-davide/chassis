@@ -98,7 +98,7 @@ from chassis.runtime import AgentRuntime, RunEnvironment
 from chassis.secrets.base import SecretProvider, SecretValue
 from chassis.secrets.env import EnvSecretProvider, RedactingSecretProvider
 from chassis.secrets.redaction import SecretRedactor
-from chassis.telemetry.base import NoopTelemetry, RedactingTelemetry, Telemetry
+from chassis.telemetry.base import NoopTelemetry, RedactingTelemetry, SafeTelemetry, Telemetry
 from chassis.tools.executor import ApprovalGate, ToolExecutor
 from chassis.tools.registry import ToolRegistry, ToolSnapshot
 
@@ -269,8 +269,12 @@ class Harness:
         self._redactor = redactor if redactor is not None else SecretRedactor()
         # One redaction boundary for every emitted signal: backends receive
         # scrubbed payloads and are never trusted to remove secrets themselves.
-        self._telemetry: Telemetry = RedactingTelemetry(
-            telemetry if telemetry is not None else NoopTelemetry(), self._redactor
+        # The safe wrapper contains backend failures so observability can never
+        # break runtime correctness or suppress another backend.
+        self._telemetry: Telemetry = SafeTelemetry(
+            RedactingTelemetry(
+                telemetry if telemetry is not None else NoopTelemetry(), self._redactor
+            )
         )
         # Secrets resolved through the harness become redactable at the moment
         # they are read, which is what keeps them out of traces and snapshots.
