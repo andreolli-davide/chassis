@@ -90,6 +90,44 @@ not merely the presence of `<redacted>`.
 | policy decision | Chassis | event `policy.decision` |
 | budget exhaustion | Chassis | event `budget.exhausted` |
 
+## Enabling OpenTelemetry
+
+The OpenTelemetry adapter (`pip install "chassis-harness[opentelemetry]"`) maps
+the same signal contract onto OpenTelemetry: Chassis spans become OpenTelemetry
+spans nested in the ambient context, Chassis events become events on the active
+span (or zero-duration spans when none is active), and names, attributes, and
+redaction are exactly the contract above. It is a separate adapter from
+LangSmith — both can run together.
+
+```python
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+
+from chassis import Harness
+from chassis.telemetry import LangSmithTelemetry, OpenTelemetryTelemetry, TeeTelemetry
+
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+trace.set_tracer_provider(provider)
+
+harness = Harness(
+    telemetry=TeeTelemetry(
+        OpenTelemetryTelemetry(provider.get_tracer("chassis")),
+        LangSmithTelemetry(),
+    )
+)
+```
+
+`OpenTelemetryTelemetry()` with no arguments uses the ambient tracer under the
+`chassis` instrumentation name, so a Chassis span nests inside the trace the
+application already has. Attributes and recorded errors are scrubbed by the
+adapter before export, and — like every backend — it is wrapped by the harness
+in `SafeTelemetry(RedactingTelemetry(...))`, so a failing collector can never
+break the operation being observed (`tests/telemetry/test_otel_adapter.py`
+exports through the SDK's in-memory exporter and asserts exactly this
+mapping).
+
 ## Enabling LangSmith
 
 The backend lives behind the `langsmith` extra

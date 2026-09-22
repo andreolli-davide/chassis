@@ -32,6 +32,10 @@ langgraph = [
 langsmith = [
     "langsmith>=0.12.5",
 ]
+# The OpenTelemetry telemetry adapter over the core signal contract.
+opentelemetry = [
+    "opentelemetry-api>=1.35.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/andreolli-davide/chassis"
@@ -50,6 +54,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
+    "opentelemetry-sdk>=1.35.0",
     "ruff>=0.16.7",
 ]
 docs = [

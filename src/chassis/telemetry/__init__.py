@@ -25,6 +25,7 @@ from chassis.telemetry.signals import (
 
 if TYPE_CHECKING:
     from chassis.telemetry.langsmith import LangSmithSpan, LangSmithTelemetry
+    from chassis.telemetry.otel import OpenTelemetrySpan, OpenTelemetryTelemetry
 
 __all__ = [
     "ATTRIBUTE_ITEMS_LIMIT",
@@ -35,6 +36,8 @@ __all__ = [
     "LangSmithTelemetry",
     "NoopSpan",
     "NoopTelemetry",
+    "OpenTelemetrySpan",
+    "OpenTelemetryTelemetry",
     "RecordedEvent",
     "RecordedSpan",
     "RecordingTelemetry",
@@ -49,6 +52,8 @@ __all__ = [
 _LAZY = {
     "LangSmithSpan": "chassis.telemetry.langsmith",
     "LangSmithTelemetry": "chassis.telemetry.langsmith",
+    "OpenTelemetrySpan": "chassis.telemetry.otel",
+    "OpenTelemetryTelemetry": "chassis.telemetry.otel",
 }
 
 

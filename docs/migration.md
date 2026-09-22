@@ -51,6 +51,10 @@ changes to be aware of.
 
 ### Telemetry signals
 
+- New optional extra `opentelemetry` provides
+  `chassis.telemetry.OpenTelemetryTelemetry` over the same signal contract;
+  LangSmith support is unchanged
+  ([observability.md](observability.md#enabling-opentelemetry)).
 - The telemetry retirement event is renamed `generation.drain` →
   `generation.retired`; every signal name and its required attributes are now
   declared in `chassis.telemetry.signals.SIGNALS` and stable from 0.9.0 on

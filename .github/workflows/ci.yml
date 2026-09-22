@@ -181,15 +181,30 @@ jobs:
           uv pip install --python .smoke-ls/bin/python "${wheel}[langsmith]"
           .smoke-ls/bin/python -c "import chassis.testing, langsmith; print('langsmith extra ok')"
 
+      - name: Smoke the OpenTelemetry extra independently
+        run: |
+          wheel=$(ls dist/*.whl)
+          uv venv .smoke-otel
+          uv pip install --python .smoke-otel/bin/python "${wheel}[opentelemetry]"
+          .smoke-otel/bin/python - <<'PY'
+          import opentelemetry
+          from chassis.telemetry import OpenTelemetryTelemetry
+
+          OpenTelemetryTelemetry()
+          print("opentelemetry extra ok")
+          PY
+
       - name: Smoke the combined extras independently
         run: |
           wheel=$(ls dist/*.whl)
           uv venv .smoke-all
-          uv pip install --python .smoke-all/bin/python "${wheel}[langgraph,langsmith]"
+          uv pip install --python .smoke-all/bin/python "${wheel}[langgraph,langsmith,opentelemetry]"
           .smoke-all/bin/python - <<'PY'
           import chassis.langgraph
           import langsmith
+          from chassis.telemetry import OpenTelemetryTelemetry
 
+          OpenTelemetryTelemetry()
           print("combined extras ok")
           PY
 

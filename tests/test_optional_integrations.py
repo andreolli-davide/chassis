@@ -19,7 +19,7 @@ SRC = str(Path(__file__).resolve().parents[1] / "src")
 _BLOCKER = """
 import sys, importlib.abc
 
-_BLOCKED = {"langgraph", "langchain_core", "langsmith"}
+_BLOCKED = {"langgraph", "langchain_core", "langsmith", "opentelemetry"}
 
 
 class _BlockOptional(importlib.abc.MetaPathFinder):
@@ -141,6 +141,23 @@ def test_langsmith_integration_is_optional_and_reports_the_missing_extra() -> No
     assert result.returncode == 0, result.stderr
     assert "MissingExtraError" in result.stdout
     assert "chassis-harness[langsmith]" in result.stdout
+
+
+def test_opentelemetry_adapter_reports_the_missing_extra() -> None:
+    result = run_without_extras(
+        "from chassis.telemetry import OpenTelemetryTelemetry\n"
+        "try:\n"
+        "    OpenTelemetryTelemetry()\n"
+        "except ImportError as error:\n"
+        "    print(type(error).__name__)\n"
+        "    print(str(error))\n"
+        "else:\n"
+        "    raise SystemExit('OpenTelemetryTelemetry() did not require the extra')\n"
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "MissingExtraError" in result.stdout
+    assert "chassis-harness[opentelemetry]" in result.stdout
 
 
 def test_replay_model_reports_the_missing_extra() -> None:

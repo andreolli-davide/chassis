@@ -593,6 +593,12 @@
       "NoopTelemetry": {
         "stability": "stable"
       },
+      "OpenTelemetrySpan": {
+        "stability": "stable"
+      },
+      "OpenTelemetryTelemetry": {
+        "stability": "stable"
+      },
       "RecordedSpan": {
         "stability": "stable"
       },

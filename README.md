@@ -23,7 +23,8 @@ runtime generation it started with. LangGraph is the first-class execution engin
 pip install chassis-harness                       # the core lifecycle kernel
 pip install "chassis-harness[langgraph]"          # the LangGraph adapter
 pip install "chassis-harness[langsmith]"          # LangSmith telemetry + evaluation
-pip install "chassis-harness[langgraph,langsmith]"
+pip install "chassis-harness[opentelemetry]"      # OpenTelemetry telemetry adapter
+pip install "chassis-harness[langgraph,langsmith,opentelemetry]"
 ```
 
 Python 3.12+. The import package is `chassis`.

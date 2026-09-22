@@ -9,6 +9,21 @@ that a minor release may break the documented surface.
 
 ### Added
 
+- **Optional OpenTelemetry adapter** (roadmap R031 phase 2).
+  `chassis.telemetry.OpenTelemetryTelemetry` maps the signal contract onto
+  OpenTelemetry — Chassis spans become OpenTelemetry spans in the ambient
+  context (parent/child preserved), Chassis events become events on the active
+  span or zero-duration spans — behind the new `opentelemetry` extra
+  (`pip install "chassis-harness[opentelemetry]"`; `opentelemetry-api`, never a
+  core dependency). Importing `chassis.telemetry` without it is fine;
+  constructing the adapter without it raises `MissingExtraError` naming the
+  extra. Attributes and recorded errors are scrubbed before export, explicit
+  backend overrides and `SafeTelemetry` isolation are preserved, and a failing
+  collector cannot break the observed operation. Verified with the SDK's
+  in-memory exporter (`tests/telemetry/test_otel_adapter.py`) and added to the
+  per-extra and combined-extras package smokes. LangSmith support is unchanged —
+  the two are separate adapters over the same core signal contract. Documented
+  in `docs/observability.md`.
 - **Stable operational signal contract** (roadmap R031 phase 1, new guarantee
   G27). `chassis.telemetry.signals` declares every span and event Chassis emits
   — stable names, required and optional attributes, correlation fields (run id,

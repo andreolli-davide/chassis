@@ -15,12 +15,20 @@ from __future__ import annotations
 
 from importlib.util import find_spec
 
-__all__ = ["EXTRA_LANGGRAPH", "EXTRA_LANGSMITH", "MissingExtraError", "require_extra"]
+__all__ = [
+    "EXTRA_LANGGRAPH",
+    "EXTRA_LANGSMITH",
+    "EXTRA_OPENTELEMETRY",
+    "MissingExtraError",
+    "require_extra",
+]
 
 #: Extra that installs the LangGraph adapter and its ``langchain-core`` tools.
 EXTRA_LANGGRAPH = "langgraph"
 #: Extra that installs the LangSmith telemetry backend.
 EXTRA_LANGSMITH = "langsmith"
+#: Extra that installs the OpenTelemetry telemetry adapter.
+EXTRA_OPENTELEMETRY = "opentelemetry"
 
 
 class MissingExtraError(ImportError):
