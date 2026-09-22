@@ -361,3 +361,139 @@ def test_session_counts_group_by_boundary_kind() -> None:
     recording.record(BoundaryKind.MODEL, key="c")
 
     assert recording.counts() == {"model": 1, "tool": 2}
+
+
+# --------------------------------------------------------------------------
+# Semantic completeness (R015): keys cover every option, results round-trip.
+# --------------------------------------------------------------------------
+
+
+def messages(text: str = "hi") -> list[Any]:
+    from langchain_core.messages import HumanMessage
+
+    return [HumanMessage(content=text)]
+
+
+async def test_requests_differing_by_one_option_do_not_collide() -> None:
+    recording = session(ReplayMode.RECORD)
+    record_model = ReplayChatModel(
+        session=recording, inner=FakeChatModel(responses=["cold", "hot"]), model_name="m"
+    )
+    record_model._generate(messages(), temperature=0.0)  # type: ignore[call-arg]
+    record_model._generate(messages(), temperature=0.7)  # type: ignore[call-arg]
+
+    recording.mode = ReplayMode.REPLAY
+    replay_model = ReplayChatModel(session=recording, model_name="m")
+
+    # Replaying in the opposite order still pairs each request with its own
+    # result: the key includes the option that differs.
+    hot = replay_model._generate(messages(), temperature=0.7)  # type: ignore[call-arg]
+    cold = replay_model._generate(messages(), temperature=0.0)  # type: ignore[call-arg]
+
+    assert hot.generations[0].message.content == "hot"
+    assert cold.generations[0].message.content == "cold"
+
+
+async def test_one_semantic_option_is_enough_to_mismatch() -> None:
+    recording = session(ReplayMode.RECORD)
+    record_model = ReplayChatModel(
+        session=recording, inner=FakeChatModel(responses=["text"]), model_name="m"
+    )
+    record_model._generate(messages(), response_format={"type": "text"})  # type: ignore[call-arg]
+
+    recording.mode = ReplayMode.REPLAY
+    replay_model = ReplayChatModel(session=recording, model_name="m")
+
+    with pytest.raises(ReplayMismatch):
+        replay_model._generate(messages(), response_format={"type": "json"})  # type: ignore[call-arg]
+    with pytest.raises(ReplayMismatch):
+        replay_model._generate(messages(), stop=["x"])  # type: ignore[call-arg]
+    with pytest.raises(ReplayMismatch):
+        replay_model._generate(messages(), provider_options={"region": "eu"})  # type: ignore[call-arg]
+
+
+async def test_stop_sequences_are_normalized_in_the_key() -> None:
+    recording = session(ReplayMode.RECORD)
+    record_model = ReplayChatModel(
+        session=recording, inner=FakeChatModel(responses=["stopped"]), model_name="m"
+    )
+    record_model._generate(messages(), stop=["y", "x", "y"])  # type: ignore[call-arg]
+
+    recording.mode = ReplayMode.REPLAY
+    replay_model = ReplayChatModel(session=recording, model_name="m")
+
+    result = replay_model._generate(messages(), stop=["x", "y"])  # type: ignore[call-arg]
+    assert result.generations[0].message.content == "stopped"
+
+
+async def test_non_canonical_options_are_rejected_not_omitted() -> None:
+    recording = session(ReplayMode.RECORD)
+    model = ReplayChatModel(session=recording, inner=FakeChatModel(responses=["x"]), model_name="m")
+
+    with pytest.raises(ReplayMismatch):
+        model._generate(messages(), temperature=object())  # type: ignore[call-arg]
+    with pytest.raises(ReplayMismatch):
+        model._generate(messages(), temperature=float("nan"))  # type: ignore[call-arg]
+    assert recording.records == []
+
+
+async def test_recorded_results_preserve_llm_output_and_generation_metadata() -> None:
+    from langchain_core.language_models.chat_models import BaseChatModel
+    from langchain_core.messages import AIMessage
+    from langchain_core.outputs import ChatGeneration, ChatResult
+
+    class RichResultModel(BaseChatModel):
+        @property
+        def _llm_type(self) -> str:
+            return "rich"
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # type: ignore[no-untyped-def]
+            return ChatResult(
+                generations=[
+                    ChatGeneration(
+                        message=AIMessage(content="hi"),
+                        generation_info={"finish_reason": "stop"},
+                    )
+                ],
+                llm_output={"finish_stats": {"calls": 7}},
+            )
+
+    recording = session(ReplayMode.RECORD)
+    record_model = ReplayChatModel(session=recording, inner=RichResultModel(), model_name="rich")
+    record_model._generate(messages())  # type: ignore[call-arg]
+
+    recording.mode = ReplayMode.REPLAY
+    replay_model = ReplayChatModel(session=recording, model_name="rich")
+    replayed = replay_model._generate(messages())  # type: ignore[call-arg]
+
+    assert replayed.llm_output == {"finish_stats": {"calls": 7}}
+    assert replayed.generations[0].generation_info == {"finish_reason": "stop"}
+
+
+async def test_replay_presence_is_cursor_aware() -> None:
+    recording = session(ReplayMode.RECORD, fallback=ReplayFallback.LIVE)
+    record_model = ReplayChatModel(
+        session=recording, inner=FakeChatModel(responses=["first"]), model_name="m"
+    )
+    record_model._generate(messages())  # type: ignore[call-arg]
+
+    key = recording.records[0].key
+    assert recording.has(BoundaryKind.MODEL, key=key) is True
+    assert recording.has_remaining(BoundaryKind.MODEL, key=key) is True
+
+    recording.mode = ReplayMode.REPLAY
+    live_model = ReplayChatModel(
+        session=recording, inner=FakeChatModel(responses=["second"]), model_name="m"
+    )
+
+    first = live_model._generate(messages())  # type: ignore[call-arg]
+    assert first.generations[0].message.content == "first"
+
+    # The record is exhausted: presence is cursor-aware, and the next call
+    # falls back to live execution instead of re-answering or erroring.
+    assert recording.has_remaining(BoundaryKind.MODEL, key=key) is False
+    assert recording.peek(BoundaryKind.MODEL, key=key) is None
+    assert recording.has(BoundaryKind.MODEL, key=key) is True
+
+    second = live_model._generate(messages())  # type: ignore[call-arg]
+    assert second.generations[0].message.content == "second"

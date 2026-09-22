@@ -315,7 +315,7 @@ class ToolExecutor:
         # was allowed to ask.
         replay_key = boundary_key(BoundaryKind.TOOL.value, entry.name, args)
         if self._replay is not None and self._replay.is_replaying:
-            if self._replay.has(BoundaryKind.TOOL, key=replay_key):
+            if self._replay.has_remaining(BoundaryKind.TOOL, key=replay_key):
                 return ToolExecutionResult.from_payload(
                     self._replay.replay(BoundaryKind.TOOL, key=replay_key).response
                 )

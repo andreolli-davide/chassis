@@ -25,6 +25,21 @@ that a minor release may break the documented surface.
   generation, run, and thread attribution (`AgentEvent` gained `thread_id`)
   instead of trusting a custom runtime to attribute its own events. Hook
   failures, agent errors, and cancellation behave identically on both paths.
+- **Replay keys and results are semantically complete** (roadmap R015). Model
+  boundary keys now include normalized stop sequences and every invocation
+  option — temperature, tools, structured output/response format, provider
+  options — so requests differing by one semantic option can never collide;
+  a value that cannot be canonicalized deterministically (arbitrary objects,
+  non-finite floats) raises `ReplayMismatch` instead of being silently omitted.
+  Recorded results preserve `llm_output` and per-generation metadata.
+  `ReplaySession` gained cursor-aware `has_remaining()`/`peek()` (and replay
+  consumption is per key, so out-of-order consumption across keys never skips a
+  record); replayed tool calls use the cursor-aware check and fall back live
+  once their records are exhausted.
+- **Migration note:** model recordings made with earlier versions omit options
+  and result metadata from their keys — re-record them for exact matching.
+  Code that relied on `has()` implying an unconsumed record should use
+  `has_remaining()`.
 
 ## [0.6.0] - 2026-09-22
 

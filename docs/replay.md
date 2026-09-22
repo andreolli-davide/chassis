@@ -56,8 +56,13 @@ If an operation is outside these boundaries, replay does not pretend to cover it
 
 Records are matched by `kind` and a canonical `key` covering the boundary identity:
 for a tool call, the tool name and canonical arguments; for a model call, the model
-identity and the request. A recording therefore cannot silently answer the wrong
-request.
+identity, the request, normalized stop sequences, and every invocation option
+(temperature, tools, structured output, provider options) — a value that cannot be
+canonicalized deterministically is rejected rather than omitted. A recording
+therefore cannot silently answer the wrong request. Consumption is per key and
+cursor-aware (`has_remaining()`/`peek()`): repeated keys replay in recording
+order and exhaust cleanly, and once a key's records are gone the call falls back
+to live execution (or fails) instead of re-answering.
 
 Unrecorded operations follow an explicit policy:
 

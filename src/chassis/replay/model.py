@@ -8,7 +8,7 @@ harness does not mediate cannot be recorded honestly.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from chassis._optional import EXTRA_LANGGRAPH, require_extra
@@ -56,42 +56,61 @@ class ReplayChatModel(BaseChatModel):
     def _llm_type(self) -> str:
         return "chassis-replay"
 
-    def _key(self, messages: Sequence[BaseMessage]) -> str:
+    def _key(
+        self, messages: Sequence[BaseMessage], stop: Sequence[str] | None, kwargs: Mapping[str, Any]
+    ) -> str:
         return boundary_key(
             BoundaryKind.MODEL.value,
             self.model_name,
             [message.model_dump(mode="json") for message in messages],
+            _canonical_options(stop, kwargs),
         )
 
-    def _request(self, messages: Sequence[BaseMessage]) -> dict[str, Any]:
+    def _request(
+        self, messages: Sequence[BaseMessage], stop: Sequence[str] | None, kwargs: Mapping[str, Any]
+    ) -> dict[str, Any]:
         return {
             "model": self.model_name,
             "messages": [message.model_dump(mode="json") for message in messages],
+            "options": _canonical_options(stop, kwargs),
         }
 
-    def _recorded(self, key: str, messages: Sequence[BaseMessage], result: ChatResult) -> None:
+    def _recorded(
+        self,
+        key: str,
+        messages: Sequence[BaseMessage],
+        stop: Sequence[str] | None,
+        kwargs: Mapping[str, Any],
+        result: ChatResult,
+    ) -> None:
         self.session.record(
             BoundaryKind.MODEL,
             key=key,
-            request=self._request(messages),
+            request=self._request(messages, stop, kwargs),
             response=_serialize(result),
         )
 
     def _from_record(self, payload: Any) -> ChatResult:
         return ChatResult(
             generations=[
-                ChatGeneration(message=AIMessage.model_validate(generation["message"]))
+                ChatGeneration(
+                    message=AIMessage.model_validate(generation["message"]),
+                    generation_info=generation.get("generation_info"),
+                )
                 for generation in payload["generations"]
-            ]
+            ],
+            llm_output=payload.get("llm_output"),
         )
 
-    def _before_call(self, messages: Sequence[BaseMessage]) -> tuple[str, ChatResult | None]:
+    def _before_call(
+        self, messages: Sequence[BaseMessage], stop: Sequence[str] | None, kwargs: Mapping[str, Any]
+    ) -> tuple[str, ChatResult | None]:
         """Return the boundary key and, when replaying, the recorded result."""
 
-        key = self._key(messages)
+        key = self._key(messages, stop, kwargs)
         if not self.session.is_replaying:
             return key, None
-        if self.session.has(BoundaryKind.MODEL, key=key):
+        if self.session.has_remaining(BoundaryKind.MODEL, key=key):
             return key, self._from_record(self.session.replay(BoundaryKind.MODEL, key=key).response)
         if self.session.fallback is ReplayFallback.ERROR:
             raise ReplayMismatch(
@@ -116,13 +135,13 @@ class ReplayChatModel(BaseChatModel):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
-        key, replayed = self._before_call(messages)
+        key, replayed = self._before_call(messages, stop, kwargs)
         if replayed is not None:
             return replayed
         result = self._require_inner()._generate(
             messages, stop=stop, run_manager=run_manager, **kwargs
         )
-        self._recorded(key, messages, result)
+        self._recorded(key, messages, stop, kwargs, result)
         return result
 
     async def _agenerate(
@@ -132,20 +151,70 @@ class ReplayChatModel(BaseChatModel):
         run_manager: AsyncCallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
-        key, replayed = self._before_call(messages)
+        key, replayed = self._before_call(messages, stop, kwargs)
         if replayed is not None:
             return replayed
         result = await self._require_inner()._agenerate(
             messages, stop=stop, run_manager=run_manager, **kwargs
         )
-        self._recorded(key, messages, result)
+        self._recorded(key, messages, stop, kwargs, result)
         return result
 
 
 def _serialize(result: ChatResult) -> dict[str, Any]:
     return {
         "generations": [
-            {"message": generation.message.model_dump(mode="json")}
+            {
+                "message": generation.message.model_dump(mode="json"),
+                "generation_info": generation.generation_info,
+            }
             for generation in result.generations
-        ]
+        ],
+        "llm_output": result.llm_output,
     }
+
+
+def _canonical_options(stop: Sequence[str] | None, kwargs: Mapping[str, Any]) -> dict[str, Any]:
+    """Canonical, complete invocation options for a model boundary key.
+
+    Stop sequences are normalized as a set (their order is not semantic), and
+    every invocation kwarg — temperature, tools, structured output, provider
+    options — is included. A value that cannot be canonicalized
+    deterministically is rejected: silently omitting it would let genuinely
+    different requests collide on one key.
+    """
+
+    options: dict[str, Any] = {
+        "stop": None if stop is None else sorted({str(item) for item in stop})
+    }
+    for name, value in kwargs.items():
+        options[name] = _canonical_value(name, value)
+    return dict(sorted(options.items()))
+
+
+def _canonical_value(name: str, value: Any) -> Any:
+    if isinstance(value, float) and (value != value or value in (float("inf"), float("-inf"))):
+        raise ReplayMismatch(
+            "invocation option is not a canonical number",
+            option=name,
+            value=value,
+        )
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, Mapping):
+        return {
+            str(key): _canonical_value(name, item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_canonical_value(name, item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        return sorted(str(_canonical_value(name, item)) for item in value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        return _canonical_value(name, model_dump(mode="json"))
+    raise ReplayMismatch(
+        "invocation option cannot be canonicalized into a replay key",
+        option=name,
+        value_type=type(value).__name__,
+    )

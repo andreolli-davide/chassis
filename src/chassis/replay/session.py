@@ -134,29 +134,50 @@ class ReplaySession:
     # ------------------------------------------------------------------ reading
 
     def replay(self, kind: BoundaryKind, *, key: str) -> ReplayRecord:
-        """Return the recorded interaction for ``kind`` and ``key``.
+        """Return the next recorded interaction for ``kind`` and ``key``.
+
+        Consumption is per key: records of one boundary key replay in recording
+        order, and out-of-order consumption across different keys never skips a
+        record.
 
         Raises:
-            ReplayMismatch: nothing was recorded for this boundary.
+            ReplayMismatch: every record for this boundary is exhausted.
         """
 
-        consumed = self._cursor.get(kind.value, 0)
-        for index, record in enumerate(self.records):
-            if record.kind is not kind or record.key != key:
-                continue
-            if index < consumed:
-                continue
-            self._cursor[kind.value] = index + 1
-            return record
-        raise ReplayMismatch(
-            f"no recorded {kind.value} interaction matches this operation",
-            kind=kind.value,
-            key=key,
-            recorded=len([record for record in self.records if record.kind is kind]),
-        )
+        cursor = f"{kind.value}:{key}"
+        matches = [record for record in self.records if record.kind is kind and record.key == key]
+        consumed = self._cursor.get(cursor, 0)
+        if consumed >= len(matches):
+            raise ReplayMismatch(
+                f"no recorded {kind.value} interaction matches this operation",
+                kind=kind.value,
+                key=key,
+                recorded=len([record for record in self.records if record.kind is kind]),
+            )
+        self._cursor[cursor] = consumed + 1
+        return matches[consumed]
 
     def has(self, kind: BoundaryKind, *, key: str) -> bool:
+        """Whether any record exists for this boundary, ignoring the cursor."""
+
         return any(record.kind is kind and record.key == key for record in self.records)
+
+    def has_remaining(self, kind: BoundaryKind, *, key: str) -> bool:
+        """Whether an unconsumed record exists for this boundary.
+
+        Cursor-aware: a record already replayed for this key is exhausted and
+        will not answer again.
+        """
+
+        return self.peek(kind, key=key) is not None
+
+    def peek(self, kind: BoundaryKind, *, key: str) -> ReplayRecord | None:
+        """The next unconsumed record for this boundary, without consuming it."""
+
+        cursor = f"{kind.value}:{key}"
+        matches = [record for record in self.records if record.kind is kind and record.key == key]
+        consumed = self._cursor.get(cursor, 0)
+        return matches[consumed] if consumed < len(matches) else None
 
     def counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
