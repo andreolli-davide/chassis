@@ -148,11 +148,16 @@ class ReplaySession:
         matches = [record for record in self.records if record.kind is kind and record.key == key]
         consumed = self._cursor.get(cursor, 0)
         if consumed >= len(matches):
+            reason = "exhausted" if matches else "missing"
             raise ReplayMismatch(
-                f"no recorded {kind.value} interaction matches this operation",
+                f"no recorded {kind.value} interaction matches this operation"
+                if not matches
+                else f"recorded {kind.value} interactions for this key are exhausted",
                 kind=kind.value,
                 key=key,
+                reason=reason,
                 recorded=len([record for record in self.records if record.kind is kind]),
+                consumed=consumed,
             )
         self._cursor[cursor] = consumed + 1
         return matches[consumed]

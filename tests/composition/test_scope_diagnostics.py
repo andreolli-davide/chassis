@@ -12,7 +12,7 @@ from tests.composition.support import (
 )
 
 from chassis import DATABASE, MODEL, Harness
-from chassis.core.errors import HarnessStateError
+from chassis.core.errors import ConfigurationError, HarnessStateError
 
 
 async def test_explain_selected_provider_names_origin_and_reason() -> None:
@@ -392,5 +392,22 @@ async def test_scope_of_a_published_generation_is_cheap_to_inspect() -> None:
         assert scope.children == ()
         assert scope.capabilities is None
         assert harness.diagnostics.explain_scope("/tenant").children == ("/tenant/research",)
+    finally:
+        await harness.stop()
+
+
+async def test_missing_scopes_are_not_confused_with_empty_ones() -> None:
+    harness = Harness()
+    harness.composition.child("empty")
+    await harness.start()
+    try:
+        generation = harness.current_generation
+        assert generation is not None
+
+        # A valid scope with no visible provider answers with an empty tuple...
+        assert generation.scopes.providers_of("/empty", "database") == ()
+        # ...while a missing scope is an error, not an empty answer.
+        with pytest.raises(ConfigurationError):
+            generation.scopes.providers_of("/missing", "database")
     finally:
         await harness.stop()

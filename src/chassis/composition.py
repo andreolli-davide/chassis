@@ -749,11 +749,15 @@ class ScopeTree:
         return scope
 
     def providers_of(self, path: str, capability: str) -> tuple[str, ...]:
-        """Visible provider instance ids for a capability in a scope."""
+        """Visible provider instance ids for a capability in a scope.
+
+        A missing scope is an error, not an empty answer: a valid scope with no
+        visible provider and an unknown scope are different facts.
+        """
 
         scope = self.get(path)
         if scope is None:
-            return ()
+            raise ConfigurationError("unknown composition scope in this generation", scope=path)
         return scope.visible.get(capability, ())
 
     def to_dict(self) -> dict[str, Any]:

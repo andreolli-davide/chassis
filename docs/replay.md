@@ -80,7 +80,8 @@ ReplaySession(mode=ReplayMode.REPLAY, fallback=ReplayFallback.LIVE)   # run live
 ```
 
 `ReplayMismatch` carries the mismatch dimensions (`kind`, `key`, count of recorded
-interactions of that kind) so a failed replay explains itself.
+interactions of that kind) so a failed replay explains itself, and distinguishes    exhaustion from absence (`reason="exhausted"` when the key's records were
+consumed, `"missing"` when none were ever recorded).
 
 ## Authorization still applies
 

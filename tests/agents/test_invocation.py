@@ -6,6 +6,8 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
+import pytest
+
 from chassis import Harness, PluginContext, plugin
 from chassis.agent_spec import AgentSpec
 from chassis.capabilities.keys import CapabilityKey
@@ -273,3 +275,25 @@ async def test_agents_replaced_after_start_resolve_and_run() -> None:
         assert result.agent_revision == "2"
     finally:
         await harness.stop()
+
+
+async def test_convenience_arguments_are_rejected_alongside_a_complete_request() -> None:
+    from chassis.core.errors import ConfigurationError
+    from chassis.runtime import AgentRequest
+
+    h = harness()
+    h.register_agent(RecordingRuntime())
+    await h.start()
+    try:
+        request = AgentRequest(input={"messages": []}, thread_id="t1")
+        for kwargs in (
+            {"thread_id": "t2"},
+            {"resume": "r"},
+            {"checkpoint_id": "c"},
+            {"metadata": {"m": 1}},
+        ):
+            with pytest.raises(ConfigurationError) as excinfo:
+                await h.agents.invoke("finance-graph", request=request, **kwargs)  # type: ignore[arg-type]
+            assert excinfo.value.context["ignored"]
+    finally:
+        await h.stop()

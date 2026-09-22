@@ -630,3 +630,20 @@ async def test_replay_stamps_current_attribution() -> None:
         assert result.duration_seconds >= 0.0
         assert recorded.generation_id == "gen-old"
         assert recorded.run_id == "run-old"
+
+
+def test_replay_exhaustion_is_distinguishable_from_a_missing_key() -> None:
+    recording = session(ReplayMode.RECORD)
+    recording.record(BoundaryKind.TOOL, key="known")
+
+    recording.mode = ReplayMode.REPLAY
+    first = recording.replay(BoundaryKind.TOOL, key="known")
+    assert first.key == "known"
+
+    with pytest.raises(ReplayMismatch) as exhausted:
+        recording.replay(BoundaryKind.TOOL, key="known")
+    assert exhausted.value.context["reason"] == "exhausted"
+
+    with pytest.raises(ReplayMismatch) as missing:
+        recording.replay(BoundaryKind.TOOL, key="never")
+    assert missing.value.context["reason"] == "missing"

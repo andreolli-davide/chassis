@@ -269,12 +269,18 @@ class AgentResult:
 
     @property
     def text(self) -> str | None:
-        """Text of the most recent message carrying string content."""
+        """Text of the most recent message carrying textual content.
+
+        Documented content shapes: a string, a mapping with a textual ``text``
+        field, or a sequence of blocks whose ``text`` fields are joined. Other
+        shapes contribute nothing.
+        """
 
         for message in reversed(self.messages):
             content = getattr(message, "content", None)
-            if isinstance(content, str) and content:
-                return content
+            text = _text_of(content)
+            if text:
+                return text
         return None
 
     def to_dict(self) -> dict[str, Any]:
@@ -339,6 +345,20 @@ class AgentRuntime(Protocol):
         """Execute the agent, emitting events as they occur."""
 
         ...
+
+
+def _text_of(content: Any) -> str | None:
+    """Textual content of one message body, for the documented shapes."""
+
+    if isinstance(content, str):
+        return content
+    if isinstance(content, Mapping):
+        text = content.get("text")
+        return text if isinstance(text, str) and text else None
+    if isinstance(content, (list, tuple)):
+        parts = [part for part in (_text_of(item) for item in content) if part]
+        return "\n".join(parts) if parts else None
+    return None
 
 
 def monotonic() -> float:

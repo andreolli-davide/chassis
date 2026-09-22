@@ -21,6 +21,19 @@ that a minor release may break the documented surface.
   inside that).
 - **Migration note:** payloads with non-string mapping keys are no longer
   accepted by `stable_hash`/`canonical_json`; convert keys to strings first.
+- **API ambiguity and silent fallbacks removed** (roadmap R022). Passing
+  `thread_id`/`resume`/`checkpoint_id`/`metadata` alongside a complete
+  `AgentRequest` now raises `ConfigurationError` instead of silently ignoring
+  them. `AgentResult.text` supports the documented message shapes (strings,
+  mappings with a `text` field, and text-block sequences — joined with newlines)
+  instead of silently omitting mapping-shaped messages. `ScopeTree.providers_of`
+  raises for a missing scope instead of answering `()` — a valid empty scope and
+  a missing scope are different facts. `ReplayMismatch` distinguishes exhaustion
+  from a missing key (`reason="exhausted"`/`"missing"`).
+- **Migration note:** code that combined a complete `AgentRequest` with
+  convenience arguments now raises; move those fields into the request itself.
+  Code relying on `providers_of` returning `()` for unknown scope paths must
+  handle `ConfigurationError`.
 
 ## [0.7.0] - 2026-09-22
 

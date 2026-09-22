@@ -941,6 +941,22 @@ class AgentRegistry:
         if request is not None:
             if input is not None:
                 raise ConfigurationError("pass either input or request, not both")
+            extras = {
+                name
+                for name, value in (
+                    ("thread_id", thread_id),
+                    ("resume", resume),
+                    ("checkpoint_id", checkpoint_id),
+                    ("metadata", metadata),
+                )
+                if value is not None
+            }
+            if extras:
+                raise ConfigurationError(
+                    "a complete AgentRequest carries these itself; do not repeat them",
+                    request=request.__class__.__name__,
+                    ignored=sorted(extras),
+                )
             return request
         return AgentRequest(
             input=input,

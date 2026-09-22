@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Any
 
 import pytest
 
@@ -363,3 +364,28 @@ async def test_capability_key_providers_are_reported() -> None:
         assert providers[0].key == CapabilityKey("database", "1")
     finally:
         await harness.stop()
+
+
+def test_result_text_supports_documented_message_shapes() -> None:
+    class Msg:
+        def __init__(self, content: Any) -> None:
+            self.content = content
+
+    def result_with(*messages: Any) -> AgentResult:
+        return AgentResult(
+            agent="a",
+            generation_id="g",
+            run_id="r",
+            output={"messages": list(messages)},
+        )
+
+    # Strings, mappings with a textual field, and block sequences are all
+    # documented shapes; anything else contributes nothing.
+    assert result_with(Msg("plain")).text == "plain"
+    assert result_with(Msg({"text": "mapped"})).text == "mapped"
+    assert (
+        result_with(Msg([{"type": "text", "text": "one"}, {"type": "text", "text": "two"}])).text
+        == "one\ntwo"
+    )
+    assert result_with(Msg({"image": "chart.png"})).text is None
+    assert result_with(Msg(42)).text is None
