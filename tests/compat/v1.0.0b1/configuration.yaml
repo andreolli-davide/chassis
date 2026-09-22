@@ -1,0 +1,12 @@
+version: 1
+plugins:
+  - id: orders-db
+    plugin: orders-db
+    config:
+      endpoint: https://example.invalid/orders
+  - id: memory
+    plugin: memory
+    config:
+      max_items: 128
+provider_preferences:
+  database: orders-db

@@ -1,0 +1,68 @@
+{
+  "actions": [
+    {
+      "action": "add",
+      "ambiguities": [],
+      "cause_capability": null,
+      "cause_provider": null,
+      "config_keys": [
+        "max_items"
+      ],
+      "entry_id": "memory",
+      "expected_reuse": false,
+      "generation_impact": "new_generation",
+      "instance_id": null,
+      "plugin": "memory@2.1.0",
+      "reasons": [
+        "entry_added"
+      ],
+      "scope": "/",
+      "validation_failures": []
+    },
+    {
+      "action": "add",
+      "ambiguities": [],
+      "cause_capability": null,
+      "cause_provider": null,
+      "config_keys": [
+        "endpoint"
+      ],
+      "entry_id": "orders-db",
+      "expected_reuse": false,
+      "generation_impact": "new_generation",
+      "instance_id": null,
+      "plugin": "orders-db@1.0.0",
+      "reasons": [
+        "entry_added"
+      ],
+      "scope": "/",
+      "validation_failures": []
+    },
+    {
+      "action": "publish",
+      "ambiguities": [],
+      "cause_capability": null,
+      "cause_provider": null,
+      "config_keys": [],
+      "entry_id": null,
+      "expected_reuse": false,
+      "generation_impact": "new_generation",
+      "instance_id": null,
+      "plugin": null,
+      "reasons": [
+        "composition_changed"
+      ],
+      "scope": "/",
+      "validation_failures": []
+    }
+  ],
+  "chassis_version": "1.0.0b1",
+  "current_generation_id": null,
+  "cycles": [],
+  "format_version": 1,
+  "pending": [],
+  "preferences": {
+    "database": "orders-db"
+  },
+  "would_publish": true
+}

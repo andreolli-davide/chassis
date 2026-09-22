@@ -7,6 +7,42 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
+## [1.0.0b1] - Unreleased
+
+First 1.0 beta checkpoint. It freezes a candidate public API for review and
+makes the release workflow prerelease-aware without yet declaring the permanent
+1.0 compatibility baseline.
+
+### Changed
+
+- **The development version is now `1.0.0b1`.** Chassis uses the canonical
+  [PEP 440](https://peps.python.org/pep-0440/) spelling for the release commonly
+  described as 1.0.0-beta 1; its eventual tag is `v1.0.0b1`.
+- **The 1.0 beta API has its own checked-in candidate baseline.** Compatibility
+  is checked both against the released 0.8.1 contract and against the exact
+  surface selected for 1.0.0b1, so review changes cannot silently move the beta
+  target.
+- **Every persisted format has a deterministic 1.0 beta candidate fixture.**
+  Snapshot, replay, configuration, planning, reconciliation, config-apply, and
+  generation-pressure documents are generated from a real harness, sanitized,
+  checksummed, and reproduced byte-for-byte in CI. Formats with readers also
+  prove exact round-trips; the historical 0.8.1 migration fixtures remain green.
+- **Release publication now promotes the complete CI matrix and one verified
+  build.** Tag and dry-run workflows reuse the same Python 3.12/3.13, coverage,
+  dependency-range, audit, strict-docs, package, extras, quickstart, and
+  production-reference gates as branch CI. The verified wheel and sdist are
+  built once, then the same workflow artifact is promoted to PyPI and GitHub
+  with SHA-256 digests and an SBOM.
+- **Prerelease publication no longer advances stable release channels.** A beta
+  tag is marked as a GitHub prerelease and does not replace the latest stable
+  documentation deployment. Pushes to `main` verify documentation without
+  deploying it; only a stable release may update the stable site.
+- **The beta has an explicit readiness decision record.**
+  `docs/1.0-beta-readiness.md` records local validation, API and format review,
+  publication architecture, the read-only external-control snapshot,
+  rollback/yank procedure, deliberate limitations, and the exact blockers that
+  keep the unpublished candidate at NO-GO.
+
 ## [0.9.1] - 2026-09-22
 
 Pre-1.0 documentation and release-plan hardening. This patch changes no runtime

@@ -5,6 +5,8 @@ Rendered at **https://andreolli-davide.github.io/chassis/**.
 Current release: **0.9.1**. Install it from
 [PyPI](https://pypi.org/project/chassis-harness/0.9.1/) or inspect the
 [GitHub Release](https://github.com/andreolli-davide/chassis/releases/tag/v0.9.1).
+The repository is preparing **1.0.0b1**; prerelease artifacts do not replace
+this stable documentation site.
 
 New here? Start with [getting-started.md](getting-started.md), then use the guides
 below for task-oriented detail.
@@ -24,6 +26,7 @@ below for task-oriented detail.
 | [performance.md](performance.md) | benchmark methodology, the 0.9.0 baseline, capacity, and known scaling limits |
 | [roadmap.md](roadmap.md) | ordered 0.5.1–1.0 plan, acceptance criteria, release gates, and finding traceability |
 | [compatibility.md](compatibility.md) | surface classes, the API baseline and compatibility check, deprecations, persisted format versions |
+| [1.0-beta-readiness.md](1.0-beta-readiness.md) | the 1.0.0b1 decision record: candidate API/formats, validation, external controls, blockers, and sign-off |
 | [production-readiness.md](production-readiness.md) | the 0.9.0 compatibility and operational review: domains, validation matrix, audit resolutions, limitations |
 | [observability.md](observability.md) | tracing, snapshots, canonical hashing, redaction, evaluation |
 | [security.md](security.md) | trust model, policy, secrets, and what Chassis is *not* |

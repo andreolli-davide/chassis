@@ -2,8 +2,12 @@
 
 ## Supported versions
 
-Chassis is pre-1.0. Security fixes land on `main` and ship in the next release; only
-the latest release is supported.
+The latest stable release, currently 0.9.1, is supported. Security fixes land on
+`main` and ship in the next appropriate release. 1.0 betas are evaluation
+releases: reported vulnerabilities are fixed in a subsequent beta or final
+release, while stable users receive the fix on the supported stable line when
+affected. This policy will be replaced by the declared 1.0 support horizon
+before 1.0.0 final.
 
 ## Reporting a vulnerability
 

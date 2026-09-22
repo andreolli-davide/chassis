@@ -1,0 +1,190 @@
+{
+  "disposed": [],
+  "failures": [],
+  "format_version": 1,
+  "generation_id": "gen_0001",
+  "impact": {
+    "counts": {
+      "added": 2
+    },
+    "new_generation_id": "gen_0001",
+    "nodes": [
+      {
+        "changed_inputs": [],
+        "decision": "added",
+        "dependency_changes": [],
+        "entry_id": "memory",
+        "kind": "plugin",
+        "new_instance_id": "plugin_fixture_0",
+        "new_semantic_id": "63cc7c9fb48bb8dcf39d9aece32654e35069daf1564656ce0604dd0606ae5356",
+        "old_instance_id": null,
+        "old_semantic_id": null,
+        "physically_reused": false,
+        "reasons": [],
+        "scope_path": "/",
+        "semantically_unchanged": false,
+        "shared_instance_id": null
+      },
+      {
+        "changed_inputs": [],
+        "decision": "added",
+        "dependency_changes": [],
+        "entry_id": "orders-db",
+        "kind": "plugin",
+        "new_instance_id": "plugin_fixture_1",
+        "new_semantic_id": "64f40fc1b4594c85a2c6bb4954d44f1426641b702616125ac00cc31a50fdd3bc",
+        "old_instance_id": null,
+        "old_semantic_id": null,
+        "physically_reused": false,
+        "reasons": [],
+        "scope_path": "/",
+        "semantically_unchanged": false,
+        "shared_instance_id": null
+      }
+    ],
+    "old_generation_id": null
+  },
+  "mounted": [
+    "orders-db",
+    "memory"
+  ],
+  "plan": {
+    "activation_order": [
+      "orders-db",
+      "memory"
+    ],
+    "cycles": [],
+    "edges": [
+      [
+        "orders-db",
+        "memory"
+      ]
+    ],
+    "pending": [],
+    "plugins": [
+      {
+        "active": false,
+        "entry_id": "orders-db",
+        "instance_id": null,
+        "order": 0,
+        "plugin": "orders-db@1.0.0",
+        "reasons": [],
+        "requirements": [],
+        "scope": "/",
+        "status": "eligible"
+      },
+      {
+        "active": false,
+        "entry_id": "memory",
+        "instance_id": null,
+        "order": 1,
+        "plugin": "memory@2.1.0",
+        "reasons": [],
+        "requirements": [
+          {
+            "assessments": [
+              {
+                "eligible": true,
+                "origin": "local",
+                "provider_entry_id": "orders-db",
+                "provider_instance_id": null,
+                "provider_name": "orders-db",
+                "rejection": null,
+                "scope": "/",
+                "selected": true,
+                "version": "1.0.0",
+                "visible": true
+              }
+            ],
+            "capability": "database",
+            "consumer": "memory",
+            "consumer_kind": "plugin",
+            "explain": "provided by orders-db (orders-db 1.0.0)",
+            "optional": false,
+            "provider_entry_id": "orders-db",
+            "provider_key": "database@1",
+            "provider_name": "orders-db",
+            "provider_origin": "local",
+            "provider_scope": "/",
+            "provider_version": "1.0.0",
+            "requirement": "database <2,>=1",
+            "selection_reason": "only_eligible",
+            "status": "resolved"
+          }
+        ],
+        "scope": "/",
+        "status": "eligible"
+      }
+    ],
+    "scopes": [
+      {
+        "capabilities": null,
+        "children": [],
+        "entries": [
+          "memory",
+          "orders-db"
+        ],
+        "inherited": {},
+        "name": "root",
+        "order": [
+          "orders-db",
+          "memory"
+        ],
+        "parent": null,
+        "path": "/",
+        "pending": [],
+        "provenance": [
+          {
+            "assessments": [
+              {
+                "eligible": true,
+                "origin": "local",
+                "provider_entry_id": "orders-db",
+                "provider_instance_id": null,
+                "provider_name": "orders-db",
+                "rejection": null,
+                "scope": "/",
+                "selected": true,
+                "version": "1.0.0",
+                "visible": true
+              }
+            ],
+            "capability": "database",
+            "consumer": "memory",
+            "consumer_kind": "plugin",
+            "explain": "provided by orders-db (orders-db 1.0.0)",
+            "optional": false,
+            "provider_entry_id": "orders-db",
+            "provider_key": "database@1",
+            "provider_name": "orders-db",
+            "provider_origin": "local",
+            "provider_scope": "/",
+            "provider_version": "1.0.0",
+            "requirement": "database <2,>=1",
+            "selection_reason": "only_eligible",
+            "status": "resolved"
+          }
+        ],
+        "providers": {
+          "database": [
+            "orders-db"
+          ],
+          "memory": [
+            "memory"
+          ]
+        },
+        "requirements": [],
+        "tools": null,
+        "visible": {
+          "database": [
+            "orders-db"
+          ],
+          "memory": [
+            "memory"
+          ]
+        }
+      }
+    ]
+  },
+  "reused": []
+}

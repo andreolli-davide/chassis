@@ -81,6 +81,22 @@ Maintainers only. Record the change in `CHANGELOG.md` under a `## [x.y.z]` headi
 the same version in `pyproject.toml`, then tag `vX.Y.Z`. The release workflow refuses
 to publish unless the tag, the project version, and the changelog agree.
 
+Use canonical PEP 440 spelling for prereleases: for example, the first 1.0 beta
+is version `1.0.0b1` with tag `v1.0.0b1`. The workflow publishes it to PyPI,
+marks the GitHub release as a prerelease, and deliberately leaves the latest
+stable documentation deployment unchanged.
+
+Before tagging, run the release workflow manually with its default `dry_run`
+input. The dry run executes the same reusable CI matrix as a tag, builds the
+wheel and sdist once, verifies every package smoke, and assembles the exact
+bundle that a tag would promote without publishing it.
+
+When a persisted document shape changes during beta review, regenerate all
+candidate fixtures with
+`uv run python tests/compat/v1.0.0b1/generate.py`. Never hand-edit a generated
+fixture: `tests/test_format_baseline.py` reproduces the set byte-for-byte and
+will reject drift, missing format families, or stale checksums.
+
 ## Conduct
 
 Be specific, be kind, assume good faith. Argue about mechanisms and evidence, not

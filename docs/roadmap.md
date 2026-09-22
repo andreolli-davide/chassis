@@ -36,7 +36,7 @@ security and runtime-lifetime invariants are restored.
 | **0.8.0** | Beta-readiness hardening | Remove API sharp edges and add the compatibility, coverage, packaging, and supply-chain gates needed for Beta |
 | **0.9.0** | Production confidence | Compatibility, operability, resilience, and scale: an explicit compatibility contract, versioned persisted formats, hardened lifecycle behavior, stable planning and telemetry contracts, measured capacity, and a production reference application |
 | **0.9.1** | Pre-1.0 release-plan hardening | Close documentation-verification gaps and turn the 1.0 intent into auditable work with release gates |
-| **1.0.0** | Stable surface and release governance | Freeze the 1.0 public API and format baselines; versioned documentation hosting, post-publication PyPI smoke tests, and tag-protection and release-governance automation |
+| **1.0.0b1 → 1.0.0** | Stable surface and release governance | Review the candidate API and formats in beta, then freeze the permanent 1.0 baselines; add versioned documentation hosting, post-publication PyPI smoke tests, and tag-protection and release-governance automation |
 
 0.9.0 is the production-confidence release and the last planned opportunity for
 deliberate pre-1.0 compatibility changes. Release *publication* work is
@@ -972,14 +972,27 @@ Acceptance criteria:
 
 ## 1.0.0 — stable surface and release governance
 
-**Status: planned.** 1.0 freezes the reviewed runtime contract rather than adding
-a new execution framework. Feature work that does not directly establish the
-stable surface or its release safety moves to a later minor release.
+**Status: in progress (`1.0.0b1`).** 1.0 freezes the reviewed runtime contract
+rather than adding a new execution framework. Feature work that does not
+directly establish the stable surface or its release safety moves to a later
+minor release. The first beta checkpoint has selected a candidate API baseline,
+kept the released 0.8.1 compatibility check, documented a no-action migration,
+and made GitHub/docs publication prerelease-aware. Deterministic candidates now
+cover every documented persisted format, and the full publication matrix reuses
+branch CI and promotes one verified build. Permanent final baselines, versioned
+docs, public-index canaries, and external governance evidence remain release
+blockers.
 
 ### R037 — freeze the 1.0 API and persisted-format baselines
 
 **Severity:** High. **Affected guarantees:** G25 and the documented public
 surface.
+
+**Status: beta candidates complete; permanent baselines pending.**
+`api-baseline-1.0.0b1.json` pins the candidate surface, while
+`tests/compat/v1.0.0b1/` deterministically covers snapshot, replay,
+configuration, planning, reconciliation, config-apply, and generation-pressure
+formats. The permanent API and per-format baselines remain final-release gates.
 
 - Review every stable public export and signature one final time; remove only an
   API deprecated during the documented 0.9.x window.
@@ -1004,6 +1017,16 @@ Acceptance criteria:
 **Severity:** High. **Affected guarantees:** release provenance and artifact
 quality.
 
+**Status: implementation complete for `1.0.0b1`; remote dry run pending.**
+Release tags and dry runs call the same reusable workflow as branch CI, covering
+supported Python versions, branch and focused coverage, dependency bounds,
+audit, strict docs, package formats, optional extras, quickstart, and the
+production reference app. That workflow builds the distributions once;
+publication jobs download one release bundle, so PyPI and GitHub receive the
+same wheel and sdist bytes. SHA-256 digests and the SBOM accompany the GitHub
+release. Prerelease classification is derived from the project version, and
+beta tags cannot replace stable documentation.
+
 - Refactor CI gates into reusable workflows or jobs so a tag cannot publish after
   running only a subset of the main-branch matrix.
 - Require tests on every supported Python, branch/focused coverage, Ruff,
@@ -1027,6 +1050,10 @@ Acceptance criteria:
 
 **Severity:** Medium. **Affected guarantees:** the documented public workflow.
 
+**Status: in progress.** Main and prerelease runs now build docs strictly but
+cannot deploy the stable site. Immutable versioned paths and the public-index
+canary remain open.
+
 - Publish immutable documentation for `/1.0/` and a movable `/latest/` alias;
   main-branch documentation must not overwrite the released 1.0 site.
 - After PyPI publication, create a clean environment, install
@@ -1047,6 +1074,11 @@ Acceptance criteria:
 ### R040 — declare and exercise the 1.0 support policy
 
 **Severity:** Medium. **Affected guarantees:** compatibility and operations.
+
+**Status: in progress.** The 1.0.0b1 readiness review records the current
+security treatment, bad-beta yank/fix-forward procedure, and external-control
+snapshot. Supported-Python alignment, protected release authority, PyPI
+approval, hosted dry-run evidence, and final maintainer sign-off remain open.
 
 - Decide the supported Python versions at release-candidate time, list them in
   package classifiers and documentation, and test each one.

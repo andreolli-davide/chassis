@@ -174,15 +174,19 @@ what Chassis refuses to promise.
 
 ## Status
 
-Pre-1.0 Beta (`0.9.1`) — production confidence with pre-1.0 documentation and
-release-plan hardening. The surface covered by
-`tests/test_public_api.py` is classified and baselined
-([compatibility](docs/compatibility.md)); a minor release may still break it
-until 1.0, and every break is recorded in [CHANGELOG.md](CHANGELOG.md).
-[migrations](docs/migration.md) lists the 0.8 → 0.9, 0.8 → 0.8.1, 0.7 → 0.8,
+Development target: **1.0.0b1**, the first 1.0 beta checkpoint. The latest
+stable release remains **0.9.1** while the candidate API, persisted formats,
+release matrix, documentation hosting, and support policy complete review. The
+surface covered by `tests/test_public_api.py` is classified and checked against
+both the released 0.8.1 contract and the 1.0 beta candidate
+([compatibility](docs/compatibility.md)); every persisted format has a
+deterministic candidate fixture under `tests/compat/v1.0.0b1/`.
+[migrations](docs/migration.md) lists
+the 0.9 → 1.0 beta, 0.8 → 0.9, 0.8 → 0.8.1, 0.7 → 0.8,
 0.6 → 0.7, 0.5.1 → 0.6, 0.5 → 0.5.1, 0.4 → 0.5, 0.3 → 0.4, 0.2 → 0.3, and
 0.1 → 0.2 changes. The release reviews are recorded in
-[production-readiness.md](docs/production-readiness.md) (0.9.0) and
+[1.0-beta-readiness.md](docs/1.0-beta-readiness.md) (1.0.0b1),
+[production-readiness.md](docs/production-readiness.md) (0.9.0), and
 [beta-readiness.md](docs/beta-readiness.md) (0.8.0).
 
 ## Development
@@ -208,12 +212,17 @@ alternative project managers or parallel `requirements.txt` files.
 2. bump `version` in `pyproject.toml` to the same number;
 3. tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
+Prereleases use canonical PEP 440 versions (`1.0.0b1`) and matching tags
+(`v1.0.0b1`). They publish as GitHub prereleases and do not replace the latest
+stable documentation deployment.
+
 `.github/workflows/release.yml` runs the full check suite, then refuses to build
 unless the tag, the project version, and the changelog agree. It builds and
-smoke-tests the distribution, publishes it through PyPI trusted publishing,
-creates the GitHub Release with wheel, sdist, and SBOM assets, and deploys the
-documentation from the released tag. `workflow_dispatch` verifies the build
-without publishing.
+smoke-tests the distribution once through the reusable CI matrix, publishes the
+same verified bytes through PyPI trusted publishing, creates the GitHub Release
+with wheel, sdist, SHA-256 digests, and SBOM assets, and deploys documentation
+only from a stable released tag. `workflow_dispatch` runs the complete matrix
+and assembles the release bundle without publishing.
 
 ### Examples
 

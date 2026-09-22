@@ -1,0 +1,77 @@
+{
+  "current_generation_id": "gen_0001",
+  "draining_generations": 0,
+  "format_version": 1,
+  "generated_at": 1790000000.0,
+  "generations": [
+    {
+      "age_seconds": 0.25,
+      "generation_id": "gen_0001",
+      "is_current": true,
+      "leases": 0,
+      "oldest_lease_age_seconds": null,
+      "retained_plugins": [
+        {
+          "entry_id": "memory",
+          "generation_refs": 1,
+          "instance_id": "plugin_fixture_0",
+          "plugin": "memory",
+          "state": "active",
+          "version": "2.1.0"
+        },
+        {
+          "entry_id": "orders-db",
+          "generation_refs": 1,
+          "instance_id": "plugin_fixture_1",
+          "plugin": "orders-db",
+          "state": "active",
+          "version": "1.0.0"
+        }
+      ],
+      "sequence": 1,
+      "state": "active"
+    }
+  ],
+  "history": {
+    "evicted": 0,
+    "limit": 32,
+    "retained": 0
+  },
+  "instance_generations": {
+    "plugin_fixture_0": [
+      "gen_0001"
+    ],
+    "plugin_fixture_1": [
+      "gen_0001"
+    ]
+  },
+  "live_generations": 1,
+  "oldest_lease_age_seconds": null,
+  "resources": [
+    {
+      "entry_id": "memory",
+      "generation_refs": 1,
+      "generations": [
+        "gen_0001"
+      ],
+      "instance_id": "plugin_fixture_0",
+      "plugin": "memory",
+      "retained_by": [],
+      "shared": false,
+      "state": "active"
+    },
+    {
+      "entry_id": "orders-db",
+      "generation_refs": 1,
+      "generations": [
+        "gen_0001"
+      ],
+      "instance_id": "plugin_fixture_1",
+      "plugin": "orders-db",
+      "retained_by": [],
+      "shared": false,
+      "state": "active"
+    }
+  ],
+  "total_leases": 0
+}

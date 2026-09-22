@@ -1,11 +1,13 @@
 # Migrating between versions
 
-Chassis is pre-1.0, and each minor release uses that freedom to remove ambiguity.
-Each section lists every change that can break a caller from the previous version,
-why it was made, and what to do instead. Lifecycle behaviour is unchanged across
-these releases: published generations are still immutable, publication is still
-transactional, and logical unload is still distinct from physical disposal.
+Chassis 1.0.0b1 is the first 1.0 beta checkpoint. Each section lists every
+change that can break a caller from the previous version, why it was made, and
+what to do instead. Lifecycle behaviour is unchanged across these releases:
+published generations are still immutable, publication is still transactional,
+and logical unload is still distinct from physical disposal.
 
+- [0.9 → 1.0 beta](#09-10-beta): no runtime migration; candidate API freeze and
+  prerelease delivery rules
 - [0.8 → 0.9](#08-09): the compatibility contract, versioned persisted
   formats, the planning and telemetry contracts, and the deprecation machinery
 - [0.8 → 0.8.1](#08-081): review follow-ups for redaction, replay,
@@ -24,6 +26,29 @@ transactional, and logical unload is still distinct from physical disposal.
 - [0.3 → 0.4](#03-04): incremental composition, semantic identity, reuse diagnostics
 - [0.2 → 0.3](#02-03): composition scopes, explain and diff diagnostics
 - [0.1 → 0.2](#01-02): optional extras, tool protocol, lease identity, budgets
+
+## 0.9 → 1.0 beta
+
+**No application migration is required for 1.0.0b1.** The first beta changes no
+runtime API or persisted-format version. It establishes the candidate 1.0
+surface and the release controls needed to review it:
+
+- the package version uses PEP 440 spelling `1.0.0b1` (and the matching eventual
+  tag is `v1.0.0b1`);
+- the current surface is checked against both the released 0.8.1 baseline and
+  `tests/compat/api-baseline-1.0.0b1.json`;
+- beta GitHub releases are marked as prereleases and do not advance the latest
+  stable documentation site;
+- persisted 0.8.1 fixtures remain readable, while deterministic candidates for
+  every current format live in `tests/compat/v1.0.0b1/`. Permanent 1.0 fixtures
+  remain a final-release gate, not a claim made by this beta checkpoint.
+
+Install the beta explicitly when it is published; ordinary stable resolution
+does not select a prerelease:
+
+```bash
+pip install chassis-harness==1.0.0b1
+```
 
 ## 0.8 → 0.9
 

@@ -188,7 +188,7 @@ wheels = [
 
 [[package]]
 name = "chassis-harness"
-version = "0.9.1"
+version = "1.0.0b1"
 source = { editable = "." }
 dependencies = [
     { name = "packaging" },

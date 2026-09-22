@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_call:
   push:
     branches: ["main"]
   pull_request:
@@ -211,6 +212,16 @@ jobs:
           print("combined extras ok")
           PY
 
+      # A release workflow downloads this exact artifact after every job in this
+      # reusable workflow succeeds. It must never rebuild the distributions.
+      - name: Upload the verified distributions
+        uses: actions/upload-artifact@v7
+        with:
+          name: verified-distributions
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
   audit:
     name: dependency vulnerability scan
     runs-on: ubuntu-latest
@@ -231,3 +242,11 @@ jobs:
       # An untriaged finding fails the job.
       - name: Audit installed dependencies
         run: uv run --with pip-audit pip-audit
+
+  documentation:
+    name: strict documentation build
+    uses: ./.github/workflows/docs.yml
+    with:
+      deploy: false
+    permissions:
+      contents: read

@@ -14,39 +14,30 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: build and verify the distribution
+  prepare:
+    name: validate release metadata
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v10.1.0
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
-
-      - name: Sync environment from the lockfile
-        run: uv sync --locked --all-extras --dev
-
-      - name: Lint, type-check, and test
-        run: |
-          uv run ruff check .
-          uv run ruff format --check .
-          uv run pyright
-          uv run pytest
 
       - name: Read the project version
         id: version
         run: |
-          version=$(uv run python -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          version=$(uv run --no-project python -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          prerelease=$(uv run --no-project --with packaging python -c "from packaging.version import Version; import sys; print(str(Version(sys.argv[1]).is_prerelease).lower())" "$version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           echo "project version: $version"
+          echo "prerelease: $prerelease"
 
       # Publishing is irreversible, so the tag, the project version, and the
-      # changelog must agree before anything is built.
+      # changelog must agree before the full release matrix starts.
       - name: The tag must match the project version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
@@ -66,37 +57,32 @@ jobs:
           fi
           echo "changelog documents ${{ steps.version.outputs.version }}"
 
-      - name: Build
-        run: uv build
+  quality:
+    name: run the complete CI and package matrix
+    needs: prepare
+    uses: ./.github/workflows/ci.yml
 
-      # The artifact, not the source tree: install the core wheel into an
-      # environment that has never seen this checkout, prove it works without the
-      # optional integrations, then add the LangGraph extra and run a real agent.
-      - name: Verify the built wheel
+  bundle:
+    name: assemble the verified release bundle
+    needs: [prepare, quality]
+    runs-on: ubuntu-latest
+    steps:
+      # The reusable CI workflow builds once and verifies wheel, sdist, every
+      # optional extra, the quickstart, and the production reference app. The
+      # release promotes those exact bytes instead of rebuilding them.
+      - name: Download the verified distributions
+        uses: actions/download-artifact@v8
+        with:
+          name: verified-distributions
+          path: dist
+
+      - name: Verify artifact names and record their digests
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          uv venv .smoke
-          uv pip install --python .smoke/bin/python dist/*.whl
-          .smoke/bin/python - <<'PY'
-          import sys
-
-          import chassis
-          import chassis.replay
-          import chassis.telemetry
-          import chassis.testing
-
-          expected = "${{ steps.version.outputs.version }}"
-          assert chassis.__version__ == expected, f"{chassis.__version__} != {expected}"
-          loaded = sorted(
-              name
-              for name in sys.modules
-              if name.split(".")[0] in {"langgraph", "langchain_core", "langsmith"}
-          )
-          assert loaded == [], f"the core imported optional integrations: {loaded}"
-          print("installed chassis-harness", chassis.__version__, "without the extras")
-          PY
-          wheel=$(ls dist/*.whl)
-          uv pip install --python .smoke/bin/python "${wheel}[langgraph]"
-          .smoke/bin/python examples/quickstart.py
+          test -f "dist/chassis_harness-${VERSION}-py3-none-any.whl"
+          test -f "dist/chassis_harness-${VERSION}.tar.gz"
+          (cd dist && sha256sum -- * | sort -k 2) > SHA256SUMS
 
       # The SBOM must live outside dist/: pypa/gh-action-pypi-publish publishes
       # every file in the packages directory and rejects non-distributions.
@@ -107,20 +93,21 @@ jobs:
           format: cyclonedx-json
           output-file: sbom.cdx.json
 
-      # Publishing through pypa/gh-action-pypi-publish attests the artifacts
-      # (Trusted Publishing + digital attestations), so provenance ships with
-      # the release; the SBOM ships alongside the uploaded distributions.
-      - name: Upload the distribution
+      # Every publishing job downloads this one immutable workflow artifact.
+      # PyPI receives dist/; GitHub receives the same files plus digests and SBOM.
+      - name: Upload the release bundle
         uses: actions/upload-artifact@v7
         with:
-          name: dist
+          name: release-bundle
           path: |
             dist/
             sbom.cdx.json
+            SHA256SUMS
+          if-no-files-found: error
 
   publish:
     name: publish to PyPI
-    needs: build
+    needs: [prepare, bundle]
     if: startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != true
     runs-on: ubuntu-latest
     environment:
@@ -135,7 +122,7 @@ jobs:
       - name: Download the distribution
         uses: actions/download-artifact@v8
         with:
-          name: dist
+          name: release-bundle
           path: .
 
       - name: Publish
@@ -143,7 +130,7 @@ jobs:
 
   github-release:
     name: publish the GitHub Release
-    needs: [build, publish]
+    needs: [prepare, bundle, publish]
     if: startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != true
     runs-on: ubuntu-latest
     permissions:
@@ -154,17 +141,19 @@ jobs:
       - name: Download the verified distribution
         uses: actions/download-artifact@v8
         with:
-          name: dist
+          name: release-bundle
           path: .
 
       - name: Build release notes from the changelog
         env:
-          VERSION: ${{ needs.build.outputs.version }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           {
-            printf '```bash\npip install chassis-harness==%s\n```\n\n' "$VERSION"
-            printf -- '- Documentation: https://andreolli-davide.github.io/chassis/\n'
+            printf '%s\n' "\`\`\`bash" "pip install chassis-harness==$VERSION" "\`\`\`" ""
+            printf -- '- Stable documentation: https://andreolli-davide.github.io/chassis/\n'
             printf -- '- PyPI: https://pypi.org/project/chassis-harness/%s/\n\n' "$VERSION"
+            # The dollar expression belongs to awk, not the shell.
+            # shellcheck disable=SC2016
             awk -v version="$VERSION" '
               index($0, "## [" version "]") == 1 { publishing = 1; next }
               publishing && /^## \[/ { exit }
@@ -176,20 +165,27 @@ jobs:
       - name: Create the GitHub Release and attach the artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.build.outputs.version }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
+          release_flags=(--latest)
+          if [ "${{ needs.prepare.outputs.prerelease }}" = "true" ]; then
+            release_flags=(--prerelease)
+          fi
           gh release create "$GITHUB_REF_NAME" \
             dist/* \
             sbom.cdx.json \
+            SHA256SUMS \
             --verify-tag \
-            --latest \
+            "${release_flags[@]}" \
             --title "chassis-harness $VERSION" \
             --notes-file release-notes.md
 
   docs:
     name: publish the released documentation
-    needs: github-release
-    if: startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != true
+    needs: [prepare, github-release]
+    # Prereleases remain available from their immutable GitHub/PyPI artifacts,
+    # but must not replace the documentation for the latest stable release.
+    if: startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != true && needs.prepare.outputs.prerelease != 'true'
     uses: ./.github/workflows/docs.yml
     with:
       deploy: true
