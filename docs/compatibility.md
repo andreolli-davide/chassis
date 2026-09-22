@@ -86,7 +86,11 @@ def old_plan(self) -> object: ...
 ```
 
 The warning is raised at the caller's frame, so application warnings filters
-and logs point at the code that needs to change.
+and logs point at the code that needs to change. Because it subclasses the
+standard `DeprecationWarning`, Python hides it outside `__main__` unless the
+application opts in — for example `python -W once::chassis.compat.ChassisDeprecationWarning`
+or a `filterwarnings` entry in `pyproject.toml`. The test suite runs with
+warnings as errors, so an undeclared deprecation use fails CI.
 
 ### The 1.0 deprecation window
 

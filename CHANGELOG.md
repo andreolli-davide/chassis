@@ -20,6 +20,13 @@ that a minor release may break the documented surface.
   incompatible signatures, changed enum values, and changed public fields
   deterministically, exiting non-zero on any of them; `tests/test_api_compat.py`
   covers each detection class and pins the current surface as compatible.
+- **Typed deprecation machinery** (roadmap R027). `chassis.compat` adds
+  `ChassisDeprecationWarning` — carrying the deprecated API, its replacement,
+  the deprecating version, and the earliest removal version as structured
+  attributes — with `deprecated` (functions, methods, classes) and
+  `warn_deprecated`, raised at the caller's frame. The policy and the intended
+  1.0 deprecation window are documented in `docs/compatibility.md`; 0.9.0
+  deprecates nothing itself.
 - **The 0.9.0 roadmap and compatibility policy** (roadmap R027–R034).
   `docs/roadmap.md` defines the production-confidence milestone — compatibility,
   operability, resilience, and scale — with severity, motivation, acceptance

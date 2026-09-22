@@ -6,6 +6,8 @@ why it was made, and what to do instead. Lifecycle behaviour is unchanged across
 these releases: published generations are still immutable, publication is still
 transactional, and logical unload is still distinct from physical disposal.
 
+- [0.8 → 0.9](#08-09): the compatibility contract, versioned persisted
+  formats, the planning and telemetry contracts, and the deprecation machinery
 - [0.8 → 0.8.1](#08-081): review follow-ups for redaction, replay,
   immutable publication, and release delivery
 - [0.7 → 0.8](#07-08): strict canonical hashing, unambiguous request
@@ -22,6 +24,32 @@ transactional, and logical unload is still distinct from physical disposal.
 - [0.3 → 0.4](#03-04): incremental composition, semantic identity, reuse diagnostics
 - [0.2 → 0.3](#02-03): composition scopes, explain and diff diagnostics
 - [0.1 → 0.2](#01-02): optional extras, tool protocol, lease identity, budgets
+
+## 0.8 → 0.9
+
+0.9.0 is the production-confidence release: compatibility, operability,
+resilience, and scale. It is the last planned release with deliberate pre-1.0
+compatibility changes, and it stays source-compatible with 0.8.1 — the
+[API baseline](compatibility.md) for 0.8.1 passes unchanged, so nothing is
+removed or reshaped. This section records the additive surface and the format
+changes to be aware of.
+
+### Additive APIs
+
+- `chassis.compat` (`ChassisDeprecationWarning`, `deprecated`,
+  `warn_deprecated`): typed deprecation machinery naming the API, replacement,
+  deprecating version, and earliest removal version. Nothing is deprecated in
+  0.9.0 itself.
+- The public surface is classified in `tests/compat/public-api.json` and
+  checked against `tests/compat/api-baseline-0.8.1.json` by
+  `scripts/api_compat.py` (see [compatibility.md](compatibility.md)).
+
+### Persisted formats
+
+Persisted and exchanged documents gain explicit per-format version fields.
+Payloads written by 0.8.1 (which declare no format version) are read and
+migrated explicitly; each format's support horizon is documented in
+[compatibility.md](compatibility.md#persisted-formats).
 
 ## 0.8 → 0.8.1
 

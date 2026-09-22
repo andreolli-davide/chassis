@@ -242,6 +242,17 @@
         "stability": "stable"
       }
     },
+    "chassis.compat": {
+      "ChassisDeprecationWarning": {
+        "stability": "stable"
+      },
+      "deprecated": {
+        "stability": "stable"
+      },
+      "warn_deprecated": {
+        "stability": "stable"
+      }
+    },
     "chassis.composition": {
       "CompositionScope": {
         "stability": "stable"

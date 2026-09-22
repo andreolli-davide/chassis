@@ -70,13 +70,15 @@ class TestBaseline:
         assert baseline["package_version"] == "0.8.1"
         assert baseline["format_version"] == 1
 
-    def test_the_baseline_covers_exactly_the_documented_surface(self) -> None:
+    def test_every_baseline_name_is_still_classified(self) -> None:
+        """A name silently dropped from the source of truth is a removal attempt."""
+
         surface = _surface()
         baseline = _baseline()
 
-        assert {module: sorted(names) for module, names in baseline["modules"].items()} == {
-            module: sorted(names) for module, names in surface["modules"].items()
-        }
+        for module, names in baseline["modules"].items():
+            for name in names:
+                assert name in surface["modules"].get(module, {}), (module, name)
 
     def test_every_classified_name_has_a_valid_stability_class(self) -> None:
         for module, names in _surface()["modules"].items():
