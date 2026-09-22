@@ -9,7 +9,7 @@ imported.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -78,6 +78,30 @@ class PluginCatalog:
         return {"plugins": list(self.names())}
 
 
+_CONFIG_MIGRATIONS: dict[int, Callable[[Mapping[str, Any]], Mapping[str, Any]]] = {
+    1: lambda payload: payload,
+}
+
+
+def migrate_config(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Migrate a raw configuration payload to the supported schema version.
+
+    An explicit dispatcher: a schema version this build does not know is
+    rejected here, before validation, so accepting a second version is a
+    deliberate, tested change rather than a silent guess.
+    """
+
+    version = payload.get("version", 1)
+    migration = _CONFIG_MIGRATIONS.get(version) if isinstance(version, int) else None
+    if migration is None:
+        raise ConfigurationError(
+            "unsupported configuration schema version",
+            version=version,
+            supported=sorted(_CONFIG_MIGRATIONS),
+        )
+    return migration(payload)
+
+
 def parse_config(source: Any) -> HarnessConfig:
     """Parse configuration from a mapping, a YAML/JSON string, or a path.
 
@@ -142,6 +166,7 @@ def _validate(payload: Any, *, origin: str) -> HarnessConfig:
         raise ConfigurationError(
             "configuration must be a mapping", path=origin, value_type=type(payload).__name__
         )
+    payload = migrate_config(payload)
     try:
         return HarnessConfig.model_validate(dict(payload))
     except ValidationError as error:

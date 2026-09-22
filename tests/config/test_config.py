@@ -456,3 +456,157 @@ async def test_constructor_configuration_is_applied_once() -> None:
         assert harness.current_generation is first
     finally:
         await harness.stop()
+
+
+# --------------------------------------------------------------------------
+# Atomic application (R011): stage first, commit as one transaction.
+# --------------------------------------------------------------------------
+
+
+@plugin(name="consumer", version="1.0.0", requires={"database": ">=1,<2"})
+async def consumer_plugin(ctx: PluginContext) -> None:
+    return None
+
+
+def atomic_harness() -> Harness:
+    harness = Harness(name="atomic")
+    harness.register_plugin_type("db-a", db_a)
+    harness.register_plugin_type("db-b", db_b)
+    harness.register_plugin_type("fake-model", fake_model)
+    harness.register_plugin_type("consumer", consumer_plugin)
+    return harness
+
+
+def test_unsupported_schema_versions_are_rejected() -> None:
+    harness = atomic_harness()
+
+    with pytest.raises(ConfigurationError):
+        harness.apply_config({"version": 2, "plugins": []})
+
+    assert harness.config is None
+    assert harness.entry("db") is None
+
+
+def test_unknown_plugins_reject_the_whole_configuration() -> None:
+    harness = atomic_harness()
+
+    with pytest.raises(ConfigurationError):
+        harness.apply_config(
+            {
+                "version": 1,
+                "plugins": [
+                    {"id": "good", "plugin": "db-a"},
+                    {"id": "missing", "plugin": "not-registered"},
+                ],
+            }
+        )
+
+    assert harness.entry("good") is None
+    assert harness.entry("missing") is None
+    assert harness.config is None
+
+
+def test_invalid_preferences_reject_the_whole_configuration() -> None:
+    harness = atomic_harness()
+    harness.apply_config({"version": 1, "plugins": [{"id": "db", "plugin": "db-a"}]})
+
+    with pytest.raises(ConfigurationError):
+        harness.apply_config(
+            {
+                "version": 1,
+                "plugins": [{"id": "db", "plugin": "db-a"}],
+                "provider_preferences": {"database": "  "},
+            }
+        )
+
+    assert harness.config is not None
+    assert harness.config.provider_preferences == {}
+    assert harness.entry("db") is not None
+
+
+async def test_partial_removals_roll_back_when_a_later_change_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = atomic_harness()
+    harness.apply_config(
+        {
+            "version": 1,
+            "plugins": [
+                {"id": "db", "plugin": "db-a"},
+                {"id": "model", "plugin": "fake-model"},
+            ],
+        }
+    )
+
+    real_uninstall = Harness.uninstall
+    calls = {"count": 0}
+
+    def failing_uninstall(self: Harness, entry_id: str) -> bool:
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise RuntimeError("uninstall exploded")
+        return real_uninstall(self, entry_id)
+
+    monkeypatch.setattr(Harness, "uninstall", failing_uninstall)
+
+    with pytest.raises(RuntimeError):
+        harness.apply_config({"version": 1, "plugins": []})
+
+    # The first removal is rolled back: desired state is exactly as before.
+    assert harness.entry("db") is not None
+    assert harness.entry("model") is not None
+    assert harness.config is not None and harness.config.plugins != ()
+
+
+async def test_config_preferences_replace_omitted_values() -> None:
+    harness = atomic_harness()
+    harness.apply_config(
+        {
+            "version": 1,
+            "plugins": [
+                {"id": "db-a", "plugin": "db-a"},
+                {"id": "db-b", "plugin": "db-b"},
+                {"id": "consumer", "plugin": "consumer"},
+            ],
+            "provider_preferences": {"database": "db-b"},
+        }
+    )
+    planned = harness.plan().plan_for("consumer")
+    assert planned is not None
+    assert planned.requirements[0].provider_entry_id == "db-b"
+
+    # A preference omitted from the next application must not linger: with two
+    # providers and no preference, the requirement is ambiguous again.
+    harness.apply_config(
+        {
+            "version": 1,
+            "plugins": [
+                {"id": "db-a", "plugin": "db-a"},
+                {"id": "db-b", "plugin": "db-b"},
+                {"id": "consumer", "plugin": "consumer"},
+            ],
+        }
+    )
+    replanned = harness.plan().plan_for("consumer")
+    assert replanned is not None
+    assert replanned.requirements[0].status == "ambiguous"
+    assert replanned.requirements[0].provider_entry_id is None
+
+
+async def test_programmatic_preferences_take_precedence_over_config() -> None:
+    harness = atomic_harness()
+    entries = {
+        "version": 1,
+        "plugins": [
+            {"id": "db-a", "plugin": "db-a"},
+            {"id": "db-b", "plugin": "db-b"},
+            {"id": "consumer", "plugin": "consumer"},
+        ],
+    }
+    harness.apply_config(entries)
+    harness.prefer_provider("database", "db-a")
+    harness.apply_config({**entries, "provider_preferences": {"database": "db-b"}})
+
+    planned = harness.plan().plan_for("consumer")
+    assert planned is not None
+    assert planned.requirements[0].provider_entry_id == "db-a"

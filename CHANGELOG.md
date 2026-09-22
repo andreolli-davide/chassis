@@ -83,6 +83,21 @@ that a minor release may break the documented surface.
   user-owned scope relied on implicit takeover; declare the agent's own scope
   (the default `/agents/<name>`), or empty the user scope first. Specs carrying
   reserved metadata keys now fail construction.
+- **Declarative configuration applies atomically** (roadmap R011). The complete
+  configuration is parsed, migrated, validated, and catalog-resolved before any
+  desired state is mutated; entries, config-owned preferences, and the stored
+  config commit as one transaction, and a failure (unknown plugin, invalid
+  preference, or a failing entry change) restores the exact previous state
+  including partial removals. Unsupported schema versions are rejected by an
+  explicit migration dispatcher (and by `HarnessConfig` itself), config-owned
+  provider preferences are replaced wholesale on every application, and
+  programmatic `prefer_provider` preferences are stored separately and take
+  precedence over config-owned ones with the same key.
+- **Migration note:** a re-applied configuration now *replaces* its provider
+  preferences — a preference omitted from the new document no longer lingers
+  (re-declare it, or set it programmatically with `prefer_provider`, which now
+  outranks the document). Configurations with a schema `version` other than `1`
+  are rejected instead of being accepted silently.
 
 ## [0.5.1] - 2026-09-22
 

@@ -20,6 +20,15 @@ provider_preferences:
   database: postgres
 ```
 
+Applying a configuration is atomic: the whole document is parsed, migrated, and
+validated (including catalog resolution of every `plugin` reference) before any
+desired state changes, and a failure restores the exact previous state. The
+schema `version` must be `1`; unknown versions are rejected by an explicit
+migration dispatcher. `provider_preferences` are replaced wholesale on every
+application — re-declare a preference you still want. Programmatic
+`prefer_provider` preferences are stored separately and take precedence over
+config-owned ones with the same key.
+
 - **`id` is a stable identity.** It must not change when the plugin or its
   configuration changes, or reconciliation sees a remove plus an add instead of a
   replace.

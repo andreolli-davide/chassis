@@ -82,6 +82,13 @@ class HarnessConfig(BaseModel):
     plugins: tuple[PluginEntryConfig, ...] = ()
     provider_preferences: Mapping[str, str] = Field(default_factory=dict)
 
+    @field_validator("version")
+    @classmethod
+    def _validate_schema_version(cls, value: int) -> int:
+        if value != 1:
+            raise ValueError(f"unsupported configuration schema version: {value}")
+        return value
+
     @model_validator(mode="after")
     def _freeze_preferences(self) -> HarnessConfig:
         object.__setattr__(self, "provider_preferences", FrozenDict(self.provider_preferences))

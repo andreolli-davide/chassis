@@ -32,7 +32,7 @@ generation keep working against the environment they acquired.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator, Iterable, Mapping
+from collections.abc import AsyncGenerator, Callable, Iterable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from enum import StrEnum
@@ -118,6 +118,21 @@ class ConfigApplyResult:
             "changes": [change.to_dict() for change in self.changes],
             "applied": [change.to_dict() for change in self.applied],
         }
+
+
+def _entry_restorer(harness: Harness, entry: PluginEntry) -> Callable[[], Any]:
+    """Undo action that restores one desired entry exactly."""
+
+    def restore() -> None:
+        harness.install(
+            entry.plugin,
+            entry_id=entry.entry_id,
+            config=dict(entry.config),
+            replace=True,
+            scope=entry.scope,
+        )
+
+    return restore
 
 
 class _FailClosedPolicy:
@@ -292,6 +307,7 @@ class Harness:
         self._pending_config = config
         self._resolver = DependencyResolver()
         self._provider_preference: dict[str, str] = {}
+        self._config_preferences: dict[str, str] = {}
         self._compose_lock = asyncio.Lock()
         self._plan: ResolutionPlan | None = None
         self._last_failures: tuple[CleanupFailure, ...] = ()
@@ -371,40 +387,94 @@ class Harness:
         self._catalog.register(name, plugin_type, replace=replace)
 
     def apply_config(self, source: Any) -> ConfigApplyResult:
-        """Reconcile the harness towards a declarative configuration.
+        """Reconcile the harness towards a declarative configuration, atomically.
 
-        Desired entries are created, replaced, or removed through the same install
-        path used programmatically, and provider preferences are applied before the
-        next reconcile so the composition is resolved exactly once.
+        The complete configuration is parsed, migrated, validated, and
+        catalog-resolved before any desired state is mutated; entries,
+        config-owned preferences, and the stored config then commit as one
+        transaction, and a failure restores the exact previous state.
+
+        Config-owned preferences are replaced wholesale on every application,
+        so omitted values do not linger. They live separately from programmatic
+        :meth:`prefer_provider` preferences, which take precedence.
         """
 
         config = parse_config(source)
+        self._stage_config(config)
         changes = diff_desired_state(config, self._installed_state())
         applied: list[DesiredStateChange] = []
+        undo: list[Callable[[], Any]] = []
+        previous_config = self._config
+        previous_preferences = dict(self._config_preferences)
+        try:
+            for change in changes:
+                if not change.is_mutation:
+                    continue
+                entry = config.entry(change.entry_id)
+                if change.action is DesiredStateAction.REMOVE:
+                    existing = self.entry(change.entry_id)
+                    if existing is not None:
+                        undo.append(_entry_restorer(self, existing))
+                    self.uninstall(change.entry_id)
+                elif entry is not None:
+                    existing = self.entry(entry.id)
+                    if existing is not None:
+                        undo.append(_entry_restorer(self, existing))
+                    else:
+                        undo.append(lambda entry_id=entry.id: self.uninstall(entry_id))
+                    self.install(
+                        self._catalog.get(entry.plugin),
+                        entry_id=entry.id,
+                        config=entry.config,
+                        replace=change.action is DesiredStateAction.REPLACE,
+                    )
+                applied.append(change)
 
-        for change in changes:
-            if not change.is_mutation:
-                continue
-            entry = config.entry(change.entry_id)
-            if change.action is DesiredStateAction.REMOVE:
-                self.uninstall(change.entry_id)
-            elif entry is not None:
-                self.install(
-                    self._catalog.get(entry.plugin),
-                    entry_id=entry.id,
-                    config=entry.config,
-                    replace=change.action is DesiredStateAction.REPLACE,
-                )
-            applied.append(change)
-
-        for capability, provider in config.provider_preferences.items():
-            self.prefer_provider(capability, provider)
-        for entry in config.enabled_entries:
-            for capability, provider in entry.provider_preference.items():
-                self.prefer_provider(capability, provider, consumer=entry.id)
-
-        self._config = config
+            config_preferences = dict(config.provider_preferences)
+            for entry in config.enabled_entries:
+                for capability, provider in entry.provider_preference.items():
+                    config_preferences[f"{entry.id}:{capability}"] = provider
+            self._config_preferences = config_preferences
+            self._config = config
+        except BaseException:
+            for restore in reversed(undo):
+                restore()
+            self._config_preferences = previous_preferences
+            self._config = previous_config
+            raise
+        if config_preferences != previous_preferences:
+            self._dirty = True
         return ConfigApplyResult(config=config, changes=changes, applied=tuple(applied))
+
+    def _stage_config(self, config: HarnessConfig) -> None:
+        """Validate the complete configuration before any desired state mutates.
+
+        Raises:
+            ConfigurationError: an entry names an unregistered plugin
+                implementation, or a provider preference is malformed.
+        """
+
+        for entry in config.plugins:
+            self._catalog.get(entry.plugin)
+        preferences = dict(config.provider_preferences)
+        for entry in config.enabled_entries:
+            preferences.update(entry.provider_preference)
+        for capability, provider in preferences.items():
+            if not str(capability).strip() or not str(provider).strip():
+                raise ConfigurationError(
+                    "provider preferences need a non-empty capability and provider",
+                    capability=str(capability),
+                )
+
+    def _effective_preferences(self) -> dict[str, str]:
+        """Preferences for resolution: config-owned plus programmatic overrides.
+
+        Precedence: a programmatic :meth:`prefer_provider` preference overrides
+        a config-owned preference with the same key; within the merged set the
+        most specific key (consumer, then scope, then global) wins.
+        """
+
+        return {**self._config_preferences, **self._provider_preference}
 
     def _installed_state(self) -> dict[str, InstalledEntry]:
         return {
@@ -614,6 +684,9 @@ class Harness:
         A preference never hides an ambiguity that has no preference: without one,
         a requirement satisfied by several visible providers stays ambiguous and
         its consumer stays pending.
+
+        Programmatic preferences are stored separately from declarative
+        configuration preferences and take precedence over them for the same key.
         """
 
         if consumer is not None and scope is not None:
@@ -805,7 +878,7 @@ class Harness:
 
             plan = self._resolver.resolve(
                 self._plugin_registry.candidates(),
-                prefer=self._provider_preference,
+                prefer=self._effective_preferences(),
                 scopes=self._composition.specs(),
             )
             self._telemetry.event(
@@ -1193,7 +1266,7 @@ class Harness:
         """
 
         registry = self._plugin_registry
-        preferences = self._provider_preference
+        preferences = self._effective_preferences()
 
         def provider_instance(provider_entry: str) -> str | None:
             instance = registry.instance(provider_entry)
@@ -1564,11 +1637,12 @@ class Harness:
     ) -> str | None:
         """Most specific explicit preference: scope first, then global."""
 
+        effective = self._effective_preferences()
         if scope is not None:
-            scoped = self._provider_preference.get(f"scope:{self._scope_path(scope)}:{capability}")
+            scoped = effective.get(f"scope:{self._scope_path(scope)}:{capability}")
             if scoped is not None:
                 return scoped
-        return self._provider_preference.get(capability)
+        return effective.get(capability)
 
     def snapshot_for(
         self,
@@ -1700,7 +1774,7 @@ class Harness:
 
         return self._resolver.resolve(
             self._plugin_registry.candidates(),
-            prefer=dict(self._provider_preference) if prefer is None else prefer,
+            prefer=self._effective_preferences() if prefer is None else prefer,
             scopes=self._composition.specs(),
         )
 
