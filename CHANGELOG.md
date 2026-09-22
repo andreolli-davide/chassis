@@ -7,6 +7,17 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-22
+
+Beta readiness: strict canonicalization, an unambiguous public API, aligned
+diagnostics and documentation, enforced coverage and compatibility gates,
+expanded package and dependency verification, and a completed Beta readiness
+review — the package classifier is now **Beta**. Every change that can break a
+caller from 0.7 is listed in
+[migrations](https://github.com/andreolli-davide/chassis/blob/main/docs/migration.md),
+and the release-candidate audit is recorded in
+[beta-readiness](https://github.com/andreolli-davide/chassis/blob/main/docs/beta-readiness.md).
+
 ### Fixed
 
 - **Persistence canonicalization hardened** (roadmap R021). Canonical hashing
@@ -57,7 +68,8 @@ that a minor release may break the documented surface.
   (`uv lock --upgrade`) comparing against it.
 - **Package and dependency verification expanded** (roadmap R025). CI now
   smoke-tests the wheel and the sdist in clean environments and exercises the
-  core, `langgraph`, `langsmith`, and combined extras independently; a    dependency vulnerability scan (`pip-audit`) runs on every push with a
+  core, `langgraph`, `langsmith`, and combined extras independently; a
+  dependency vulnerability scan (`pip-audit`) runs on every push with a
   documented triage process (fix, reviewed upper bound, or a written exception —
   untriaged findings fail the build). Lower-bound-only dependencies are reviewed
   through the minimum/latest compatibility jobs; no upper bounds are needed

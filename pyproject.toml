@@ -1,6 +1,6 @@
 [project]
 name = "chassis-harness"
-version = "0.7.0"
+version = "0.8.0"
 description = "Chassis: transactional runtime composition for dynamic agent systems -- scoped ownership, reactive capabilities, and immutable runtime generations."
 readme = "README.md"
 requires-python = ">=3.12"
