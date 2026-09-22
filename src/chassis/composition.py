@@ -112,6 +112,17 @@ def _validate_name(name: str) -> str:
     return name
 
 
+def _validate_parent_ownership(
+    tree: CompositionTree, parent: CompositionScope | None, name: str
+) -> None:
+    if parent is not None and parent.tree is not tree:
+        raise ConfigurationError(
+            "parent scope belongs to another composition tree",
+            name=name,
+            parent=parent.path,
+        )
+
+
 def _view_from(capabilities: Iterable[str | CapabilityKey] | None) -> frozenset[str] | None:
     if capabilities is None:
         return None
@@ -211,12 +222,7 @@ class CompositionScope:
     ) -> None:
         self._tree = tree
         self._name = _validate_name(name)
-        if parent is not None and parent.tree is not tree:
-            raise ConfigurationError(
-                "parent scope belongs to another composition tree",
-                name=name,
-                parent=parent.path,
-            )
+        _validate_parent_ownership(tree, parent, name)
         self._parent = parent
         self._capabilities = _view_from(capabilities)
         self._tools = _tool_view_from(tools)
@@ -543,6 +549,7 @@ class CompositionTree:
                 parent_scope = existing
         else:
             parent_scope = parent
+        _validate_parent_ownership(self, parent_scope, name)
         return parent_scope.child(name, capabilities=capabilities, tools=tools, metadata=metadata)
 
     def ensure(self, path: str) -> CompositionScope:
