@@ -13,11 +13,24 @@ from typing import TYPE_CHECKING, Any
 
 from chassis.telemetry.base import NoopSpan, NoopTelemetry, Span, TeeTelemetry, Telemetry
 from chassis.telemetry.recording import RecordedEvent, RecordedSpan, RecordingTelemetry
+from chassis.telemetry.signals import (
+    ATTRIBUTE_ITEMS_LIMIT,
+    ATTRIBUTE_STRING_LIMIT,
+    CORRELATION_FIELDS,
+    SIGNALS,
+    SignalKind,
+    SignalSpec,
+    validate_signal,
+)
 
 if TYPE_CHECKING:
     from chassis.telemetry.langsmith import LangSmithSpan, LangSmithTelemetry
 
 __all__ = [
+    "ATTRIBUTE_ITEMS_LIMIT",
+    "ATTRIBUTE_STRING_LIMIT",
+    "CORRELATION_FIELDS",
+    "SIGNALS",
     "LangSmithSpan",
     "LangSmithTelemetry",
     "NoopSpan",
@@ -25,9 +38,12 @@ __all__ = [
     "RecordedEvent",
     "RecordedSpan",
     "RecordingTelemetry",
+    "SignalKind",
+    "SignalSpec",
     "Span",
     "TeeTelemetry",
     "Telemetry",
+    "validate_signal",
 ]
 
 _LAZY = {

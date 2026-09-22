@@ -330,8 +330,15 @@ class ToolExecutor:
         if self._replay is not None and self._replay.is_replaying:
             if self._replay.has_remaining(BoundaryKind.TOOL, key=replay_key):
                 replayed = self._replay.replay(BoundaryKind.TOOL, key=replay_key).response
+                self._telemetry.event(
+                    "replay.hit", {"kind": BoundaryKind.TOOL.value, "tool": entry.name}
+                )
             elif self._replay.fallback is ReplayFallback.ERROR:
                 exhausted = self._replay.has(BoundaryKind.TOOL, key=replay_key)
+                self._telemetry.event(
+                    "replay.exhausted" if exhausted else "replay.miss",
+                    {"kind": BoundaryKind.TOOL.value, "tool": entry.name},
+                )
                 raise ReplayMismatch(
                     "recorded tool interactions for this key are exhausted"
                     if exhausted
@@ -342,6 +349,15 @@ class ToolExecutor:
                     reason="exhausted" if exhausted else "missing",
                     recorded=self._replay.counts().get(BoundaryKind.TOOL.value, 0),
                 )
+            else:
+                self._telemetry.event(
+                    "replay.miss",
+                    {
+                        "kind": BoundaryKind.TOOL.value,
+                        "tool": entry.name,
+                        "fallback": self._replay.fallback.value,
+                    },
+                )
 
         started = time.monotonic()
         async with self._telemetry.span(
@@ -349,7 +365,9 @@ class ToolExecutor:
             {
                 "tool": entry.name,
                 "owner": entry.owner_name,
+                "registration_id": entry.registration_id,
                 "generation_id": request.generation_id or snapshot.generation_id,
+                "run_id": request.run_id,
                 "idempotent": entry.policy.idempotent,
                 "replayed": replayed is not None,
             },

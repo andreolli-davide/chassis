@@ -4,6 +4,75 @@ Chassis instruments the operations it owns and leaves model, tool, and graph
 internals to LangGraph, LangChain, and LangSmith. It does not create a competing
 telemetry universe.
 
+## The signal contract
+
+Every span and event Chassis emits is declared in
+`chassis.telemetry.signals.SIGNALS`: a stable name, whether it is a span or an
+event, the required attribute keys, and the optional ones. The contract is
+backend-independent and enforced by `tests/telemetry/test_signal_contract.py`
+against the in-repo recording backend — adapters transport these signals, they
+do not reshape them (guarantee G27).
+
+| Signal | Kind | Required attributes | Emitted for |
+| --- | --- | --- | --- |
+| `harness.reconcile` | span | `harness` | one reconciliation (failure recorded on the span) |
+| `harness.shutdown` | span | `harness` | one shutdown run |
+| `plugin.mount` | span | `plugin`, `entry_id` | plugin setup for a candidate instance |
+| `plugin.unmount` | span | `plugin`, `entry_id`, `instance_id` | plugin teardown and scope close |
+| `tool.execute` | span | `tool`, `generation_id` | one tool call (attributes include `registration_id`, `run_id`, `replayed`) |
+| `agent.run` | span | `agent`, `agent_revision`, `generation_id` | one agent invocation or stream |
+| `dependency.resolve` | event | `eligible`, `pending`, `cycles`, `edges`, `scopes` | one resolution outcome |
+| `generation.build` | event | `plugins`, `mounted` | a candidate generation was assembled |
+| `generation.publish` | event | `generation_id`, `sequence`, `previous`, `plugins` | a generation became current |
+| `generation.acquire` | event | `generation_id`, `sequence` | a run leased the current generation |
+| `generation.release` | event | `generation_id`, `leases` | a run released its lease |
+| `generation.draining` | event | `generation_id`, `successor`, `leases` | the previous generation began draining |
+| `generation.retired` | event | `generation_id` | a draining generation retired |
+| `generation.impact` | event | — | reuse/rebuild decision counts |
+| `policy.decision` | event | `tool`, `allowed` | one authorization decision |
+| `budget.exhausted` | event | `tool`, `dimension` | a budget dimension was exhausted |
+| `replay.hit` | event | `kind` | a recorded boundary answered the operation |
+| `replay.miss` | event | `kind` | no record exists for the boundary key |
+| `replay.exhausted` | event | `kind` | the key's records were consumed |
+| `graph.compile` | event | `agent`, `definition_version` | a graph was compiled and cached |
+| `graph.cache` | event | `result` (`hit`/`miss`/`evict`) | one cache lookup or eviction |
+| `graph.cache.invalidate` | event | `agent`, `entries` | cached graphs were invalidated |
+| `hook.failure` | event | `event`, `error_type` | a hook handler failed and was recorded |
+| `cleanup.failure` | event | `error_type` | a disposer or teardown step failed and was aggregated |
+| `telemetry.failure` | event | `operation`, `signal` | a telemetry backend failed and was contained |
+
+In 0.9.0 the retirement event was renamed `generation.drain` →
+`generation.retired` to match the lifecycle vocabulary; names are stable from
+0.9.0 on.
+
+### Correlation
+
+The correlation fields — `run_id`, `thread_id`, `generation_id`,
+`snapshot_digest`, `agent`, `agent_revision`, `entry_id`, `instance_id`,
+`registration_id`, `scope_id` — are attached at the boundary that owns the
+fact (`CORRELATION_FIELDS` in the contract): `agent.run` carries the snapshot
+digest and revision, `tool.execute` carries the generation, run, and tool
+registration ids, `plugin.*` carries entry and instance ids. Downstream systems
+join on these fields; they never need to parse names or prose.
+
+### Cardinality and payload rules
+
+Attribute values are scalars (string, number, bool, null) or short bounded
+sequences of scalars: at most `ATTRIBUTE_ITEMS_LIMIT` items and
+`ATTRIBUTE_STRING_LIMIT` characters. Raw payloads — requests, responses,
+messages, prompt bodies, configuration material — are **forbidden** in signals;
+`validate_signal()` rejects them, and the contract test fails any emission that
+carries one. Identity values (run ids, boundary key digests) are high-cardinality:
+correct as span attributes, never as metric labels.
+
+### Redaction
+
+Everything emitted through the harness passes the redaction boundary first
+(`SafeTelemetry(RedactingTelemetry(...))` around every backend), so sensitive
+attribute keys and learned secret values cannot reach any signal. The contract
+test asserts absence of the secret material across every recorded attribute,
+not merely the presence of `<redacted>`.
+
 ## What is traced where
 
 | Operation | Instrumented by | Signal |

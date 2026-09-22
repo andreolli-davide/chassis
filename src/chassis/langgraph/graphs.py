@@ -241,8 +241,15 @@ class GraphCache:
         self.stats.builds += 1
         while len(self._entries) > self._max_entries:
             evicted, _ = self._entries.popitem(last=False)
-            self._keys.pop(evicted, None)
+            evicted_key = self._keys.pop(evicted, None)
             self.stats.evictions += 1
+            self._telemetry.event(
+                "graph.cache",
+                {
+                    "result": "evict",
+                    "agent": "*" if evicted_key is None else evicted_key.agent,
+                },
+            )
 
     def invalidate(self, agent: str | None = None) -> int:
         """Drop cached graphs, optionally only for one agent. Returns how many."""

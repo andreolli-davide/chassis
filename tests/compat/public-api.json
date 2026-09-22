@@ -578,6 +578,15 @@
       }
     },
     "chassis.telemetry": {
+      "ATTRIBUTE_ITEMS_LIMIT": {
+        "stability": "stable"
+      },
+      "ATTRIBUTE_STRING_LIMIT": {
+        "stability": "stable"
+      },
+      "CORRELATION_FIELDS": {
+        "stability": "stable"
+      },
       "LangSmithTelemetry": {
         "stability": "stable"
       },
@@ -590,6 +599,15 @@
       "RecordingTelemetry": {
         "stability": "stable"
       },
+      "SIGNALS": {
+        "stability": "stable"
+      },
+      "SignalKind": {
+        "stability": "stable"
+      },
+      "SignalSpec": {
+        "stability": "stable"
+      },
       "Span": {
         "stability": "stable"
       },
@@ -597,6 +615,9 @@
         "stability": "stable"
       },
       "Telemetry": {
+        "stability": "stable"
+      },
+      "validate_signal": {
         "stability": "stable"
       }
     },

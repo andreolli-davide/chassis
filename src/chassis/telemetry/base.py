@@ -89,7 +89,10 @@ class TeeTelemetry:
 
     Useful whenever two sinks must both see the same span -- recording for
     assertions while sending to LangSmith, or fanning out to OpenTelemetry.
-    Failures in one backend do not prevent the others from receiving the signal.
+    Failures in one backend do not prevent the others from receiving the signal,
+    and a contained failure is announced to the *other* backends as a
+    ``telemetry.failure`` event so a dead backend stays visible where telemetry
+    still works.
     """
 
     def __init__(self, *backends: Telemetry) -> None:
@@ -97,6 +100,33 @@ class TeeTelemetry:
             raise ValueError("TeeTelemetry requires at least one backend")
         self._backends = backends
         self._safe = tuple(SafeTelemetry(backend) for backend in backends)
+        self._announcing = False
+        for position, safe in enumerate(self._safe):
+            safe.set_failure_sink(self._announce_failure(position))
+
+    def _announce_failure(self, position: int) -> Any:
+        """Failure sink for one backend: notify its siblings exactly once."""
+
+        def sink(operation: str, signal: str) -> None:
+            if self._announcing:
+                return
+            self._announcing = True
+            try:
+                backend = type(self._backends[position]).__name__
+                for other, safe in enumerate(self._safe):
+                    if other != position:
+                        safe.event(
+                            "telemetry.failure",
+                            {
+                                "operation": operation,
+                                "signal": signal,
+                                "backend": backend,
+                            },
+                        )
+            finally:
+                self._announcing = False
+
+        return sink
 
     @property
     def backends(self) -> tuple[Telemetry, ...]:
@@ -159,6 +189,7 @@ class SafeTelemetry:
     def __init__(self, inner: Telemetry) -> None:
         self._inner = inner
         self._failures = 0
+        self._sink: Any = None
 
     @property
     def inner(self) -> Telemetry:
@@ -170,9 +201,24 @@ class SafeTelemetry:
 
         return self._failures
 
+    def set_failure_sink(self, sink: Any) -> None:
+        """Register a callback ``sink(operation, signal)`` for contained failures.
+
+        Used by :class:`TeeTelemetry` so a dead backend is announced to its
+        siblings as a ``telemetry.failure`` event. The sink runs inside its own
+        guard: it can neither break the observed operation nor recurse.
+        """
+
+        self._sink = sink
+
     def _note(self, phase: str, name: str) -> None:
         self._failures += 1
         _LOGGER.warning("telemetry backend failed during %s of %r", phase, name, exc_info=True)
+        if self._sink is not None:
+            try:
+                self._sink(phase, name)
+            except Exception:
+                _LOGGER.warning("telemetry failure sink failed", exc_info=True)
 
     @asynccontextmanager
     async def span(

@@ -9,6 +9,24 @@ that a minor release may break the documented surface.
 
 ### Added
 
+- **Stable operational signal contract** (roadmap R031 phase 1, new guarantee
+  G27). `chassis.telemetry.signals` declares every span and event Chassis emits
+  — stable names, required and optional attributes, correlation fields (run id,
+  thread id, generation id, snapshot digest, agent and revision, plugin entry
+  and instance id, tool registration id, scope), and bounded-cardinality rules
+  that forbid raw payloads — and `validate_signal()` checks one emission against
+  the contract. The contract is enforced backend-independently against the
+  recording backend (`tests/telemetry/test_signal_contract.py`), including that
+  no secret material can reach any attribute. Missing signals now have
+  emissions at their seams: `generation.acquire`/`generation.release` (run
+  leases), `generation.draining`, `generation.retired`, `replay.hit` /
+  `replay.miss` / `replay.exhausted` (tool boundary decisions), `cleanup.failure`
+  (aggregated disposals and drain timeouts), `telemetry.failure` (a contained
+  backend failure, announced by `TeeTelemetry` to its surviving siblings), and
+  `graph.cache` eviction (`result: "evict"`). `tool.execute` gained the
+  `registration_id` and `run_id` correlation attributes. The retirement event is
+  renamed `generation.drain` → `generation.retired` (see migrations); names are
+  stable from 0.9.0 on. Documented in `docs/observability.md`.
 - **Stable machine-readable planning contract** (roadmap R030, new guarantee
   G26). `chassis.planning` defines the versioned `PlanResult` document with a
   closed action vocabulary (`add`, `remove`, `replace`, `reuse`, `rebuild`,

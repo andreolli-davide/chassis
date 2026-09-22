@@ -117,7 +117,7 @@ def test_every_guarantee_maps_to_an_existing_test_node() -> None:
     rows: list[tuple[str, str, str]] = GUARANTEE_ROW.findall(design)
     names = [name for name, _claim, _enforcement in rows]
 
-    assert names == [f"G{i}" for i in range(1, 27)]
+    assert names == [f"G{i}" for i in range(1, 28)]
 
     violations = guarantee_violations(rows)
     assert not violations, (

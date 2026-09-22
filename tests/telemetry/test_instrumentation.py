@@ -58,14 +58,16 @@ async def test_no_op_reconcile_still_instruments_but_publishes_nothing() -> None
         assert "generation.publish" not in harness.recorded_events
 
 
-async def test_generation_drain_is_instrumented_when_a_provider_is_removed() -> None:
+async def test_generation_retirement_is_instrumented_when_a_provider_is_removed() -> None:
     async with TestHarness(plugins=[database_plugin()]) as harness:
         harness.telemetry.clear()
         harness.uninstall("plugin-1")
         await harness.reconcile()
 
-        drained = [event for event in harness.telemetry.events if event.name == "generation.drain"]
-        assert [event.attributes["generation_id"] for event in drained] == ["gen_0001"]
+        retired = [
+            event for event in harness.telemetry.events if event.name == "generation.retired"
+        ]
+        assert [event.attributes["generation_id"] for event in retired] == ["gen_0001"]
         assert [
             record.attributes["plugin"]
             for record in harness.telemetry.spans_named("plugin.unmount")

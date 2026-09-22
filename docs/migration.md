@@ -49,6 +49,17 @@ changes to be aware of.
   checked against `tests/compat/api-baseline-0.8.1.json` by
   `scripts/api_compat.py` (see [compatibility.md](compatibility.md)).
 
+### Telemetry signals
+
+- The telemetry retirement event is renamed `generation.drain` →
+  `generation.retired`; every signal name and its required attributes are now
+  declared in `chassis.telemetry.signals.SIGNALS` and stable from 0.9.0 on
+  ([observability.md](observability.md#the-signal-contract)). New signals were
+  added at previously uninstrumented seams (`generation.acquire`/`release`,
+  `generation.draining`, `replay.hit`/`miss`/`exhausted`, `cleanup.failure`,
+  `telemetry.failure`, `graph.cache` eviction); `tool.execute` gained
+  `registration_id` and `run_id` attributes.
+
 ### Lifecycle and shutdown behavior
 
 - A composition-identical reconcile is now genuinely a no-op: previously the

@@ -841,17 +841,28 @@ class Harness:
         )
         for generation in idle:
             self._generations.retire(generation)
-        for generation in busy:
-            failures.append(
-                CleanupFailure(
-                    description=f"generation {generation.generation_id}",
-                    error=TimeoutError(
-                        f"{generation.lease_count} run(s) still active after "
-                        f"{self._shutdown_grace_seconds}s; retiring anyway"
-                    ),
-                )
+            self._telemetry.event(
+                "generation.retired",
+                {"generation_id": generation.generation_id, "leases": 0},
             )
+        for generation in busy:
+            failure = CleanupFailure(
+                description=f"generation {generation.generation_id}",
+                error=TimeoutError(
+                    f"{generation.lease_count} run(s) still active after "
+                    f"{self._shutdown_grace_seconds}s; retiring anyway"
+                ),
+            )
+            failures.append(failure)
+            self._emit_cleanup_failure(failure)
             self._generations.retire(generation)
+            self._telemetry.event(
+                "generation.retired",
+                {
+                    "generation_id": generation.generation_id,
+                    "leases": generation.lease_count,
+                },
+            )
 
         self._generations.refresh_references(self._plugin_registry.instances())
         for instance in self._teardown_order():
@@ -890,6 +901,25 @@ class Harness:
 
         if self._replay is not None:
             self._replay.record_lifecycle(event, payload)
+
+    def _emit_cleanup_failure(
+        self,
+        failure: CleanupFailure,
+        *,
+        entry_id: str | None = None,
+        scope: str | None = None,
+    ) -> None:
+        """Surface one aggregated cleanup failure as a structured signal."""
+
+        self._telemetry.event(
+            "cleanup.failure",
+            {
+                "error_type": type(failure.error).__name__,
+                "entry_id": entry_id,
+                "scope": scope,
+                "description": failure.description,
+            },
+        )
 
     async def _observe(
         self, event: HookEvent, payload: Mapping[str, Any]
@@ -1013,6 +1043,14 @@ class Harness:
                 )
                 previous = self._generations.publish(generation)
                 if previous is not None:
+                    self._telemetry.event(
+                        "generation.draining",
+                        {
+                            "generation_id": previous.generation_id,
+                            "successor": generation.generation_id,
+                            "leases": previous.lease_count,
+                        },
+                    )
                     self._record_lifecycle(
                         "generation.draining",
                         {
@@ -1106,10 +1144,25 @@ class Harness:
 
         self._require_acquirable()
         lease = self._generations.acquire_lease()
+        self._telemetry.event(
+            "generation.acquire",
+            {
+                "generation_id": lease.generation.generation_id,
+                "sequence": lease.generation.sequence,
+            },
+        )
         try:
             yield lease.generation
         finally:
-            if self._generations.release_lease(lease):
+            became_idle = self._generations.release_lease(lease)
+            self._telemetry.event(
+                "generation.release",
+                {
+                    "generation_id": lease.generation.generation_id,
+                    "leases": lease.generation.lease_count,
+                },
+            )
+            if became_idle:
                 await self._reclaim_after_drain()
 
     def _require_acquirable(self) -> None:
@@ -1487,7 +1540,7 @@ class Harness:
                     "generation.retired", {"generation_id": generation.generation_id}
                 )
                 self._telemetry.event(
-                    "generation.drain",
+                    "generation.retired",
                     {"generation_id": generation.generation_id, "leases": 0},
                 )
 
@@ -1590,12 +1643,20 @@ class Harness:
                 await self._plugin_registry.dispose(instance)
             except EffectCleanupError as error:
                 failures.extend(error.failures)
+                for failure in error.failures:
+                    self._emit_cleanup_failure(
+                        failure,
+                        entry_id=instance.entry_id,
+                        scope=instance.scope.name,
+                    )
                 span.record_error(error)
             except Exception as error:
-                failures.append(
-                    CleanupFailure(
-                        description=f"dispose of {instance.manifest.name!r}", error=error
-                    )
+                failure = CleanupFailure(
+                    description=f"dispose of {instance.manifest.name!r}", error=error
+                )
+                failures.append(failure)
+                self._emit_cleanup_failure(
+                    failure, entry_id=instance.entry_id, scope=instance.scope.name
                 )
                 span.record_error(error)
             failures.extend(
