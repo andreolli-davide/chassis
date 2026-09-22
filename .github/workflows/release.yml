@@ -98,21 +98,25 @@ jobs:
           uv pip install --python .smoke/bin/python "${wheel}[langgraph]"
           .smoke/bin/python examples/quickstart.py
 
+      # The SBOM must live outside dist/: pypa/gh-action-pypi-publish publishes
+      # every file in the packages directory and rejects non-distributions.
       - name: Generate an SBOM for the distribution
         uses: anchore/sbom-action@v0
         with:
           path: dist
           format: cyclonedx-json
-          output-file: dist/sbom.cdx.json
+          output-file: sbom.cdx.json
 
       # Publishing through pypa/gh-action-pypi-publish attests the artifacts
       # (Trusted Publishing + digital attestations), so provenance ships with
-      # the release; the SBOM ships inside the uploaded distribution.
+      # the release; the SBOM ships alongside the uploaded distributions.
       - name: Upload the distribution
         uses: actions/upload-artifact@v7
         with:
           name: dist
-          path: dist/
+          path: |
+            dist/
+            sbom.cdx.json
 
   publish:
     name: publish to PyPI
@@ -132,7 +136,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: dist
-          path: dist/
+          path: .
 
       - name: Publish
         uses: pypa/gh-action-pypi-publish@release/v1
