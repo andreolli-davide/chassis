@@ -174,3 +174,54 @@ def test_tool_schema_hash_surfaces_unserializable_schemas() -> None:
 def test_prompt_hash_normalizes_surrounding_whitespace() -> None:
     assert prompt_hash("  hello  ") == prompt_hash("hello")
     assert prompt_hash("hello") != prompt_hash("hello world")
+
+
+# --------------------------------------------------------------------------
+# Canonicalization (R021): string keys, deterministic primitives.
+# --------------------------------------------------------------------------
+
+
+def test_canonical_hashing_requires_string_mapping_keys() -> None:
+    with pytest.raises(ConfigurationError):
+        stable_hash({"a": 1, 2: "b"})
+    with pytest.raises(ConfigurationError):
+        stable_hash({"nested": {1: "x"}})
+    with pytest.raises(ConfigurationError):
+        stable_hash({True: "y"})
+
+    # String keys never collide after normalization.
+    assert stable_hash({"1": "a"}) != stable_hash({"1": "b"})
+
+
+def test_unicode_is_hashed_without_silent_normalization() -> None:
+    composed = "cafe\u0301"
+    single = "caf\u00e9"
+
+    assert stable_hash(single) == stable_hash(single)
+    assert stable_hash(composed) != stable_hash(single)
+
+
+def test_signed_zero_and_integral_floats_normalize() -> None:
+    assert stable_hash({"x": 0.0}) == stable_hash({"x": -0.0}) == stable_hash({"x": 0})
+    assert stable_hash({"x": 1.0}) == stable_hash({"x": 1})
+
+
+def test_non_finite_floats_are_deterministic() -> None:
+    assert stable_hash({"x": float("nan")}) == stable_hash({"x": float("nan")})
+    assert stable_hash({"x": float("inf")}) == stable_hash({"x": float("inf")})
+    assert stable_hash({"x": float("nan")}) != stable_hash({"x": float("inf")})
+
+
+def test_decimal_like_values_are_rejected_not_guessed() -> None:
+    from decimal import Decimal
+
+    with pytest.raises(ConfigurationError):
+        stable_hash({"x": Decimal("1.5")})
+    assert stable_hash({"x": "1.5"}) != stable_hash({"x": 1.5})
+
+
+def test_nested_order_variation_hashes_identically() -> None:
+    first = {"a": {"x": 1, "y": 2}, "b": [1, 2]}
+    second = {"b": [1, 2], "a": {"y": 2, "x": 1}}
+
+    assert stable_hash(first) == stable_hash(second)

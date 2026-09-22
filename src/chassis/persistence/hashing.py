@@ -67,13 +67,26 @@ def _canonicalize(value: Any) -> Any:
         return value
     if isinstance(value, float):
         # Normalize integral floats so 1.0 and 1 cannot produce different digests.
+        # Non-integral floats are rounded to 12 digits: two values that differ
+        # only beyond the 12th decimal produce the same digest. That trade-off
+        # (float noise does not churn fingerprints) is intentional and applies to
+        # behavior-affecting configuration too — keep such values well inside 12
+        # decimal places.
         if value.is_integer() and abs(value) < 2**53:
             return int(value)
         return round(value, 12)
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, Mapping):
-        return {str(key): _canonicalize(item) for key, item in sorted(value.items(), key=_key)}
+        normalized: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ConfigurationError(
+                    "canonical hashing requires string mapping keys",
+                    key_type=type(key).__name__,
+                )
+            normalized[key] = _canonicalize(item)
+        return dict(sorted(normalized.items()))
     if isinstance(value, (set, frozenset)):
         return sorted((_canonicalize(item) for item in value), key=_order)
     if isinstance(value, (list, tuple)):
@@ -89,10 +102,6 @@ def _canonicalize(value: Any) -> Any:
     raise ConfigurationError(
         "value cannot be canonically serialized", value_type=type(value).__name__
     )
-
-
-def _key(item: tuple[Any, Any]) -> str:
-    return str(item[0])
 
 
 def _order(value: Any) -> str:

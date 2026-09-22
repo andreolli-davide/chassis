@@ -70,6 +70,11 @@ node.config_fingerprint        # opaque; derived from unredacted config, never e
 node.dependency_fingerprint
 ```
 
+Fingerprints are computed from canonical hashing: mapping keys must be strings,
+and non-integral floats are rounded to 12 decimal places (values differing only
+beyond the 12th decimal share a fingerprint) — keep behavior-affecting
+configuration well inside that precision.
+
 `SemanticIdentity.semantic_id` is a displayable digest built from non-secret
 structure only. The private fingerprints never leave the control plane: a
 credential change must be *detected*, not *reported*. See

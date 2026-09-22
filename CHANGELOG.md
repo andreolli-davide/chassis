@@ -7,6 +7,21 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Persistence canonicalization hardened** (roadmap R021). Canonical hashing
+  now requires string mapping keys — mixed or non-string keys raise
+  `ConfigurationError` instead of being stringified into collisions — and the
+  primitive treatments are documented and pinned by deterministic tests: Unicode
+  is hashed without silent normalization, signed zero and integral floats
+  normalize together, non-finite floats are deterministic, `Decimal`-like values
+  are rejected rather than guessed, and nested key order never affects a digest.
+  The 12-digit float rounding is now documented (values that differ only beyond
+  the 12th decimal share a digest — keep behavior-affecting configuration well
+  inside that).
+- **Migration note:** payloads with non-string mapping keys are no longer
+  accepted by `stable_hash`/`canonical_json`; convert keys to strings first.
+
 ## [0.7.0] - 2026-09-22
 
 Gives invoke, stream, replay, hooks, budgets, and telemetry one coherent
@@ -296,7 +311,8 @@ caller from 0.5.1 is listed in
   scope cannot revert. Rollback cleanup failures are aggregated into the raised
   `PluginSetupError` (`cleanup_failures`, with a count in the structured
   context) and into `last_cleanup_failures` instead of being hidden inside the
-  failed scope. Failed plugin instances stay inspectable and retryable while    their entry is desired, and are reclaimed once it is not — no orphaned
+  failed scope. Failed plugin instances stay inspectable and retryable while
+  their entry is desired, and are reclaimed once it is not — no orphaned
   `FAILED` instances remain resident. Owned tasks that resist cancellation past
   the shutdown timeout are reported and stay visible (`Scope.stragglers`), and
   such a scope is never presented as fully disposed (`Scope.fully_disposed`,
