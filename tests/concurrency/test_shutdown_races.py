@@ -179,7 +179,8 @@ async def test_reconcile_queued_behind_shutdown_cannot_publish() -> None:
     harness.install(slow_mount(release, mount_started), entry_id="late")
     late = asyncio.ensure_future(harness.reconcile())
     await asyncio.sleep(0)
-    assert not late.done()
+    # The refusal is immediate now that stop() flips to STOPPING before its
+    # first yield; what matters is below: the late reconcile can never publish.
 
     release.set()
     await composing

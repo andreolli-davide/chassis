@@ -257,6 +257,7 @@ async def test_externally_supplied_replay_sessions_are_scrubbed() -> None:
     session = ReplaySession.from_dict(
         {
             "mode": "record",
+            "fallback": "error",
             "metadata": {"authorization": f"Bearer {SECRET}", "dataset": "demo"},
             "records": [
                 {

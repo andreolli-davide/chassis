@@ -17,6 +17,7 @@ answered according to an explicit policy -- fail, or run live -- never by guessi
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -87,13 +88,43 @@ class ReplayRecord:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> ReplayRecord:
+        """Rebuild one record, validating shape instead of coercing it.
+
+        Malformed fields raise ``TypeError``/``ValueError`` (surfaced as a
+        corrupted document by the session reader) — a wrong-typed field is
+        never stringified or defaulted into a plausible record.
+
+        Raises:
+            KeyError: a required field is missing.
+            TypeError: a field has the wrong type.
+            ValueError: ``kind`` is not a known boundary.
+        """
+
+        sequence = payload["sequence"]
+        key = payload["key"]
+        if isinstance(sequence, bool) or not isinstance(sequence, int):
+            raise TypeError("record sequence is not an integer")
+        if not isinstance(key, str):
+            raise TypeError("record key is not a string")
+        request = payload.get("request")
+        if request is not None and not isinstance(request, Mapping):
+            raise TypeError("record request is not a mapping")
+        generation_id = payload.get("generation_id")
+        if generation_id is not None and not isinstance(generation_id, str):
+            raise TypeError("record generation_id is not a string")
+        run_id = payload.get("run_id")
+        if run_id is not None and not isinstance(run_id, str):
+            raise TypeError("record run_id is not a string")
+        created_at = payload.get("created_at", 0.0)
+        if isinstance(created_at, bool) or not isinstance(created_at, (int, float)):
+            raise TypeError("record created_at is not a number")
         return cls(
             kind=BoundaryKind(payload["kind"]),
-            sequence=int(payload["sequence"]),
-            key=str(payload["key"]),
-            request=dict(payload.get("request") or {}),
+            sequence=sequence,
+            key=key,
+            request=dict(request or {}),
             response=payload.get("response"),
-            generation_id=payload.get("generation_id"),
-            run_id=payload.get("run_id"),
-            created_at=float(payload.get("created_at", time.time())),
+            generation_id=generation_id,
+            run_id=run_id,
+            created_at=float(created_at),
         )

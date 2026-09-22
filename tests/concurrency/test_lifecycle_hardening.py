@@ -240,3 +240,97 @@ async def test_a_stopped_harness_refuses_to_start_again() -> None:
     assert counts.instances == 0
     assert counts.leases == 0
     assert counts.live_generations == 0
+
+
+async def test_a_teardown_raising_cancelled_error_still_disposes_every_instance() -> None:
+    """A teardown that raises CancelledError is a failing teardown, not an
+    abort: every other instance must still be disposed and the harness must
+    reach its terminal state with the failure aggregated."""
+
+    torn_down: list[str] = []
+
+    class CancellingTeardown(Plugin):
+        manifest = PluginManifest(
+            name="cancelling", version="1.0.0", provides={"database": "1.0.0"}
+        )
+
+        async def setup(self, ctx: PluginContext) -> None:
+            from chassis import DATABASE
+
+            ctx.capabilities.provide(DATABASE, "db-handle")
+
+        async def teardown(self, ctx: PluginContext) -> None:
+            torn_down.append("cancelling")
+            raise asyncio.CancelledError()
+
+    class QuietTeardown(Plugin):
+        manifest = PluginManifest(name="quiet", version="1.0.0")
+
+        async def setup(self, ctx: PluginContext) -> None:
+            return None
+
+        async def teardown(self, ctx: PluginContext) -> None:
+            torn_down.append("quiet")
+
+    harness = Harness()
+    harness.install(CancellingTeardown(), entry_id="cancelling")
+    harness.install(QuietTeardown(), entry_id="quiet")
+    await harness.start()
+
+    with pytest.raises(EffectCleanupError) as excinfo:
+        await asyncio.wait_for(harness.stop(), timeout=10)
+
+    assert sorted(torn_down) == ["cancelling", "quiet"], "the teardown loop was aborted"
+    assert harness.state is HarnessState.STOPPED
+    counts = harness.diagnostics.resource_counts()
+    assert counts.instances == 0, "an instance leaked past the shutdown"
+    assert counts.live_generations == 0
+    error = excinfo.value
+    assert any(isinstance(failure.error, asyncio.CancelledError) for failure in error.failures), (
+        "the cancelled teardown must be aggregated, not lost"
+    )
+
+    # Terminal state is reachable and idempotent: a second stop observes the
+    # same completed shutdown instead of re-raising a cancelled task forever.
+    with pytest.raises(EffectCleanupError):
+        await harness.stop()
+    assert harness.state is HarnessState.STOPPED
+
+
+async def test_stop_refuses_runs_queued_behind_it() -> None:
+    """stop() flips to STOPPING before its first yield: an acquisition task
+    already in the ready queue must be refused."""
+
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class BlockingTeardown(Plugin):
+        manifest = PluginManifest(name="blocking-late", version="1.0.0")
+
+        async def setup(self, ctx: PluginContext) -> None:
+            return None
+
+        async def teardown(self, ctx: PluginContext) -> None:
+            entered.set()
+            await release.wait()
+
+    harness = Harness()
+    harness.install(BlockingTeardown(), entry_id="blocking")
+    await harness.start()
+
+    outcome: list[str] = []
+
+    async def try_acquire() -> None:
+        try:
+            async with harness.acquire():
+                outcome.append("acquired")
+        except HarnessStateError:
+            outcome.append("refused")
+
+    stopping = asyncio.create_task(harness.stop())
+    queued = asyncio.create_task(try_acquire())
+    await asyncio.wait_for(queued, timeout=10)
+
+    assert outcome == ["refused"], "a run acquired after stop() began"
+    release.set()
+    await stopping

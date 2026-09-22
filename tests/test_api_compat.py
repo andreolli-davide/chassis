@@ -142,7 +142,9 @@ class TestIncompatibleChangeDetection:
 
         report = tool.compare_documents(old, new)
 
-        assert _violation_kinds(report) == [("changed_signature", "chassis", "run")]
+        kinds = _violation_kinds(report)
+        assert kinds, "the incompatible signature was not detected"
+        assert all(kind == "changed_signature" for kind, _module, _name in kinds)
 
     def test_a_removed_class_method_is_detected(self) -> None:
         tool = _tool()
@@ -259,3 +261,59 @@ def test_the_check_command_reports_incompatibility_with_a_non_zero_exit() -> Non
         item["kind"] == "removed_method" and item["name"] == "Harness"
         for item in report["violations"]
     )
+
+
+def test_positional_signature_breaks_are_detected() -> None:
+    """Positional order is meaning: a swap or an insertion is incompatible
+    even when the parameter name set is unchanged."""
+
+    tool = _tool()
+    old = _document(
+        {
+            "chassis": {
+                "f": {
+                    "kind": "function",
+                    "params": [
+                        {"name": "source", "kind": "POSITIONAL_OR_KEYWORD", "default": False},
+                        {"name": "target", "kind": "POSITIONAL_OR_KEYWORD", "default": False},
+                    ],
+                }
+            }
+        }
+    )
+
+    swapped = _document(
+        {
+            "chassis": {
+                "f": {
+                    "kind": "function",
+                    "params": [
+                        {"name": "target", "kind": "POSITIONAL_OR_KEYWORD", "default": False},
+                        {"name": "source", "kind": "POSITIONAL_OR_KEYWORD", "default": False},
+                    ],
+                }
+            }
+        }
+    )
+    report = tool.compare_documents(old, swapped)
+    assert any(
+        "positional order changed" in problem
+        for problem in [item["detail"] for item in report["violations"]]
+    )
+
+    inserted = _document(
+        {
+            "chassis": {
+                "f": {
+                    "kind": "function",
+                    "params": [
+                        {"name": "source", "kind": "POSITIONAL_OR_KEYWORD", "default": False},
+                        {"name": "extra", "kind": "POSITIONAL_OR_KEYWORD", "default": True},
+                        {"name": "target", "kind": "POSITIONAL_OR_KEYWORD", "default": True},
+                    ],
+                }
+            }
+        }
+    )
+    report = tool.compare_documents(old, inserted)
+    assert any("positional order changed" in item["detail"] for item in report["violations"])

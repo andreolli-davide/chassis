@@ -12,6 +12,7 @@ note plus a warning, not a shim.
 from __future__ import annotations
 
 import functools
+import inspect
 import warnings
 from collections.abc import Callable
 from typing import Any, TypeVar
@@ -134,6 +135,17 @@ def deprecated(
             return obj
 
         original: Callable[..., Any] = obj  # type: ignore[assignment]
+
+        if inspect.iscoroutinefunction(original):
+            # An async callable stays a coroutine function after decoration:
+            # introspection-based dispatch must keep working.
+            @functools.wraps(original)
+            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                announce()
+                return await original(*args, **kwargs)
+
+            cast_async_wrapper: Any = async_wrapper
+            return cast_async_wrapper  # type: ignore[return-value]
 
         @functools.wraps(original)
         def wrapper(*args: Any, **kwargs: Any) -> Any:

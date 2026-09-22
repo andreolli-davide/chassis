@@ -68,6 +68,20 @@ changelog entries, and migration notes (see the
   candidate build rolls back like a failed mount, and failed tasks and partial
   unwinds stay visible (`fully_disposed`, `stragglers`, `resource_counts()`).
 
+## Release-candidate defect review (second round)
+
+A second, adversarial review of the release candidate confirmed six defects —
+three release-blocking — each reproduced, fixed, and pinned by a regression
+test that fails before the fix and passes after (see the 0.9.0 changelog,
+"Release-candidate defect review"): a teardown raising `CancelledError`
+aborting shutdown and leaking instances; a stop/acquire race through the
+event-loop ready queue; truncated replay documents degrading into live
+sessions; a false rebuild prediction for unchanged declarative configurations;
+positional signature breaks invisible to the API gate; and `@deprecated`
+turning coroutine functions into regular ones. The focused suites named by the
+review (lifecycle hardening, preview parity, format versions, API
+compatibility) remain green and each now covers its gap.
+
 ## Independent automated audit
 
 A read-only audit agent reviewed the milestone mid-flight. Findings and their

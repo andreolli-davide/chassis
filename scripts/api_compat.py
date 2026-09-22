@@ -199,6 +199,16 @@ def _incompatible_params(old: list[dict[str, Any]], new: list[dict[str, Any]]) -
 
     problems: list[str] = []
     current = {parameter["name"]: parameter for parameter in new}
+
+    # Positional order is meaning: a swap or an insertion changes what every
+    # positional call binds, even when the name set is unchanged. The old
+    # positional sequence must survive as a prefix of the new one.
+    positional = ("POSITIONAL_ONLY", "POSITIONAL_OR_KEYWORD")
+    old_positional = [p["name"] for p in old if p["kind"] in positional]
+    new_positional = [p["name"] for p in new if p["kind"] in positional]
+    if new_positional[: len(old_positional)] != old_positional:
+        problems.append(f"positional order changed {old_positional} -> {new_positional}")
+
     for parameter in old:
         name = parameter["name"]
         if name not in current:

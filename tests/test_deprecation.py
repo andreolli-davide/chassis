@@ -142,3 +142,20 @@ def test_without_the_decorator_no_warning_is_ever_emitted() -> None:
         quiet(1)
 
     assert caught == []
+
+
+async def test_deprecated_async_functions_stay_coroutines() -> None:
+    """Introspection-based dispatch must keep working after decoration."""
+
+    import inspect
+
+    @deprecated(since="0.9.0", remove_in="1.0.0", replacement="new_async()")
+    async def old_async(value: int) -> int:
+        return value + 1
+
+    assert inspect.iscoroutinefunction(old_async) is True
+
+    with pytest.warns(ChassisDeprecationWarning) as record:
+        assert await old_async(1) == 2
+
+    assert record[0].filename == __file__

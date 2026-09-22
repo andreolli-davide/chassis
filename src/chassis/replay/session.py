@@ -246,14 +246,21 @@ class ReplaySession:
                 reason="corrupted",
             )
 
+        # Every recording writer emits all four fields; a document missing one
+        # is truncated, and a truncated recording must never degrade into an
+        # empty live session that executes real boundaries.
+        for required in ("mode", "fallback", "metadata", "records"):
+            if required not in document:
+                raise corrupt(f"missing {required!r}")
+
         try:
-            mode = ReplayMode(document.get("mode", ReplayMode.LIVE))
-            fallback = ReplayFallback(document.get("fallback", ReplayFallback.ERROR))
-        except ValueError as error:
+            mode = ReplayMode(document["mode"])
+            fallback = ReplayFallback(document["fallback"])
+        except (TypeError, ValueError) as error:
             raise corrupt(f"unknown mode or fallback: {error}") from error
 
-        metadata = document.get("metadata") or {}
-        raw_records = document.get("records", [])
+        metadata = document["metadata"]
+        raw_records = document["records"]
         if not isinstance(metadata, Mapping):
             raise corrupt("'metadata' is not a mapping")
         if not isinstance(raw_records, list):

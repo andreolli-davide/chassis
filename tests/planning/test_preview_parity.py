@@ -163,3 +163,30 @@ async def test_preview_of_the_current_state_matches_an_incremental_install() -> 
         assert set(result.reused) == {"orders-db", "memory"}
     finally:
         await harness.stop()
+
+
+async def test_preview_of_an_unchanged_configuration_matches_the_apply() -> None:
+    """The common deploy loop: re-applying the same configuration is a no-op,
+    and preview must predict exactly that."""
+
+    harness = catalogued()
+    harness.apply_config(INITIAL)
+    started = await harness.start()
+    try:
+        payload = harness.preview(INITIAL).to_dict()
+        planned = actions_by_entry(payload)
+
+        assert planned["orders-db"]["action"] == "reuse"
+        assert planned["memory"]["action"] == "reuse"
+        assert payload["would_publish"] is False
+        assert payload["actions"][-1]["action"] == "no-op"
+
+        applied = harness.apply_config(INITIAL)
+        assert applied.applied == ()
+        result = await harness.reconcile()
+
+        assert result.generation_id == started.generation_id
+        assert result.mounted == ()
+        assert set(result.reused) == {"orders-db", "memory"}
+    finally:
+        await harness.stop()

@@ -354,7 +354,11 @@ class PluginRegistry:
             if context is not None:
                 try:
                     await instance.plugin.teardown(context)
-                except Exception as error:
+                except BaseException as error:
+                    # A teardown that raises -- including a CancelledError from
+                    # its own body -- is a *failing teardown*: record it and
+                    # finish the disposal, instead of leaking the instance and
+                    # aborting the caller's teardown loop.
                     teardown_error = error
                     instance.health = PluginHealth.UNHEALTHY
                     instance.scope.record_failure(f"teardown of {instance.manifest.name!r}", error)

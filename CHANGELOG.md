@@ -163,6 +163,38 @@ a production reference application composes it all. The review record is
 
 ### Fixed
 
+Release-candidate defect review (second round; each fix carries a regression
+that fails before it):
+
+- **A plugin teardown raising `CancelledError` no longer aborts shutdown or
+  leaks resources.** Teardown failures outside `Exception` are recorded as
+  teardown failures and disposal completes; the shutdown teardown loop is
+  individually contained, so one instance can no longer leave the rest
+  registered with zero live generations. The aggregated failure (including the
+  `CancelledError`) is raised to every `stop()` caller and the harness reaches
+  its real terminal state.
+- **New runs can no longer acquire a generation after `stop()` has begun.**
+  `stop()` flips to `STOPPING` before its first yield, closing the window where
+  an acquisition task already in the event-loop ready queue could pass the
+  acquirable check and be drained (or disposed) underneath.
+- **Corrupted or truncated replay documents are rejected, never silently
+  treated as live sessions.** A recording missing `mode`, `fallback`,
+  `metadata`, or `records` raises `FormatError` (`corrupted`) instead of
+  degrading into an empty live session that executes real boundaries, and
+  malformed record fields (`sequence`, `key`, `request`, `created_at`,
+  `generation_id`, `run_id`) are rejected instead of coerced.
+- **Previewing an unchanged declarative configuration predicts reuse and a
+  no-op** (G26 parity): preview entries no longer bump revisions for unchanged
+  entries, so `preview(same_config)` matches the subsequent `apply_config()` +
+  `reconcile()`, which mutates nothing.
+- **The API compatibility gate detects positional signature breaks.** Parameter
+  order is meaning: a swap or an insertion before an existing positional
+  parameter is now reported as `changed_signature` even when the name set is
+  unchanged.
+- **`@deprecated` preserves coroutine functions.** An async callable stays a
+  coroutine function after decoration, so introspection-based dispatch keeps
+  working and behavior is unchanged as promised.
+
 - **A composition-identical reconcile no longer churns a generation** (found by
   the roadmap R030 parity tests; present in every release with requirements).
   The no-op comparison read resolution provenance object-wise, whose pre-mount

@@ -785,6 +785,10 @@ class Harness:
         if task is None:
             if self._state is HarnessState.STOPPED:
                 return
+            # Stop accepting runs *before* this call yields: the state flips
+            # synchronously, so nothing scheduled behind stop() — even a task
+            # already in the ready queue — can acquire a generation.
+            self._state = HarnessState.STOPPING
             task = asyncio.ensure_future(self._run_shutdown())
             self._shutdown_task = task
             # Retrieve (not suppress) a failure no caller may observe again, so
@@ -866,7 +870,18 @@ class Harness:
 
         self._generations.refresh_references(self._plugin_registry.instances())
         for instance in self._teardown_order():
-            await self._dispose_instance(instance, failures)
+            try:
+                await self._dispose_instance(instance, failures)
+            except BaseException as error:
+                # Last-resort net: no single instance may abort the shutdown's
+                # teardown loop and leak the instances behind it.
+                failure = CleanupFailure(
+                    description=f"dispose of {instance.manifest.name!r}", error=error
+                )
+                failures.append(failure)
+                self._emit_cleanup_failure(
+                    failure, entry_id=instance.entry_id, scope=instance.scope.name
+                )
 
         try:
             await self._scope.aclose()
@@ -1650,7 +1665,9 @@ class Harness:
                         scope=instance.scope.name,
                     )
                 span.record_error(error)
-            except Exception as error:
+            except BaseException as error:
+                # Even a CancelledError raised inside disposal must not abort
+                # the teardown loop: record it and move to the next instance.
                 failure = CleanupFailure(
                     description=f"dispose of {instance.manifest.name!r}", error=error
                 )
@@ -1993,7 +2010,7 @@ class Harness:
                     continue
                 desired = document.entry(change.entry_id)
                 if desired is not None:
-                    entries[change.entry_id] = self._preview_entry(desired)
+                    entries[change.entry_id] = self._preview_entry(desired, change.action)
 
         plan = self._resolver.resolve(
             self._preview_candidates(entries, changes),
@@ -2002,8 +2019,13 @@ class Harness:
         )
         return self._build_plan_result(plan, entries, changes, preferences)
 
-    def _preview_entry(self, desired: PluginEntryConfig) -> PluginEntry:
-        """The entry an apply would install — constructed, never installed."""
+    def _preview_entry(self, desired: PluginEntryConfig, action: DesiredStateAction) -> PluginEntry:
+        """The entry an apply would install — constructed, never installed.
+
+        The revision mirrors what ``install`` would assign: a replacement bumps
+        it (forcing a rebuild), an unchanged entry keeps it (so reuse is
+        predicted), and a fresh entry starts at 1.
+        """
 
         plugin_type = self._catalog.get(desired.plugin)
         plugin_object = (
@@ -2013,12 +2035,18 @@ class Harness:
         if not isinstance(manifest, PluginManifest):
             raise PluginLoadError("plugin does not declare a PluginManifest", plugin=desired.plugin)
         existing = self._plugin_registry.entry(desired.id)
+        if existing is None or action is DesiredStateAction.ADD:
+            revision = 1
+        elif action is DesiredStateAction.REPLACE:
+            revision = existing.revision + 1
+        else:
+            revision = existing.revision
         return PluginEntry(
             entry_id=desired.id,
             plugin=plugin_object,
             manifest=manifest,
             config=freeze(desired.config),
-            revision=1 if existing is None else existing.revision + 1,
+            revision=revision,
         )
 
     def _preview_candidates(

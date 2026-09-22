@@ -232,3 +232,39 @@ def test_the_current_version_needs_no_migration() -> None:
 def test_documents_are_json_compatible() -> None:
     for payload in (snapshot_record().to_dict(), recording_document().to_dict()):
         assert json.loads(json.dumps(payload, sort_keys=True)) == json.loads(json.dumps(payload))
+
+
+def test_a_truncated_recording_is_corrupted_not_a_live_session() -> None:
+    """A truncated document must never degrade into an empty live session
+    that executes real boundaries."""
+
+    with pytest.raises(FormatError) as excinfo:
+        ReplaySession.from_dict({"format_version": 1})
+
+    assert excinfo.value.context["reason"] == "corrupted"
+    assert "missing" in str(excinfo.value)
+
+    for missing in ("mode", "fallback", "metadata", "records"):
+        payload = recording_document().to_dict()
+        del payload[missing]
+        with pytest.raises(FormatError) as excinfo:
+            ReplaySession.from_dict(payload)
+        assert excinfo.value.context["reason"] == "corrupted", missing
+
+
+def test_malformed_record_fields_are_rejected_not_coerced() -> None:
+    payload = recording_document().to_dict()
+    payload["records"][0] = {
+        "kind": "tool",
+        "sequence": "zero",
+        "key": "k",
+    }
+
+    with pytest.raises(FormatError) as excinfo:
+        ReplaySession.from_dict(payload)
+    assert excinfo.value.context["reason"] == "corrupted"
+
+    payload["records"][0] = {"kind": "tool", "sequence": 0, "key": 42}
+    with pytest.raises(FormatError) as excinfo:
+        ReplaySession.from_dict(payload)
+    assert excinfo.value.context["reason"] == "corrupted"
