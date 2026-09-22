@@ -41,9 +41,11 @@ Closing a scope is deterministic:
 4. failures are aggregated into a single `EffectCleanupError`.
 
 A failing disposer never aborts the unwind: each failure is recorded and the
-remaining disposers still run. A task that refuses to stop is reported rather than
-silently leaking, and a task that dies with an exception is reported rather than
-having its failure disappear.
+remaining disposers still run — including when a disposer raises something
+outside `Exception`, which is aggregated too and chained as the cause of the
+raised `EffectCleanupError` instead of masking the other failures. A task that
+refuses to stop is reported rather than silently leaking, and a task that dies
+with an exception is reported rather than having its failure disappear.
 
 `aclose()` is idempotent and safe under concurrent callers: the first caller
 creates the close task and every caller awaits it. Cancelling a caller does not
@@ -244,20 +246,54 @@ Programmatic `install`/`provide`/`uninstall` are synchronous desired-state chang
 
 ## Shutdown
 
-`stop()` is graceful and idempotent:
+`stop()` is graceful, idempotent, and a **barrier**: every caller blocks until
+the shutdown has actually finished and then observes its result, so no caller
+is told the harness is stopped while disposal is still running. Cancelling one
+caller does not abort the shutdown — it completes in the background, and a
+later `stop()` observes the same result.
 
-1. stop accepting new runs;
+1. stop accepting new runs (`acquire()` refuses a stopping harness);
 2. mark the current generation draining;
-3. wait for active runs, bounded by `shutdown_grace_seconds`;
+3. wait for active runs, bounded by `shutdown_grace_seconds` — one deadline for
+   every draining generation together, not one grace per generation;
 4. retire generations that are still busy, reporting the timeout as a failure;
 5. dispose every remaining instance, consumers first;
 6. close the harness scope;
 7. raise one aggregated `EffectCleanupError` if anything failed.
 
+Shutdown is **terminal**: a stopped harness is never started again (build a new
+one), so its terminal state is deterministic instead of a half-restartable
+process. A cancelled or failing shutdown still reaches the terminal state, and
+its failure is recorded and re-raised to every `stop()` caller — the harness is
+never left wedged in `STOPPING`.
+
 Owned tasks that resist cancellation past the shutdown timeout are reported as
 failures and stay visible afterwards (`scope.stragglers`), and such a scope is
 never presented as fully disposed (`scope.fully_disposed` is `False`): Chassis
-does not pretend that work which is still running has been cleaned up.
+does not pretend that work which is still running has been cleaned up. The same
+applies to a scope whose cleanup failed or whose unwind was interrupted —
+`fully_disposed` requires every effect released and zero recorded failures, and
+the failures stay visible after close instead of being swallowed into the
+raised error. The configured `Harness(task_shutdown_timeout=...)` applies to
+plugin scopes as well as the harness scope.
+
+## Proving resources returned to baseline
+
+`harness.diagnostics.resource_counts()` aggregates the counters that matter for
+lifecycle correctness — instances, owned scopes, effects, tasks, stragglers,
+cleanup failures, leases, and live/draining generations — from authoritative
+state with no lock and no `await`, so a run or a stress cycle can be bracketed
+by two reads:
+
+```python
+before = harness.diagnostics.resource_counts()
+# ... start, run, stop ...
+assert harness.diagnostics.resource_counts().to_dict() == before.to_dict()
+```
+
+Everything it counts except desired `entries` (which stay installed) must
+return to its pre-run value once the harness has stopped. The stress and soak
+suites use exactly this check.
 
 ## Diagnostics
 
@@ -267,6 +303,7 @@ harness.diagnostics.capabilities()  # registered providers
 harness.diagnostics.dependencies()  # edges, activation order, pending, cycles
 harness.diagnostics.generations()   # state, leases, instances, plugins
 harness.diagnostics.generation_pressure()     # liveness, lease age, retained work
+harness.diagnostics.resource_counts()         # instances, scopes, effects, tasks, leases
 harness.diagnostics.instance_generations(id)  # live generations reaching one instance
 harness.diagnostics.budgets()       # default limits and their enforcement modes
 harness.diagnostics.tools()         # owner, policy

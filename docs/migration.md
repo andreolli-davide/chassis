@@ -44,6 +44,30 @@ changes to be aware of.
   checked against `tests/compat/api-baseline-0.8.1.json` by
   `scripts/api_compat.py` (see [compatibility.md](compatibility.md)).
 
+### Lifecycle and shutdown behavior
+
+- `stop()` is now a barrier: every caller blocks until the shutdown finishes
+  and observes its result (previously a second concurrent caller returned while
+  disposal was still running). Cancelling one `stop()` caller no longer wedges
+  the harness: the shutdown completes in the background and a later `stop()`
+  observes the terminal state. Both are behavior changes only.
+- `acquire()` refuses a stopping or stopped harness with `HarnessStateError`,
+  closing the window where a run could start while shutdown was already
+  underway. Shutdown is terminal: `start()` after `stop()` raises
+  `HarnessStateError` (build a new harness — one-shot was already the effective
+  behavior, now documented and deterministic).
+- `shutdown_grace_seconds` bounds the whole drain, not one wait per generation.
+  `Harness(task_shutdown_timeout=...)` now reaches plugin scopes (they
+  previously always used the 5s default).
+- `Scope.fully_disposed` is stricter: it also requires every effect released
+  and zero recorded cleanup failures. Cleanup failures stay visible in
+  `scope.failures` after close instead of being cleared into the raised
+  `EffectCleanupError`, and a disposer raising outside `Exception` no longer
+  aborts the unwind or hides the other failures (it is aggregated and chained
+  as the cause).
+- New: `Diagnostics.resource_counts()` (and `ResourceCounts`) aggregates
+  lifecycle resource counters for baseline comparisons.
+
 ### Persisted formats
 
 Persisted and exchanged documents gain explicit per-format version fields, with

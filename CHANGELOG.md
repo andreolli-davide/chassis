@@ -9,6 +9,12 @@ that a minor release may break the documented surface.
 
 ### Added
 
+- **Resource counters for lifecycle baselines** (roadmap R029).
+  `Diagnostics.resource_counts()` (and `ResourceCounts`) aggregates instances,
+  owned scopes, effects, tasks, stragglers, cleanup failures, leases, and
+  live/draining generations from authoritative state with no lock and no
+  `await`, so a run or stress cycle can be bracketed by two reads and proved to
+  return every resource to baseline.
 - **Versioned and migrated persisted formats** (roadmap R028, new guarantee
   G25). Every Chassis document that crosses a process, test-run, deployment, or
   package-version boundary now declares its own integer format version — never
@@ -60,6 +66,28 @@ that a minor release may break the documented surface.
   window, and per-format persisted-data versioning. 0.9.0 is the last planned
   release with deliberate pre-1.0 compatibility changes; release-publication
   work is deferred to 1.0.0.
+
+### Fixed
+
+- **Cancellation, draining, and shutdown hardened** (roadmap R029). A lifecycle
+  audit found thirteen gaps; the material ones are closed. `stop()` is a
+  barrier — every caller blocks until disposal finishes and observes its
+  result — and a cancelled `stop()` no longer wedges the harness in `STOPPING`:
+  the shutdown completes in the background and reaches the terminal state with
+  its failure recorded. `acquire()` refuses a stopping harness, closing the
+  window where a run could start mid-shutdown. `shutdown_grace_seconds` is now
+  one deadline for every draining generation together (previously one grace
+  each), and `Harness(task_shutdown_timeout=...)` reaches plugin scopes
+  (previously hardcoded to the 5s default). A disposer raising outside
+  `Exception` no longer aborts the scope unwind or hides the other cleanup
+  failures: it is aggregated and chained as the cause of the raised
+  `EffectCleanupError`. `Scope.fully_disposed` now also requires every effect
+  released and zero cleanup failures, which stay visible after close. A failed
+  candidate *build* (after setup, before publication) now rolls back every
+  mounted instance like a failed mount. A task failing after close is reported
+  instead of disappearing, and async context entry racing a closing scope is
+  refused and unwound instead of leaking. The one-shot lifecycle is explicit:
+  `start()` after `stop()` raises `HarnessStateError` deterministically.
 
 ## [0.8.1] - 2026-09-22
 

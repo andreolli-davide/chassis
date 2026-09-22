@@ -340,3 +340,116 @@ async def test_a_cancellation_resistant_task_is_reported_and_not_pretended_gone(
         # Always release the task: it is deliberately cancellation-resistant.
         stop.set()
         await task
+
+
+class DisposerAbort(BaseException):
+    """A disposer failure outside Exception (a BaseException), for R029 coverage."""
+
+
+async def test_a_baseexception_disposer_neither_aborts_the_unwind_nor_loses_failures() -> None:
+    ran: list[str] = []
+    scope = Scope("baseexception-disposer")
+
+    def quiet() -> None:
+        ran.append("quiet")
+
+    def failing() -> None:
+        ran.append("failing")
+        raise ValueError("first")
+
+    def aborting() -> None:
+        ran.append("aborting")
+        raise DisposerAbort("second")
+
+    scope.cleanup("quiet", quiet)
+    scope.cleanup("failing", failing)
+    scope.cleanup("aborting", aborting)
+
+    with pytest.raises(EffectCleanupError) as excinfo:
+        await scope.aclose()
+
+    # The unwind ran every disposer, aggregated both failures, and chained the
+    # original BaseException instead of losing it or the recorded failures.
+    assert ran == ["aborting", "failing", "quiet"]
+    error = excinfo.value
+    assert isinstance(error.__cause__, DisposerAbort)
+    assert {failure.description for failure in error.failures} == {"failing", "effect unwind"}
+    assert scope.effects == ()
+    assert scope.fully_disposed is False
+
+
+async def test_a_scope_with_cleanup_failures_is_not_reported_fully_disposed() -> None:
+    def boom() -> None:
+        raise ValueError("boom")
+
+    scope = Scope("failing-disposer")
+    scope.cleanup("boom", boom)
+
+    with pytest.raises(EffectCleanupError):
+        await scope.aclose()
+
+    assert scope.fully_disposed is False
+    assert [failure.description for failure in scope.failures] == ["boom"]
+
+    clean = Scope("clean-disposer")
+    clean.cleanup("quiet", lambda: None)
+    await clean.aclose()
+    assert clean.fully_disposed is True
+
+
+async def test_async_context_entry_during_close_is_refused_and_unwound() -> None:
+    entered = asyncio.Event()
+    proceed = asyncio.Event()
+    exited: list[bool] = []
+
+    class SlowEntry:
+        async def __aenter__(self) -> str:
+            entered.set()
+            await proceed.wait()
+            return "value"
+
+        async def __aexit__(self, *args: object) -> bool:
+            exited.append(True)
+            return False
+
+    scope = Scope("entry-race")
+    pending = asyncio.ensure_future(scope.enter_async_context(SlowEntry()))
+    await entered.wait()
+    await scope.aclose()
+    proceed.set()
+
+    with pytest.raises(ScopeClosedError):
+        await pending
+
+    assert exited == [True], "the entered manager must be exited, not leaked"
+    assert scope.effects == ()
+
+
+async def test_a_task_failing_after_close_is_still_reported() -> None:
+    stop = asyncio.Event()
+
+    async def late_failure() -> None:
+        while not stop.is_set():
+            try:
+                await asyncio.sleep(0.01)
+            except asyncio.CancelledError:
+                continue  # cancellation-resistant: outlives the close
+        raise ValueError("late failure")
+
+    scope = Scope("late-failure", task_shutdown_timeout=0.05)
+    task = scope.create_task(late_failure(), name="late")
+    await asyncio.sleep(0)
+
+    try:
+        with pytest.raises(EffectCleanupError):
+            await scope.aclose()
+        assert scope.stragglers
+
+        stop.set()
+        with pytest.raises(ValueError):
+            await task
+        await asyncio.sleep(0)
+
+        assert any(failure.description == "task late" for failure in scope.failures)
+    finally:
+        stop.set()

@@ -86,12 +86,14 @@ class PluginRegistry:
         hooks: HookRegistry,
         agents: AgentRegistry,
         secrets: SecretProvider,
+        task_shutdown_timeout: float | None = 5.0,
     ) -> None:
         self._capabilities = capabilities
         self._tools = tools
         self._hooks = hooks
         self._agents = agents
         self._secrets = secrets
+        self._task_shutdown_timeout = task_shutdown_timeout
         self._entries: dict[str, PluginEntry] = {}
         self._instances: dict[str, PluginInstance] = {}
         self._by_entry: dict[str, list[str]] = {}
@@ -276,7 +278,11 @@ class PluginRegistry:
                 "plugin entry is already mounted for this revision", entry_id=entry.entry_id
             )
         instance_id = f"plugin_{uuid.uuid4().hex[:12]}"
-        scope = Scope(f"plugin:{entry.entry_id}", description=entry.manifest.identity)
+        scope = Scope(
+            f"plugin:{entry.entry_id}",
+            description=entry.manifest.identity,
+            task_shutdown_timeout=self._task_shutdown_timeout,
+        )
         instance = PluginInstance(
             instance_id=instance_id,
             entry_id=entry.entry_id,

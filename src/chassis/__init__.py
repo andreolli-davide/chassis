@@ -62,7 +62,7 @@ from chassis.core.errors import (
 from chassis.core.generation import GenerationLease, GenerationState, RuntimeGeneration
 from chassis.core.generations import GenerationManager
 from chassis.core.scope import EffectRecord, Scope, ScopeState
-from chassis.diagnostics import Diagnostics, GenerationPressureReport
+from chassis.diagnostics import Diagnostics, GenerationPressureReport, ResourceCounts
 from chassis.harness import Harness, HarnessState, ReconcileResult
 from chassis.plugins import (
     Plugin,
@@ -147,6 +147,7 @@ __all__ = [
     "ReconcileResult",
     "ReplayMismatch",
     "ResolutionPlan",
+    "ResourceCounts",
     "RunEnvironment",
     "RuntimeGeneration",
     "Scope",

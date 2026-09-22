@@ -24,6 +24,7 @@ from chassis.core.identity import (
     analyse_impact,
     observations_from,
 )
+from chassis.core.scope import Scope
 from chassis.persistence.formats import DIAGNOSTICS_FORMAT_VERSION
 from chassis.plugins.resolver import ProviderAssessment, RequirementResolution
 
@@ -41,6 +42,7 @@ __all__ = [
     "GenerationPressureEntry",
     "GenerationPressureReport",
     "RequirementExplanation",
+    "ResourceCounts",
     "ResourceReachability",
     "ReuseExplanation",
     "ScopeExplanation",
@@ -247,6 +249,43 @@ class GenerationPressureReport:
                 f"{self.history_evicted} evicted"
             )
         return "\n".join(lines)
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceCounts:
+    """How many resources the harness currently holds, read from authoritative state.
+
+    The counters prove a lifecycle returned to baseline: desired ``entries``
+    survive shutdown (they stay installed), while ``instances``, ``scopes``,
+    ``effects``, ``tasks``, ``stragglers``, ``cleanup_failures``, ``leases``,
+    and the generation counts must return to their pre-run values — zero for a
+    harness that has stopped.
+    """
+
+    entries: int
+    instances: int
+    scopes: int
+    effects: int
+    tasks: int
+    stragglers: int
+    cleanup_failures: int
+    live_generations: int
+    draining_generations: int
+    leases: int
+
+    def to_dict(self) -> dict[str, int]:
+        return {
+            "entries": self.entries,
+            "instances": self.instances,
+            "scopes": self.scopes,
+            "effects": self.effects,
+            "tasks": self.tasks,
+            "stragglers": self.stragglers,
+            "cleanup_failures": self.cleanup_failures,
+            "live_generations": self.live_generations,
+            "draining_generations": self.draining_generations,
+            "leases": self.leases,
+        }
 
 
 _REJECTION_REASONS = {
@@ -1800,6 +1839,39 @@ class Diagnostics:
                         )
                     )
         return changes
+
+    def resource_counts(self) -> ResourceCounts:
+        """Aggregate resource counters across every owned scope tree.
+
+        Cheap enough to call around a run or a stress iteration: it reads
+        authoritative state, takes no lock, and performs no ``await``. Comparing
+        the counts before and after a lifecycle proves resources returned to
+        baseline.
+        """
+
+        def walk(scope: Scope) -> list[Scope]:
+            collected = [scope]
+            for child in scope.children:
+                collected.extend(walk(child))
+            return collected
+
+        roots: list[Scope] = [self._harness.scope]
+        roots.extend(instance.scope for instance in self._harness.plugin_registry.instances())
+        scopes = [scope for root in roots for scope in walk(root)]
+        pressure = self.generation_pressure()
+        return ResourceCounts(
+            entries=len(self._harness.plugin_registry.entries()),
+            instances=len(self._harness.plugin_registry.instances()),
+            scopes=len(scopes),
+            effects=sum(len(scope.effects) for scope in scopes),
+            tasks=sum(len(scope.tasks) for scope in scopes),
+            stragglers=sum(len(scope.stragglers) for scope in scopes),
+            cleanup_failures=sum(len(scope.failures) for scope in scopes)
+            + len(self._harness.last_cleanup_failures),
+            live_generations=pressure.live_generations,
+            draining_generations=pressure.draining_generations,
+            leases=pressure.total_leases,
+        )
 
     def status(self) -> dict[str, Any]:
         """Harness-level summary."""

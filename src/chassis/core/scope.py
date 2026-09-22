@@ -238,9 +238,20 @@ class Scope:
 
     @property
     def fully_disposed(self) -> bool:
-        """Whether the scope closed with every owned effect and task finished."""
+        """Whether the scope closed with every owned effect and task finished.
 
-        return self._state is ScopeState.CLOSED and not self._stragglers
+        False for stragglers, for effects that were never released (a partial
+        unwind), and for any recorded cleanup failure: a disposer that failed may
+        still hold its resource, so the scope is never presented as fully
+        disposed when one failed.
+        """
+
+        return (
+            self._state is ScopeState.CLOSED
+            and not self._stragglers
+            and not self._effects
+            and not self._failures
+        )
 
     def assert_open(self, operation: str) -> None:
         """Raise :class:`ScopeClosedError` unless the scope accepts new work."""
@@ -343,6 +354,13 @@ class Scope:
         except BaseException:
             self.release_effect(record)
             raise
+        if self._state is not ScopeState.OPEN:
+            # The scope closed while entry was awaited, so the exit stack is
+            # already unwound: exit the manager here rather than pushing a
+            # disposer onto a closed stack, where it would never run.
+            self.release_effect(record)
+            await cm.__aexit__(None, None, None)
+            self.assert_open("enter async context")
         handler = _ContextCleanup(self, record, type(cm).__aexit__, cm)
         self._stack.push_async_exit(handler.__aexit__)
         return result
@@ -384,8 +402,11 @@ class Scope:
 
     def _on_task_done(self, task: asyncio.Task[Any]) -> None:
         self._tasks.discard(task)
-        if task.cancelled() or self._state is ScopeState.CLOSED:
+        if task.cancelled():
             return
+        # Always retrieve the exception: an unretrieved one is invisible (and
+        # noisy). A failed task is reported even when it failed after close —
+        # its failure must not disappear.
         error = task.exception()
         if error is not None:
             self.record_failure(f"task {task.get_name()}", error)
@@ -410,15 +431,29 @@ class Scope:
 
     async def _close(self) -> None:
         self._state = ScopeState.CLOSING
+        unwind_error: BaseException | None = None
         try:
             await self._stop_tasks()
-            await self._stack.aclose()
+            try:
+                await self._stack.aclose()
+            except BaseException as error:
+                # A disposer raised something the wrapper does not swallow (or
+                # the close itself was cancelled). AsyncExitStack has already
+                # continued the unwind through the remaining disposers; record
+                # the error and aggregate below instead of losing the other
+                # failures or the original error.
+                unwind_error = error
+                self.record_failure("effect unwind", error)
         finally:
             self._state = ScopeState.CLOSED
         if self._failures:
+            # Failures stay recorded after close: the scope is not fully
+            # disposed, and diagnostics keep naming what failed.
             failures = tuple(self._failures)
-            self._failures.clear()
-            raise EffectCleanupError(self._name, failures)
+            aggregated = EffectCleanupError(self._name, failures)
+            if unwind_error is not None:
+                raise aggregated from unwind_error
+            raise aggregated
 
     async def _stop_tasks(self) -> None:
         pending = [task for task in self._tasks if not task.done()]

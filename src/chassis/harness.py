@@ -159,6 +159,18 @@ class _FailClosedSecrets:
         ) from self._error
 
 
+def _retrieve_task_exception(task: asyncio.Task[Any]) -> None:
+    """Retrieve (never suppress) a background task failure.
+
+    The shutdown task's result is re-raised to every ``stop()`` caller; this
+    callback only prevents a failure no caller awaits from disappearing as an
+    unretrieved-task warning.
+    """
+
+    if not task.cancelled():
+        task.exception()
+
+
 def _services_plugin(
     provisions: tuple[tuple[CapabilityKey, object, str | None], ...],
 ) -> type[Plugin]:
@@ -284,6 +296,7 @@ class Harness:
             hooks=self._hook_registry,
             agents=self._agents,
             secrets=self._secrets,
+            task_shutdown_timeout=task_shutdown_timeout,
         )
         self._tool_executor = ToolExecutor(
             policy=self._policy,
@@ -308,6 +321,7 @@ class Harness:
         self._compose_lock = asyncio.Lock()
         self._plan: ResolutionPlan | None = None
         self._last_failures: tuple[CleanupFailure, ...] = ()
+        self._shutdown_task: asyncio.Task[None] | None = None
         self._shutdown_grace_seconds = shutdown_grace_seconds
         self._diagnostics = Diagnostics(self)
 
@@ -725,23 +739,49 @@ class Harness:
     async def stop(self) -> None:
         """Gracefully drain runs, dispose every plugin instance, and close down.
 
-        Idempotent. Cleanup failures never abort the shutdown; they are aggregated
-        and raised once everything that could be disposed has been.
+        Idempotent and a **barrier**: every caller blocks until the shutdown has
+        actually finished and then observes its result — no caller is told the
+        harness is stopped while disposal is still running. Cancelling one
+        caller does not abort the shutdown: it completes in the background and a
+        later ``stop()`` observes the same result. Cleanup failures never abort
+        the shutdown; they are aggregated and raised once everything that could
+        be disposed has been. Shutdown is terminal: a stopped harness is never
+        started again (build a new one), so its terminal state is deterministic.
         """
 
-        if self._state in (HarnessState.STOPPED, HarnessState.STOPPING):
-            return
-        # Holding the composition lock means a reconciliation already in flight
-        # finishes before shutdown starts, and a later one cannot publish a
-        # generation into a harness that is going away.
-        async with self._compose_lock:
-            self._state = HarnessState.STOPPING
-            failures: list[CleanupFailure] = []
-            async with self._telemetry.span("harness.shutdown", {"harness": self._name}):
-                await self._shutdown(failures)
+        task = self._shutdown_task
+        if task is None:
+            if self._state is HarnessState.STOPPED:
+                return
+            task = asyncio.ensure_future(self._run_shutdown())
+            self._shutdown_task = task
+            # Retrieve (not suppress) a failure no caller may observe again, so
+            # it cannot vanish as an unretrieved-task warning.
+            task.add_done_callback(_retrieve_task_exception)
+        await asyncio.shield(task)
 
-            self._state = HarnessState.STOPPED
+    async def _run_shutdown(self) -> None:
+        """The one shutdown run: serialised against composition, always terminal."""
+
+        failures: list[CleanupFailure] = []
+        try:
+            # Holding the composition lock means a reconciliation already in
+            # flight finishes before shutdown starts, and a later one cannot
+            # publish a generation into a harness that is going away.
+            async with self._compose_lock:
+                self._state = HarnessState.STOPPING
+                async with self._telemetry.span("harness.shutdown", {"harness": self._name}):
+                    await self._shutdown(failures)
+        except BaseException as error:
+            # Never leave the harness wedged in STOPPING: record what failed and
+            # reach the terminal state, so the failure is observable instead of
+            # the harness silently refusing everything forever.
+            failures.append(CleanupFailure(description="shutdown", error=error))
             self._last_failures = tuple(failures)
+            self._state = HarnessState.STOPPED
+            raise
+        self._state = HarnessState.STOPPED
+        self._last_failures = tuple(failures)
         if failures:
             raise EffectCleanupError(self._name, tuple(failures), sanitize=self._redactor.redact)
 
@@ -889,9 +929,28 @@ class Harness:
             failures: list[CleanupFailure] = []
             mounted: list[PluginInstance] = []
             reused: list[str] = []
+            scope_tree: ScopeTree
+            snapshot_factory: Any
+            current: RuntimeGeneration | None
+            reuse_current = False
             try:
                 instances = await self._materialize(plan, mounted, reused, failures)
                 self._validate_publication(plan, instances)
+                # Everything up to and including the candidate build stays
+                # transactional: a failure here rolls the mounted candidate back
+                # and leaves the published generation untouched, so no instance
+                # can survive referenced by no generation.
+                scope_tree = build_scope_tree(
+                    plan=plan,
+                    instances=instances,
+                    registrations=self._capability_registry.registrations(),
+                    tools=self._tool_registry.entries(),
+                )
+                snapshot_factory = self._snapshot_factory(instances)
+                current = self._generations.current
+                reuse_current = current is not None and self._same_composition(
+                    current, instances, snapshot_factory, scope_tree
+                )
             except BaseException as error:
                 span.record_error(error)
                 rolled_back = [instance.entry_id for instance in reversed(mounted)]
@@ -906,17 +965,7 @@ class Harness:
                 self._last_failures = tuple(failures)
                 raise
 
-            scope_tree = build_scope_tree(
-                plan=plan,
-                instances=instances,
-                registrations=self._capability_registry.registrations(),
-                tools=self._tool_registry.entries(),
-            )
-            snapshot_factory = self._snapshot_factory(instances)
-            current = self._generations.current
-            if current is not None and self._same_composition(
-                current, instances, snapshot_factory, scope_tree
-            ):
+            if reuse_current and current is not None:
                 # Nothing changed: never churn generations for a no-op reconcile.
                 generation = current
                 reused = [instance.entry_id for instance in instances]
@@ -1023,12 +1072,28 @@ class Harness:
         desired-state changes may still be pending.
         """
 
+        self._require_acquirable()
         lease = self._generations.acquire_lease()
         try:
             yield lease.generation
         finally:
             if self._generations.release_lease(lease):
                 await self._reclaim_after_drain()
+
+    def _require_acquirable(self) -> None:
+        """Refuse new runs once shutdown has begun.
+
+        Shutdown stops accepting new work first and drains afterwards: a run
+        acquired while the harness is stopping would be torn down underneath
+        itself, so the acquisition boundary refuses it deterministically.
+        """
+
+        if self._state in (HarnessState.STOPPING, HarnessState.STOPPED):
+            raise HarnessStateError(
+                f"cannot start a run on a harness that is {self._state.value}",
+                harness=self._name,
+                state=self._state.value,
+            )
 
     # -------------------------------------------------------------- internals
 

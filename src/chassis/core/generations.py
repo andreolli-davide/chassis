@@ -305,25 +305,26 @@ class GenerationManager:
 
         Returns ``(idle, busy)``. Nothing is retired here, so the caller stays in
         control of when resources are reclaimed.
+
+        ``timeout_seconds`` is one deadline for the whole wait, not one per
+        generation: the configured grace bounds the shutdown, however many
+        draining generations are held. The waits run concurrently and results
+        keep the input order.
         """
 
-        idle: list[RuntimeGeneration] = []
-        busy: list[RuntimeGeneration] = []
-        for generation in generations:
-            if generation.lease_count == 0:
-                idle.append(generation)
-                continue
-            try:
-                if timeout_seconds is None:
-                    await generation.accounting.wait_idle()
-                else:
-                    async with asyncio.timeout(timeout_seconds):
-                        await generation.accounting.wait_idle()
-            except TimeoutError:
-                busy.append(generation)
+        ordered = tuple(generations)
+        waits = [generation.accounting.wait_idle() for generation in ordered]
+        try:
+            if timeout_seconds is None:
+                await asyncio.gather(*waits)
             else:
-                idle.append(generation)
-        return tuple(idle), tuple(busy)
+                async with asyncio.timeout(timeout_seconds):
+                    await asyncio.gather(*waits)
+        except TimeoutError:
+            pass
+        idle = tuple(generation for generation in ordered if generation.lease_count == 0)
+        busy = tuple(generation for generation in ordered if generation.lease_count > 0)
+        return idle, busy
 
     # ------------------------------------------------------------- bookkeeping
 

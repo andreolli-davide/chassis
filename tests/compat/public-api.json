@@ -162,6 +162,9 @@
       "ResolutionPlan": {
         "stability": "stable"
       },
+      "ResourceCounts": {
+        "stability": "stable"
+      },
       "RunEnvironment": {
         "stability": "stable"
       },
@@ -352,6 +355,9 @@
         "stability": "stable"
       },
       "RequirementExplanation": {
+        "stability": "stable"
+      },
+      "ResourceCounts": {
         "stability": "stable"
       },
       "ResourceReachability": {
