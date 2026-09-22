@@ -9,6 +9,22 @@ that a minor release may break the documented surface.
 
 ### Added
 
+- **Reproducible performance and capacity baselines** (roadmap R032).
+  `scripts/benchmark.py` measures no-op reconciliation, one-entry replacement,
+  dependency cascades, snapshot construction and hashing, plan/preview and
+  diagnostics generation, tool snapshot lookup, generation acquire/release,
+  replay lookup with repeated keys, graph-cache lookup, 10/100/1000-object
+  configurations, and replacement under concurrent held runs — reporting median
+  and p95 latency, peak memory, and the full environment, with a `--check`
+  mode for conservative (3x) regression thresholds on stable scenarios.
+  `benchmarks/baseline-0.9.0.json` records the 0.9.0 baseline and
+  `docs/performance.md` documents methodology, capacity guidance, and the
+  measured scaling limits (the data plane is flat; the control plane resolver
+  is superlinear today — documented, with the optimization deliberately
+  deferred). `tests/perf/test_scaling_structure.py` gates CI with deterministic
+  work-count assertions: one identity computation per entry per plan/reconcile,
+  one registry scan per tool lookup, and zero composition work on the data
+  plane.
 - **Optional OpenTelemetry adapter** (roadmap R031 phase 2).
   `chassis.telemetry.OpenTelemetryTelemetry` maps the signal contract onto
   OpenTelemetry — Chassis spans become OpenTelemetry spans in the ambient

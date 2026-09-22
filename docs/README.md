@@ -21,6 +21,7 @@ below for task-oriented detail.
 | [langgraph.md](langgraph.md) | agent definitions, the run context, graph caching, tools, streaming, interrupts |
 | [recipes.md](recipes.md) | behind a web service, per-tenant composition, hot provider swap, budgets, durability |
 | [troubleshooting.md](troubleshooting.md) | symptom → cause → fix, with the exact diagnostics output |
+| [performance.md](performance.md) | benchmark methodology, the 0.9.0 baseline, capacity, and known scaling limits |
 | [roadmap.md](roadmap.md) | ordered 0.5.1–0.9.0 audit remediation, acceptance criteria, release gates, and finding traceability |
 | [compatibility.md](compatibility.md) | surface classes, the API baseline and compatibility check, deprecations, persisted format versions |
 | [observability.md](observability.md) | tracing, snapshots, canonical hashing, redaction, evaluation |
@@ -35,6 +36,7 @@ below for task-oriented detail.
 
 | Example | Shows |
 | --- | --- |
+| [examples/production_reference/](https://github.com/andreolli-davide/chassis/tree/main/examples/production_reference) | **the production reference application**: one support-desk system composing configuration, catalog, scopes, AgentSpec, policy, secrets, invoke and streaming, replay, hot replacement with pinned runs, planning, diagnostics, rollback, and graceful shutdown |
 | [examples/quickstart.py](https://github.com/andreolli-davide/chassis/blob/main/examples/quickstart.py) | the smallest useful app: a model capability, one LangGraph agent, generation attribution |
 | [examples/basic_agent.py](https://github.com/andreolli-davide/chassis/blob/main/examples/basic_agent.py) | a LangGraph agent: model capability, tools, checkpointer, streaming, tracing, interrupt/resume, snapshot |
 | [examples/reactive_cascade.py](https://github.com/andreolli-davide/chassis/blob/main/examples/reactive_cascade.py) | `database → memory → agent extension`, removed and restored |

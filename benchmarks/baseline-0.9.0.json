@@ -1,0 +1,312 @@
+{
+  "environment": {
+    "captured_at": "2026-09-22T13:30:49Z",
+    "chassis": "0.8.1",
+    "machine": "arm64",
+    "platform": "macOS-26.0-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "format_version": 1,
+  "results": [
+    {
+      "iterations": 25,
+      "median_ms": 0.0169,
+      "name": "acquire_release",
+      "note": "generation lease round-trip",
+      "objects": 10,
+      "p95_ms": 0.0203,
+      "peak_bytes": 3166,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 0.017,
+      "name": "acquire_release",
+      "note": "generation lease round-trip",
+      "objects": 100,
+      "p95_ms": 0.0199,
+      "peak_bytes": 3118,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 0.0174,
+      "name": "acquire_release",
+      "note": "generation lease round-trip",
+      "objects": 1000,
+      "p95_ms": 0.0212,
+      "peak_bytes": 9342,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 6.5764,
+      "name": "concurrent_holds",
+      "note": "replacement while runs pin old generations",
+      "objects": 10,
+      "p95_ms": 6.802,
+      "peak_bytes": 678016,
+      "stable": false
+    },
+    {
+      "iterations": 25,
+      "median_ms": 178.822,
+      "name": "concurrent_holds",
+      "note": "replacement while runs pin old generations",
+      "objects": 100,
+      "p95_ms": 214.0528,
+      "peak_bytes": 13676528,
+      "stable": false
+    },
+    {
+      "iterations": 3,
+      "median_ms": 15309.873,
+      "name": "concurrent_holds",
+      "note": "replacement while runs pin old generations",
+      "objects": 1000,
+      "p95_ms": 15464.8808,
+      "peak_bytes": 204270684,
+      "stable": false
+    },
+    {
+      "iterations": 25,
+      "median_ms": 6.6493,
+      "name": "dependency_cascade",
+      "note": "provider change rebuilding its consumer",
+      "objects": 10,
+      "p95_ms": 7.0117,
+      "peak_bytes": 551360,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 175.1707,
+      "name": "dependency_cascade",
+      "note": "provider change rebuilding its consumer",
+      "objects": 100,
+      "p95_ms": 194.7795,
+      "peak_bytes": 13434544,
+      "stable": true
+    },
+    {
+      "iterations": 3,
+      "median_ms": 14836.748,
+      "name": "dependency_cascade",
+      "note": "provider change rebuilding its consumer",
+      "objects": 1000,
+      "p95_ms": 15098.1893,
+      "peak_bytes": 204266404,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 0.0383,
+      "name": "graph_cache_lookup",
+      "note": "graph-cache lookup at N entries",
+      "objects": 10,
+      "p95_ms": 0.0426,
+      "peak_bytes": 5125,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 0.0378,
+      "name": "graph_cache_lookup",
+      "note": "graph-cache lookup at N entries",
+      "objects": 100,
+      "p95_ms": 0.0428,
+      "peak_bytes": 2440,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 0.0379,
+      "name": "graph_cache_lookup",
+      "note": "graph-cache lookup at N entries",
+      "objects": 1000,
+      "p95_ms": 0.0402,
+      "peak_bytes": 2440,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 6.3002,
+      "name": "noop_reconcile",
+      "note": "no-op reconciliation of N entries",
+      "objects": 10,
+      "p95_ms": 7.0386,
+      "peak_bytes": 269949,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 173.2598,
+      "name": "noop_reconcile",
+      "note": "no-op reconciliation of N entries",
+      "objects": 100,
+      "p95_ms": 186.5977,
+      "peak_bytes": 1927650,
+      "stable": true
+    },
+    {
+      "iterations": 3,
+      "median_ms": 13898.7303,
+      "name": "noop_reconcile",
+      "note": "no-op reconciliation of N entries",
+      "objects": 1000,
+      "p95_ms": 14567.5089,
+      "peak_bytes": 130880188,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 7.0321,
+      "name": "one_entry_replacement",
+      "note": "replace one entry at N entries",
+      "objects": 10,
+      "p95_ms": 7.4931,
+      "peak_bytes": 595640,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 174.514,
+      "name": "one_entry_replacement",
+      "note": "replace one entry at N entries",
+      "objects": 100,
+      "p95_ms": 193.2922,
+      "peak_bytes": 13451000,
+      "stable": true
+    },
+    {
+      "iterations": 3,
+      "median_ms": 14730.893,
+      "name": "one_entry_replacement",
+      "note": "replace one entry at N entries",
+      "objects": 1000,
+      "p95_ms": 15040.1232,
+      "peak_bytes": 204182822,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 14.1665,
+      "name": "plan_and_diagnostics",
+      "note": "plan, preview, status, and pressure generation",
+      "objects": 10,
+      "p95_ms": 14.3303,
+      "peak_bytes": 510558,
+      "stable": true
+    },
+    {
+      "iterations": 23,
+      "median_ms": 462.3649,
+      "name": "plan_and_diagnostics",
+      "note": "plan, preview, status, and pressure generation",
+      "objects": 100,
+      "p95_ms": 506.1602,
+      "peak_bytes": 1447716,
+      "stable": true
+    },
+    {
+      "iterations": 3,
+      "median_ms": 39354.5255,
+      "name": "plan_and_diagnostics",
+      "note": "plan, preview, status, and pressure generation",
+      "objects": 1000,
+      "p95_ms": 39577.3563,
+      "peak_bytes": 87596923,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 0.0044,
+      "name": "replay_lookup",
+      "note": "repeated-key replay consumption",
+      "objects": 10,
+      "p95_ms": 0.0049,
+      "peak_bytes": 942,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 0.0122,
+      "name": "replay_lookup",
+      "note": "repeated-key replay consumption",
+      "objects": 100,
+      "p95_ms": 0.0127,
+      "peak_bytes": 1870,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 0.063,
+      "name": "replay_lookup",
+      "note": "repeated-key replay consumption",
+      "objects": 1000,
+      "p95_ms": 0.0634,
+      "peak_bytes": 9974,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 2.1662,
+      "name": "snapshot_hashing",
+      "note": "snapshot construction and hashing",
+      "objects": 10,
+      "p95_ms": 3.1462,
+      "peak_bytes": 226369,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 7.4293,
+      "name": "snapshot_hashing",
+      "note": "snapshot construction and hashing",
+      "objects": 100,
+      "p95_ms": 9.35,
+      "peak_bytes": 209289,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 59.0172,
+      "name": "snapshot_hashing",
+      "note": "snapshot construction and hashing",
+      "objects": 1000,
+      "p95_ms": 60.5163,
+      "peak_bytes": 995689,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 0.0108,
+      "name": "tool_snapshot_lookup",
+      "note": "tool snapshot over N tools",
+      "objects": 10,
+      "p95_ms": 0.0163,
+      "peak_bytes": 2944,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 0.0356,
+      "name": "tool_snapshot_lookup",
+      "note": "tool snapshot over N tools",
+      "objects": 100,
+      "p95_ms": 0.0375,
+      "peak_bytes": 4528,
+      "stable": true
+    },
+    {
+      "iterations": 25,
+      "median_ms": 0.255,
+      "name": "tool_snapshot_lookup",
+      "note": "tool snapshot over N tools",
+      "objects": 1000,
+      "p95_ms": 0.2601,
+      "peak_bytes": 27352,
+      "stable": true
+    }
+  ]
+}
