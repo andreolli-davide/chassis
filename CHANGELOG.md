@@ -34,6 +34,18 @@ that a minor release may break the documented surface.
   convenience arguments now raises; move those fields into the request itself.
   Code relying on `providers_of` returning `()` for unknown scope paths must
   handle `ConfigurationError`.
+- **Diagnostics and documentation aligned with implementation** (roadmap R023).
+  Status and cleanup reports render failures through a structured, redacted
+  representation (`description`, `error_type`, scrubbed `error`) instead of raw
+  exception strings, and `ReconcileResult.to_dict` accepts a `sanitize`
+  callable. The resolver documentation now states the real rule (active plugins
+  contribute registrations; selection stays ambiguous without a preference —
+  stability comes from incremental reuse). A documentation test maps every
+  guarantee G1–G24 to at least one existing test node, and the design, security,
+  replay, observability, and hook documentation is synchronized with its
+  regression tests.
+- **Migration note:** `CleanupFailure.to_dict()` now returns `error_type` plus a
+  scrubbed `error` message instead of one combined `"Type: message"` string.
 
 ## [0.7.0] - 2026-09-22
 

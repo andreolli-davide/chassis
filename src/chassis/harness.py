@@ -216,13 +216,13 @@ class ReconcileResult:
     failures: tuple[CleanupFailure, ...] = ()
     impact: ImpactAnalysis | None = None
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, sanitize: Callable[[str], str] | None = None) -> dict[str, Any]:
         return {
             "generation_id": self.generation_id,
             "mounted": list(self.mounted),
             "reused": list(self.reused),
             "disposed": list(self.disposed),
-            "failures": [failure.to_dict() for failure in self.failures],
+            "failures": [failure.to_dict(sanitize=sanitize) for failure in self.failures],
             "plan": self.plan.to_dict(),
             "impact": None if self.impact is None else self.impact.to_dict(),
         }

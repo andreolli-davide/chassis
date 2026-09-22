@@ -25,8 +25,12 @@ Three rules make the composition well-defined:
 
 1. A plugin cannot satisfy its own requirement; a provider must be a different
    plugin instance.
-2. Providers that are already active are preferred over providers that merely
-   declare the capability, which keeps reconciliation stable.
+2. An already-active plugin contributes what it *actually registered*, while a
+   not-yet-mounted plugin contributes what its manifest declares. An active
+   provider is not otherwise preferred: a requirement satisfied by several
+   providers is ambiguous until an explicit preference selects one, and
+   incremental reuse (semantic identity), not selection preference, is what
+   keeps reconciliation stable.
 3. Capability narrowing only narrows: a scope's view is intersected along its
    lineage, so a descendant can never observe more than its ancestor exposes.
 

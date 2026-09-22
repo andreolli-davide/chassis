@@ -27,14 +27,14 @@ below is enforced by tests, and the tests are the specification of record.
 | G2 | A failed plugin setup reverts every effect that setup created | `plugins/registry.py`, `tests/plugins/test_lifecycle.py` |
 | G3 | An active composition never contains a plugin whose selected provider is absent or incompatible | `plugins/resolver.py`, `harness.py` publication validation, `tests/plugins/test_publication_contract.py` |
 | G4 | A published generation is never mutated in a way visible to existing runs | `core/generation.py`, `tests/integration/test_generation_lifecycle.py` |
-| G5 | A run acquires either the old complete generation or the new one — never a partial candidate | `core/generations.py` |
+| G5 | A run acquires either the old complete generation or the new one — never a partial candidate | `core/generations.py`, `tests/core/test_generation.py`, `tests/integration/test_generation_lifecycle.py` |
 | G6 | A plugin scope is never physically disposed while a live generation can reach it | `harness.py` reclamation, `tests/concurrency/test_generation_concurrency.py` |
-| G7 | A plugin referenced by several live generations survives until all of them retire | same, plus `tests/integration/…::test_shared_plugin_survives_until_every_generation_releases_it` |
-| G8 | Normal model/tool execution never takes the control-plane lock | `harness.py`, `tests/integration/…::test_data_plane_is_not_blocked_by_an_in_flight_reconcile` |
-| G9 | LangGraph owns graph durability; Chassis never duplicates checkpointing | `langgraph/`, no second checkpoint system exists |
-| G10 | In-process plugins are trusted code; policy is not sandboxing | `docs/security.md` |
-| G11 | Secret values never enter snapshots, diagnostics, replay records, traces, or public error strings | `secrets/redaction.py`, `tests/secrets`, `tests/test_evaluation.py` |
-| G12 | Equivalent canonical desired state resolves to equivalent providers and ordering | `plugins/resolver.py`, `tests/capabilities` |
+| G7 | A plugin referenced by several live generations survives until all of them retire | `tests/integration/test_generation_lifecycle.py::test_shared_plugin_survives_until_every_generation_releases_it`, `tests/concurrency/test_generation_concurrency.py` |
+| G8 | Normal model/tool execution never takes the control-plane lock | `harness.py`, `tests/integration/test_generation_lifecycle.py::test_data_plane_is_not_blocked_by_an_in_flight_reconcile` |
+| G9 | LangGraph owns graph durability; Chassis never duplicates checkpointing | `langgraph/`, `tests/langgraph/test_langgraph.py` |
+| G10 | In-process plugins are trusted code; policy is not sandboxing | `docs/security.md`, `tests/policy/test_policy.py`, `tests/secrets/test_secrets.py` |
+| G11 | Secret values never enter snapshots, diagnostics, replay records, traces, or public error strings | `secrets/redaction.py`, `tests/secrets/test_secrets.py`, `tests/secrets/test_redaction_boundaries.py`, `tests/test_evaluation.py` |
+| G12 | Equivalent canonical desired state resolves to equivalent providers and ordering | `plugins/resolver.py`, `tests/capabilities/test_capabilities.py` |
 | G13 | Generation liveness and lease age are read from authoritative runtime state, never derived from the bounded diagnostics history | `core/generations.py`, `diagnostics.py`, `tests/generations/test_generation_pressure.py` |
 | G14 | A configured budget limit states whether Chassis enforces it or an integration must account for it | `budget/models.py`, `tests/budget/test_budget_semantics.py` |
 | G15 | A scope observes only its own local composition, composition inherited from its ancestors, and composition its capability view permits; sibling-local composition is not implicitly visible | `plugins/resolver.py`, `composition.py`, `tests/composition/test_scopes.py` |
@@ -46,7 +46,7 @@ below is enforced by tests, and the tests are the specification of record.
 | G21 | A published agent revision is immutable; any composition-affecting change creates a new revision | `agents.py`, `tests/agents/test_agent_registry.py` |
 | G22 | A run remains associated with the agent revision selected when it started, and with the generation it acquired | `agents.py`, `runtime.py`, `tests/agents/test_invocation.py` |
 | G23 | Agent composition is materialized through the same scoped resolver, ownership, semantic identity, and generation publication machinery as all other composition | `agents.py`, `composition.py`, `tests/agents/test_agent_lifecycle.py` |
-| G24 | Agent tool and capability visibility is composition, not authorization; it grants no user or organization authority | `docs/agent-composition.md`, `docs/security.md` |
+| G24 | Agent tool and capability visibility is composition, not authorization; it grants no user or organization authority | `docs/agent-composition.md`, `docs/security.md`, `tests/agents/test_capability_visibility.py` |
 
 Every published container is deeply frozen by recursive copy-and-freeze at the
 publication boundary — plugin config and manifest metadata, scopes and resolved

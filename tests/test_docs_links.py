@@ -42,3 +42,28 @@ def test_relative_links_resolve(document: Path) -> None:
             missing.append(target)
 
     assert missing == [], f"{document.name} links to missing files: {missing}"
+
+
+GUARANTEE_ROW = re.compile(r"^\| (G\d+) \| (.*?) \| (.*?) \|$", re.MULTILINE)
+TEST_REF = re.compile(r"(tests/[A-Za-z0-9_./-]+\.py)(?:::(test_[A-Za-z0-9_]+))?")
+
+
+def test_every_guarantee_maps_to_an_existing_test_node() -> None:
+    """Each G-row names at least one real test node, not just prose or links."""
+
+    design = (ROOT / "docs" / "design.md").read_text(encoding="utf-8")
+    rows = GUARANTEE_ROW.findall(design)
+    names = [name for name, _claim, _enforcement in rows]
+
+    assert names == [f"G{i}" for i in range(1, 25)]
+
+    for name, claim, enforcement in rows:
+        refs = TEST_REF.findall(enforcement)
+        assert refs, f"{name} maps to no test node: {claim}"
+        for path_text, node in refs:
+            target = ROOT / path_text
+            assert target.exists(), f"{name} references missing {path_text}"
+            source = target.read_text(encoding="utf-8")
+            assert "def test_" in source, f"{path_text} contains no tests for {name}"
+            if node:
+                assert f"def {node}" in source, f"{name} references missing node {node}"

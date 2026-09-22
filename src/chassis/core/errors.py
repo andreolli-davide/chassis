@@ -82,12 +82,19 @@ class CleanupFailure:
     description: str
     error: BaseException
 
-    def to_dict(self, *, sanitize: Callable[[str], str] | None = None) -> dict[str, str]:
-        """Structured rendering. ``sanitize`` scrubs author-written text."""
+    def to_dict(self, *, sanitize: Callable[[str], str] | None = None) -> dict[str, Any]:
+        """Structured, redacted public representation of the failure.
+
+        The error is rendered as its type plus a scrubbed message — never a raw
+        exception string — so reports cannot leak author-written text.
+        """
 
         scrub: Callable[[str], str] = sanitize if sanitize is not None else (lambda text: text)
-        error = f"{type(self.error).__name__}: {self.error}"
-        return {"description": scrub(self.description), "error": scrub(error)}
+        return {
+            "description": scrub(self.description),
+            "error_type": type(self.error).__name__,
+            "error": scrub(str(self.error)),
+        }
 
 
 class ScopeClosedError(ChassisError):

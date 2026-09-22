@@ -203,7 +203,8 @@ AgentResult(
 )
 result.messages   # messages from the output, when the graph produced a list
 result.text       # text of the most recent message with textual content:
-                  # a string, a mapping with a "text" field, or text blocks    (joined)
+                  # a string, a mapping with a "text" field, or text blocks
+                  # (joined)
 ```
 
 ## Testing graphs
