@@ -7,6 +7,16 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Agent lookup runs after readiness reconciliation** (roadmap R013).
+  `agents.invoke`/`stream` call `ensure_ready()` before resolving the agent
+  runtime and logical revision, so an agent installed or replaced after
+  `Harness.start()` resolves and runs — its contributions have mounted (and any
+  runtime they register exists) before lookup. Generation-owned registrations
+  are still selected only after the generation is acquired. Evaluation targets
+  resolve logical `AgentSpec` names as well as raw runtime names.
+
 ## [0.6.0] - 2026-09-22
 
 Makes composition transactional and generation-safe: identity-keyed

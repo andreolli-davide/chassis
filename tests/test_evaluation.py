@@ -4,9 +4,10 @@ from typing import Any
 
 import pytest
 
-from chassis import MODEL
+from chassis import MODEL, Harness
 from chassis.core.errors import ConfigurationError
 from chassis.evaluation import agent_target, composition_metadata, evaluate_agent
+from chassis.runtime import AgentEvent, AgentResult
 from chassis.testing import TestHarness
 
 SECRET = "sk-live-abcdef123456"
@@ -152,5 +153,47 @@ async def test_evaluate_agent_targets_the_dataset_and_labels_the_experiment(
 
         output = await captured["target"]({"input": {"messages": ["hi"]}})
         assert "generation_id" in output
+    finally:
+        await harness.stop()
+
+
+async def test_evaluation_targets_resolve_logical_agent_names() -> None:
+    """An AgentSpec's logical name is as targetable as a raw runtime name (R013)."""
+
+    from types import SimpleNamespace
+
+    from chassis.agent_spec import AgentSpec
+
+    class NamedRuntime:
+        @property
+        def name(self) -> str:
+            return "finance-graph"
+
+        async def invoke(self, request, run_context):  # type: ignore[no-untyped-def]
+            return AgentResult(
+                agent="finance",
+                generation_id=run_context.generation_id,
+                run_id=run_context.run_id,
+                output={"messages": [SimpleNamespace(content="hi")]},
+            )
+
+        async def stream(self, request, run_context):  # type: ignore[no-untyped-def]
+            yield AgentEvent(
+                agent="finance",
+                generation_id=run_context.generation_id,
+                run_id=run_context.run_id,
+                kind="end",
+            )
+
+    harness = Harness(name="logical-target")
+    harness.register_agent(NamedRuntime())
+    harness.agents.install(
+        AgentSpec(name="finance", revision="17", runtime_ref="finance-graph", plugins={})
+    )
+    await harness.start()
+    try:
+        target = agent_target(harness, "finance")
+        output = await target({"input": {"messages": ["hi"]}})
+        assert output["output"] == "hi"
     finally:
         await harness.stop()

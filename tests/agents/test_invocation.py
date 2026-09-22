@@ -215,3 +215,61 @@ async def test_a_runtime_only_agent_still_invokes_without_a_revision() -> None:
         assert runtime.contexts[0].agent_identity == "finance-graph"
     finally:
         await h.stop()
+
+
+async def test_agents_installed_after_start_resolve_and_run() -> None:
+    """Readiness reconciliation runs before agent lookup (R013)."""
+
+    def runtime_owner(runtime):  # type: ignore[no-untyped-def]
+        @plugin(name="runtime-owner", version="1.0.0")
+        async def provide(ctx: PluginContext) -> None:
+            ctx.agents.register(runtime, replace=True)
+
+        return provide
+
+    harness = Harness(name="late-agent")
+    harness.register_plugin_type("runtime-owner", runtime_owner(RecordingRuntime()))
+    await harness.start()
+    try:
+        harness.agents.install(
+            AgentSpec(
+                name="finance",
+                revision="1",
+                runtime_ref="finance-graph",
+                plugins={"runtime-owner": {}},
+            )
+        )
+        result = await harness.agents.invoke("finance", {"messages": []})
+        assert result.agent_revision == "1"
+    finally:
+        await harness.stop()
+
+
+async def test_agents_replaced_after_start_resolve_and_run() -> None:
+    def runtime_owner(runtime):  # type: ignore[no-untyped-def]
+        @plugin(name="runtime-owner", version="1.0.0")
+        async def provide(ctx: PluginContext) -> None:
+            ctx.agents.register(runtime, replace=True)
+
+        return provide
+
+    harness = Harness(name="replaced-agent")
+    harness.register_plugin_type("runtime-owner", runtime_owner(RecordingRuntime()))
+    harness.register_agent(RecordingRuntime())
+    harness.agents.install(
+        AgentSpec(name="finance", revision="1", runtime_ref="finance-graph", plugins={})
+    )
+    await harness.start()
+    try:
+        harness.agents.replace(
+            AgentSpec(
+                name="finance",
+                revision="2",
+                runtime_ref="finance-graph",
+                plugins={"runtime-owner": {}},
+            )
+        )
+        result = await harness.agents.invoke("finance", {"messages": []})
+        assert result.agent_revision == "2"
+    finally:
+        await harness.stop()

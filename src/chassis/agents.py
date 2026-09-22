@@ -650,6 +650,9 @@ class AgentRegistry:
         """
 
         harness = self._require_harness()
+        # Readiness first: an agent installed after `start()` has not mounted
+        # its contributions yet, and its runtime may only exist once they do.
+        await harness.ensure_ready()
         runtime, selected = self._resolve_agent(agent)
         agent_request = self._build_request(
             request,
@@ -660,7 +663,6 @@ class AgentRegistry:
             metadata=metadata,
         )
 
-        await harness.ensure_ready()
         async with harness.acquire() as generation:
             pinned = self._pin_revision(agent, selected, generation)
             agent_revision = None if pinned is None else pinned.revision
@@ -773,6 +775,9 @@ class AgentRegistry:
         """
 
         harness = self._require_harness()
+        # Readiness first: an agent installed after `start()` has not mounted
+        # its contributions yet, and its runtime may only exist once they do.
+        await harness.ensure_ready()
         runtime, selected = self._resolve_agent(agent)
         agent_request = self._build_request(
             request,
@@ -783,7 +788,6 @@ class AgentRegistry:
             metadata=metadata,
         )
 
-        await harness.ensure_ready()
         async with harness.acquire() as generation:
             pinned = self._pin_revision(agent, selected, generation)
             agent_revision = None if pinned is None else pinned.revision

@@ -38,7 +38,7 @@ def agent_target(
     experiment can be attributed even when composition changed mid-experiment.
     """
 
-    if agent not in harness.agents:
+    if agent not in harness.agents and harness.agents.active_spec(agent) is None:
         raise ConfigurationError("agent is not registered", agent=agent)
 
     async def target(example: Mapping[str, Any]) -> dict[str, Any]:
