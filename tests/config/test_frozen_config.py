@@ -15,7 +15,7 @@ import pytest
 from pydantic import ValidationError
 
 from chassis.config import HarnessConfig, PluginEntryConfig
-from chassis.core.collections import FrozenDict
+from chassis.core.collections import FrozenDict, freeze
 
 
 def test_mutating_the_input_after_construction_cannot_change_the_config() -> None:
@@ -121,3 +121,19 @@ def test_no_mutable_structure_is_reachable_through_the_config_surface() -> None:
     assert set(entry.config) == {"database", "retries"}
     assert entry.provider_preference == {"database": "primary"}
     assert config.provider_preferences == {"database": "primary"}
+
+
+def test_freeze_rechecks_nested_values_of_an_author_constructed_frozen_dict() -> None:
+    """The marker type alone cannot prove that nested values are immutable."""
+
+    nested: dict[str, Any] = {"pool": [1, 2]}
+    authored = FrozenDict({"database": nested})
+
+    published = freeze(authored)
+    nested["pool"].append(3)
+    nested["late"] = True
+
+    assert published == {"database": {"pool": (1, 2)}}
+    assert published is not authored
+    with pytest.raises(TypeError):
+        published["database"]["pool"][0] = 9  # type: ignore[index]

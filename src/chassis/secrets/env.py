@@ -123,11 +123,14 @@ def redacting_secrets(provider: SecretProvider, redactor: SecretRedactor | None)
     """Hand out ``provider`` through ``redactor``: every value it returns
     becomes redactable at the moment it is read.
 
-    The wrap is idempotent and honors an explicitly redacting provider, so a
-    plugin that already protects its values keeps its own boundary.
+    The wrap is idempotent when the provider already uses this exact redactor.
+    A provider using another redactor keeps that boundary and is wrapped again,
+    so its values also join the harness-owned redaction boundary.
     """
 
-    if redactor is None or isinstance(provider, RedactingSecretProvider):
+    if redactor is None:
+        return provider
+    if isinstance(provider, RedactingSecretProvider) and provider.redactor is redactor:
         return provider
     return RedactingSecretProvider(provider, redactor)
 

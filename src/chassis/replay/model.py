@@ -8,6 +8,7 @@ harness does not mediate cannot be recorded honestly.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -220,7 +221,13 @@ def _canonical_value(name: str, value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_canonical_value(name, item) for item in value]
     if isinstance(value, (set, frozenset)):
-        return sorted(str(_canonical_value(name, item)) for item in value)
+        set_items = [_canonical_value(name, item) for item in value]
+        return sorted(
+            set_items,
+            key=lambda item: json.dumps(
+                item, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ),
+        )
     model_dump = getattr(value, "model_dump", None)
     if callable(model_dump):
         return _canonical_value(name, model_dump(mode="json"))

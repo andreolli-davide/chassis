@@ -217,8 +217,7 @@ class AgentSpec:
         object.__setattr__(self, "requires", _requirements(self.requires, field_name="requires"))
         object.__setattr__(self, "optional", _requirements(self.optional, field_name="optional"))
         object.__setattr__(self, "plugins", _plugins(self.plugins))
-        if not isinstance(self.metadata, FrozenDict):
-            object.__setattr__(self, "metadata", freeze(self.metadata))
+        object.__setattr__(self, "metadata", freeze(self.metadata))
 
     # ------------------------------------------------------------------ identity
 

@@ -6,12 +6,14 @@ why it was made, and what to do instead. Lifecycle behaviour is unchanged across
 these releases: published generations are still immutable, publication is still
 transactional, and logical unload is still distinct from physical disposal.
 
-- [0.7 → 0.8](#07--08): strict canonical hashing, unambiguous request
+- [0.8 → 0.8.1](#08-081): review follow-ups for redaction, replay,
+  immutable publication, and release delivery
+- [0.7 → 0.8](#07-08): strict canonical hashing, unambiguous request
   arguments, the reviewed public surface
-- [0.6 → 0.7](#06--07): one run lifecycle, complete replay, hook semantics,
+- [0.6 → 0.7](#06-07): one run lifecycle, complete replay, hook semantics,
   validated budgets and tool contracts, isolated telemetry, truthful runtime
   identity
-- [0.5.1 → 0.6](#051--06): identity-keyed registries, exact contract binding,
+- [0.5.1 → 0.6](#051-060): identity-keyed registries, exact contract binding,
   runtime composition visibility, deep immutability, transactional
   materialization and configuration
 - [0.5 → 0.5.1](#05-051): fail-closed policy and secrets, redaction boundary,
@@ -21,14 +23,16 @@ transactional, and logical unload is still distinct from physical disposal.
 - [0.2 → 0.3](#02-03): composition scopes, explain and diff diagnostics
 - [0.1 → 0.2](#01-02): optional extras, tool protocol, lease identity, budgets
 
-## Unreleased
+## 0.8 → 0.8.1
 
-Post-0.8.0 fixes tighten four behaviors: replay key building rejects
-non-string mapping keys (convert keys to strings first), tool registration
-requires a non-empty `description`, published tool snapshots expose detached
-frozen copies (compare registrations by `registration_id`, not object
-identity), and `raise_on_error=True` raises for replayed tool errors exactly
-like live ones.
+0.8.1 tightens publication and execution boundaries: replay key
+building rejects non-string mapping keys (convert keys to strings first) and
+preserves scalar types inside sets; tool registration requires a non-empty
+`description`; published tool snapshots expose detached frozen copies (compare
+registrations by `registration_id`, not object identity); author-constructed
+`FrozenDict` values are recursively frozen again at publication; providers
+using their own secret redactor also join the harness-owned boundary; and
+`raise_on_error=True` raises for replayed tool errors exactly like live ones.
 
 ## 0.7 → 0.8
 

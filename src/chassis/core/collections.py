@@ -57,8 +57,6 @@ def freeze(value: Any) -> Any:
     authoring object from aliasing mutable state into a published revision.
     """
 
-    if isinstance(value, FrozenDict):
-        return value
     if isinstance(value, Mapping):
         return FrozenDict({str(key): freeze(item) for key, item in value.items()})
     if isinstance(value, (list, tuple)):

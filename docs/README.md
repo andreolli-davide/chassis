@@ -2,6 +2,10 @@
 
 Rendered at **https://andreolli-davide.github.io/chassis/**.
 
+Current release: **0.8.1**. Install it from
+[PyPI](https://pypi.org/project/chassis-harness/0.8.1/) or inspect the
+[GitHub Release](https://github.com/andreolli-davide/chassis/releases/tag/v0.8.1).
+
 New here? Start with [getting-started.md](getting-started.md), then use the guides
 below for task-oriented detail.
 
@@ -23,7 +27,7 @@ below for task-oriented detail.
 | [replay.md](replay.md) | record/replay boundaries and their explicit limitations |
 | [configuration.md](configuration.md) | declarative configuration, the catalog, reconciliation, drift |
 | [design.md](design.md) | guarantees, decisions, and deliberate absences |
-| [migration.md](migration.md) | the 0.3 → 0.4, 0.2 → 0.3, and 0.1 → 0.2 changes and how to migrate |
+| [migration.md](migration.md) | every compatibility change from 0.1 through the current release and how to migrate |
 
 ## Examples
 

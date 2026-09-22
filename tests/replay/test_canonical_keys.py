@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from chassis.core.errors import ConfigurationError
+from chassis.core.errors import ConfigurationError, ReplayMismatch
 from chassis.replay import ReplayChatModel, ReplayMode, ReplaySession
 from chassis.testing import FakeChatModel
 
@@ -59,3 +59,37 @@ def test_string_mapping_keys_still_record_and_replay() -> None:
         messages(), provider_options={"outer": {"inner": [1, 2.5]}, "1": "str"}
     )
     assert result.generations[0].message.content == "answer"
+
+
+def test_set_elements_keep_their_types_in_replay_keys() -> None:
+    """A set of integers must not collide with a set of numeric strings."""
+
+    recording = session(ReplayMode.RECORD)
+    model = ReplayChatModel(
+        session=recording, inner=FakeChatModel(responses=["integer-set"]), model_name="m"
+    )
+    model._generate(messages(), provider_options={1})  # type: ignore[call-arg]
+
+    replaying = ReplaySession(mode=ReplayMode.REPLAY, records=list(recording.records))
+    replay_model = ReplayChatModel(session=replaying, inner=None, model_name="m")
+
+    with pytest.raises(ReplayMismatch) as missing:
+        replay_model._generate(messages(), provider_options={"1"})  # type: ignore[call-arg]
+
+    assert missing.value.context["reason"] == "missing"
+
+
+def test_set_order_is_not_semantic_for_replay_keys() -> None:
+    recording = session(ReplayMode.RECORD)
+    model = ReplayChatModel(
+        session=recording, inner=FakeChatModel(responses=["mixed-set"]), model_name="m"
+    )
+    model._generate(messages(), provider_options={2, "1"})  # type: ignore[call-arg]
+
+    replaying = ReplaySession(mode=ReplayMode.REPLAY, records=list(recording.records))
+    replay_model = ReplayChatModel(session=replaying, inner=None, model_name="m")
+    result = replay_model._generate(  # type: ignore[call-arg]
+        messages(), provider_options={"1", 2}
+    )
+
+    assert result.generations[0].message.content == "mixed-set"

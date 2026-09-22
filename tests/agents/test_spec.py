@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from chassis.agent_spec import AgentRevision, AgentSpec, composition_payload
+from chassis.core.collections import FrozenDict
 from chassis.core.errors import ConfigurationError
 
 
@@ -79,6 +80,22 @@ def test_collections_are_frozen_and_do_not_alias_the_author() -> None:
         spec.metadata["team"] = "x"  # type: ignore[index]
     with pytest.raises(TypeError):
         spec.plugins["ledger"]["pool"] = {}  # type: ignore[index]
+
+
+def test_author_constructed_frozen_dicts_are_rechecked_recursively() -> None:
+    metadata_nested: dict[str, Any] = {"owners": ["finance"]}
+    plugin_nested: dict[str, Any] = {"hosts": ["db-a"]}
+    spec = AgentSpec(
+        name="finance",
+        metadata=FrozenDict({"team": metadata_nested}),
+        plugins=FrozenDict({"ledger": FrozenDict({"database": plugin_nested})}),
+    )
+
+    metadata_nested["owners"].append("other")
+    plugin_nested["hosts"].append("db-b")
+
+    assert spec.metadata == {"team": {"owners": ("finance",)}}
+    assert spec.plugins["ledger"] == {"database": {"hosts": ("db-a",)}}
 
 
 def test_spec_accepts_a_plugin_type_programmatically() -> None:

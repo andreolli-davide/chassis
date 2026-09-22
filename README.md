@@ -173,11 +173,12 @@ what Chassis refuses to promise.
 
 ## Status
 
-Pre-1.0 Beta (`0.8.0`). The surface covered by `tests/test_public_api.py` may break in a
+Pre-1.0 Beta (`0.8.1`). The surface covered by `tests/test_public_api.py` may break in a
 minor release; every break is recorded in [CHANGELOG.md](CHANGELOG.md), and
 [migrations](docs/migration.md) lists the 0.1 → 0.2, 0.2 → 0.3, 0.3 → 0.4,
-0.4 → 0.5, 0.5 → 0.5.1, 0.5.1 → 0.6, 0.6 → 0.7, and 0.7 → 0.8 changes. The Beta
-readiness review is recorded in [beta-readiness.md](docs/beta-readiness.md).
+0.4 → 0.5, 0.5 → 0.5.1, 0.5.1 → 0.6, 0.6 → 0.7, 0.7 → 0.8, and
+0.8 → 0.8.1 changes. The Beta readiness review is recorded in
+[beta-readiness.md](docs/beta-readiness.md).
 
 ## Development
 
@@ -203,10 +204,11 @@ alternative project managers or parallel `requirements.txt` files.
 3. tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
 `.github/workflows/release.yml` runs the full check suite, then refuses to build
-unless the tag, the project version, and the changelog agree; it builds the
-distribution, installs the wheel into a clean environment, runs the quickstart
-against it, and publishes through PyPI trusted publishing (no token is stored).
-`workflow_dispatch` verifies all of that without publishing.
+unless the tag, the project version, and the changelog agree. It builds and
+smoke-tests the distribution, publishes it through PyPI trusted publishing,
+creates the GitHub Release with wheel, sdist, and SBOM assets, and deploys the
+documentation from the released tag. `workflow_dispatch` verifies the build
+without publishing.
 
 ### Examples
 
