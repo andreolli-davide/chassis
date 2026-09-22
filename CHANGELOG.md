@@ -46,6 +46,15 @@ that a minor release may break the documented surface.
   regression tests.
 - **Migration note:** `CleanupFailure.to_dict()` now returns `error_type` plus a
   scrubbed `error` message instead of one combined `"Type: message"` string.
+- **Coverage and compatibility gates established** (roadmap R024). CI now
+  enforces branch coverage for `src/chassis` at the measured 0.5.0 baseline of
+  91% (`pytest --cov=src/chassis --cov-branch`) plus focused per-area floors for
+  lifecycle, resolver, registry, security, replay, and telemetry via
+  `scripts/coverage_gate.py` — a high global number can no longer hide an
+  untested boundary. The lockfile job stays the reproducible development
+  baseline, with a minimum-supported-direct-dependencies job
+  (`uv lock --resolution lowest-direct`) and a latest-compatible job
+  (`uv lock --upgrade`) comparing against it.
 
 ## [0.7.0] - 2026-09-22
 

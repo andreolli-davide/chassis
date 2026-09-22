@@ -42,12 +42,14 @@ Documentation = "https://github.com/andreolli-davide/chassis/tree/main/docs"
 
 [dependency-groups]
 dev = [
+    "coverage>=7.16.1",
     "langchain-core>=1.6.3",
     "langgraph>=1.2.11",
     "langsmith>=0.12.5",
     "pyright>=1.1.414",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
     "ruff>=0.16.7",
 ]
 docs = [
@@ -109,6 +111,10 @@ known-first-party = ["chassis"]
 [tool.ruff.lint.per-file-ignores]
 "examples/**" = ["T201"]
 "tests/**" = ["T201"]
+
+[tool.coverage.run]
+source = ["src/chassis"]
+branch = true
 
 [tool.pyright]
 include = ["src", "tests", "examples"]
