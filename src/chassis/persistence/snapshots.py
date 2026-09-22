@@ -189,7 +189,7 @@ class RuntimeSnapshot:
         redactor: SecretRedactor | None = None,
         agent: str | None = None,
         agent_revision: str | None = None,
-        agent_runtime: str = "langgraph",
+        agent_runtime: str = "unknown",
         graph_definition_hash: str | None = None,
         prompt_hash: str | None = None,
         metadata: Mapping[str, Any] | None = None,

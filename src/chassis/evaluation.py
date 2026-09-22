@@ -22,6 +22,33 @@ __all__ = ["agent_target", "composition_metadata", "evaluate_agent"]
 EvaluationTarget = Callable[[Mapping[str, Any]], Awaitable[dict[str, Any]]]
 
 
+def _agent_runtime_kind(harness: Harness, agent: str | None) -> str | None:
+    """Execution-engine identity of the selected agent runtime, when resolvable.
+
+    The identity comes from the runtime itself — a custom runtime is never
+    labelled ``langgraph``.
+    """
+
+    if agent is None:
+        return None
+    from chassis.agents import AgentNotFound
+
+    runtime = None
+    try:
+        runtime = harness.agents.get(agent)
+    except AgentNotFound:
+        spec = harness.agents.active_spec(agent)
+        if spec is not None and spec.runtime_ref is not None:
+            try:
+                runtime = harness.agents.get(spec.runtime_ref)
+            except AgentNotFound:
+                return None
+    if runtime is None:
+        return None
+    kind = getattr(runtime, "runtime_kind", None)
+    return kind if isinstance(kind, str) and kind else type(runtime).__name__
+
+
 def agent_target(
     harness: Harness,
     agent: str,
@@ -77,7 +104,12 @@ def composition_metadata(
     generation = harness.current_generation
     if generation is None:
         return {"harness": harness.name, "generation_id": None}
-    snapshot = harness.snapshot_for(generation, agent=agent, prompt_hash=prompt_hash)
+    snapshot = harness.snapshot_for(
+        generation,
+        agent=agent,
+        agent_runtime=_agent_runtime_kind(harness, agent),
+        prompt_hash=prompt_hash,
+    )
     return {
         "harness": harness.name,
         "generation_id": snapshot.generation_id,

@@ -709,6 +709,7 @@ class AgentRegistry:
                 generation,
                 agent=agent,
                 agent_revision=agent_revision,
+                agent_runtime=_runtime_kind(runtime),
                 graph_definition_hash=graph_digest,
             )
             outcome = _RunOutcome()
@@ -1033,6 +1034,17 @@ def _record_interrupts(
             generation_id=result.generation_id,
             run_id=result.run_id,
         )
+
+
+def _runtime_kind(runtime: AgentRuntime) -> str:
+    """Identity of the execution engine, as the runtime reports it.
+
+    A runtime may declare ``runtime_kind``; otherwise its class name is used.
+    Custom runtimes are never labelled ``langgraph``.
+    """
+
+    kind = getattr(runtime, "runtime_kind", None)
+    return kind if isinstance(kind, str) and kind else type(runtime).__name__
 
 
 def _definition_digest(runtime: AgentRuntime, run_context: HarnessRunContext) -> str | None:

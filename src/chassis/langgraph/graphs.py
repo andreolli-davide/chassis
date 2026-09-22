@@ -36,7 +36,7 @@ from typing import Any
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph, StateGraph
 
-from chassis.core.errors import GraphBuildError
+from chassis.core.errors import ConfigurationError, GraphBuildError
 from chassis.persistence.hashing import schema_hash, stable_hash, tool_schema_hash
 from chassis.telemetry.base import NoopTelemetry, Telemetry
 from chassis.tools.registry import ToolSnapshot
@@ -175,11 +175,23 @@ class GraphCache:
     """Bounded LRU cache of compiled graphs, keyed by build-time inputs.
 
     Args:
-        max_entries: Maximum number of compiled graphs retained.
+        max_entries: Maximum number of compiled graphs retained. ``0`` disables
+            caching entirely (every build is a miss); negative values are
+            rejected.
         telemetry: Receives ``graph.compile`` and ``graph.cache`` signals.
+
+    The key covers only *declared* build-time inputs (definition version, state
+    schema, middleware topology, tool schema, build-time capability versions).
+    Topology or captured static inputs the key cannot see require an
+    :attr:`AgentDefinition.version` change; the cache cannot detect them.
     """
 
     def __init__(self, *, max_entries: int = 32, telemetry: Telemetry | None = None) -> None:
+        if not isinstance(max_entries, int) or isinstance(max_entries, bool) or max_entries < 0:
+            raise ConfigurationError(
+                "GraphCache max_entries must be a non-negative integer",
+                max_entries=max_entries,
+            )
         self._entries: OrderedDict[str, CompiledStateGraph[Any, Any, Any, Any]] = OrderedDict()
         self._keys: dict[str, GraphCacheKey] = {}
         self._max_entries = max_entries

@@ -129,6 +129,18 @@ data, so it is the contract on authors: **bump it when the node or edge topology
 changes.** Everything else invalidates automatically -- change a tool's schema and
 the graph is rebuilt; change a model provider and it is not.
 
+!!! warning "Captured static inputs are invisible to the cache"
+
+    A builder that captures static values (a closure over a prompt template, a
+    hand-wired tool object, a constant table) can serve a stale compiled graph:
+    the cache key cannot see them. Prefer routing runtime-varying tools through
+    the harness boundary (`GraphBuildInputs.tools`), and treat any other captured
+    static input exactly like a topology change — bump
+    `AgentDefinition.version` when it changes.
+
+`GraphCache(max_entries=0)` disables caching entirely (every build is a miss);
+negative capacities are rejected.
+
 `build_time_capabilities` names capabilities whose *versions* affect construction.
 A capability that contributes nodes belongs there; a model provider does not.
 

@@ -1655,6 +1655,7 @@ class Harness:
         *,
         agent: str | None = None,
         agent_revision: str | None = None,
+        agent_runtime: str | None = None,
         graph_definition_hash: str | None = None,
         prompt_hash: str | None = None,
         metadata: Mapping[str, Any] | None = None,
@@ -1662,7 +1663,9 @@ class Harness:
         """Attributable metadata for one runtime generation.
 
         Configuration is redacted before it is hashed, so a snapshot explains the
-        composition without carrying secret material.
+        composition without carrying secret material. ``agent_runtime`` is the
+        runtime identity reported by the selected execution engine; it is never
+        assumed to be LangGraph.
         """
 
         return RuntimeSnapshot.from_generation(
@@ -1671,6 +1674,7 @@ class Harness:
             redactor=self._redactor,
             agent=agent,
             agent_revision=agent_revision,
+            agent_runtime=agent_runtime if agent_runtime is not None else "unknown",
             graph_definition_hash=graph_definition_hash,
             prompt_hash=prompt_hash,
             metadata=metadata,

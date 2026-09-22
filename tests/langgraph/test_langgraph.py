@@ -525,3 +525,80 @@ async def test_agent_spec_binds_to_a_langgraph_agent_definition() -> None:
         assert result.text == "hello from finance"
         assert result.metadata["runtime"] == "langgraph"
         assert result.metadata["snapshot_digest"]
+
+
+# --------------------------------------------------------------------------
+# Runtime identity and graph cache validation (R020).
+# --------------------------------------------------------------------------
+
+
+async def test_snapshots_report_the_selected_runtime_identity() -> None:
+    from chassis.evaluation import composition_metadata
+    from chassis.testing import TestHarness
+
+    class CustomRuntime:
+        @property
+        def name(self) -> str:
+            return "custom"
+
+        async def invoke(self, request: Any, run_context: Any) -> Any:
+            raise NotImplementedError
+
+        async def stream(self, request: Any, run_context: Any) -> Any:
+            raise NotImplementedError
+            yield  # pragma: no cover - protocol shape only
+
+    async with TestHarness() as harness:
+        harness.register_agent(CustomRuntime())  # type: ignore[arg-type]
+        await harness.reconcile()
+
+        # The identity comes from the selected runtime; a custom runtime is
+        # never labelled `langgraph`, and no runtime means `unknown`.
+        assert composition_metadata(harness)["agent_runtime"] == "unknown"
+        assert composition_metadata(harness, agent="custom")["agent_runtime"] == "CustomRuntime"
+
+
+def test_graph_cache_capacity_is_validated_and_zero_disables() -> None:
+    from chassis.core.errors import ConfigurationError
+    from chassis.langgraph.graphs import AgentDefinition, GraphCache, build_cache_key
+
+    with pytest.raises(ConfigurationError):
+        GraphCache(max_entries=-1)
+
+    def build(inputs: Any) -> Any:
+        raise NotImplementedError
+
+    definition = AgentDefinition(
+        name="cache-probe", version="1", state_schema=ChatState, build=build
+    )
+    key = build_cache_key(definition, tools=[], build_time_versions=None)
+
+    # Zero disables caching: nothing is retained.
+    cache = GraphCache(max_entries=0)
+    cache.put(key, "graph")  # type: ignore[arg-type]
+    assert cache.get(key) is None
+
+
+def test_captured_static_inputs_require_a_version_change() -> None:
+    from chassis.langgraph.graphs import AgentDefinition, build_cache_key
+
+    def build_first(inputs: Any) -> Any:
+        raise NotImplementedError
+
+    def build_second(inputs: Any) -> Any:
+        raise NotImplementedError
+
+    first = AgentDefinition(name="dup", version="1", state_schema=ChatState, build=build_first)
+    second = AgentDefinition(name="dup", version="1", state_schema=ChatState, build=build_second)
+
+    # The key cannot see captured static inputs: two different builders collide
+    # on one key. That hazard is why topology or captured static changes require
+    # a version bump.
+    assert build_cache_key(first, tools=[], build_time_versions=None) == build_cache_key(
+        second, tools=[], build_time_versions=None
+    )
+
+    bumped = AgentDefinition(name="dup", version="2", state_schema=ChatState, build=build_first)
+    assert build_cache_key(first, tools=[], build_time_versions=None) != build_cache_key(
+        bumped, tools=[], build_time_versions=None
+    )

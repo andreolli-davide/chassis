@@ -100,6 +100,12 @@ class LangGraphAgent:
         return self._definition.name
 
     @property
+    def runtime_kind(self) -> str:
+        """Execution engine identity reported into runtime snapshots."""
+
+        return "langgraph"
+
+    @property
     def definition(self) -> AgentDefinition:
         return self._definition
 

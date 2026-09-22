@@ -81,7 +81,9 @@ async def test_composition_metadata_attributes_an_experiment(harness_with_agent:
 
         assert metadata["generation_id"] == harness.current_generation.generation_id  # type: ignore[union-attr]
         assert metadata["chassis_version"]
-        assert metadata["agent_runtime"] == "langgraph"
+        # The identity comes from the selected runtime itself; a custom stub is
+        # never labelled `langgraph`.
+        assert metadata["agent_runtime"] == "StubRuntime"
         assert metadata["plugins"] == {"chassis-services": "1.0.0"}
         assert metadata["capabilities"]["model"] == ["1"]
         assert metadata["config_hash"]

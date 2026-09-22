@@ -91,6 +91,19 @@ that a minor release may break the documented surface.
   backend. Registered runtimes that expose `bind_harness_services` (such as
   `LangGraphAgent`) adopt the harness telemetry and redaction at registration
   unless they were constructed with an explicit override.
+- **Runtime snapshots and graph cache validation corrected** (roadmap R020).
+  `RuntimeSnapshot.agent_runtime` now reports the identity of the *selected*
+  `AgentRuntime` (`runtime_kind` when the runtime declares one, else its class
+  name) — custom runtimes are never labelled `langgraph`, and snapshots built
+  without a runtime report `unknown`. `composition_metadata` resolves the same
+  identity for evaluation experiments. `GraphCache` validates `max_entries`
+  (non-negative integer; `0` explicitly disables caching) and documents that
+  topology or captured static inputs invisible to the cache key require an
+  `AgentDefinition.version` change, with a guide warning preferring
+  harness-bound runtime tools over captured static implementations.
+- **Migration note:** code that asserted `snapshot.agent_runtime == "langgraph"`
+  for custom runtimes must read the runtime's own identity; snapshots without an
+  agent run now report `unknown` instead of `langgraph`.
 
 ## [0.6.0] - 2026-09-22
 
