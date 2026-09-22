@@ -28,7 +28,7 @@ from langchain_core.messages import AIMessage, BaseMessage  # noqa: E402
 from langchain_core.outputs import ChatGeneration, ChatResult  # noqa: E402
 from pydantic import ConfigDict  # noqa: E402
 
-from chassis.core.errors import ReplayMismatch  # noqa: E402
+from chassis.core.errors import ConfigurationError, ReplayMismatch  # noqa: E402
 from chassis.replay.models import BoundaryKind, ReplayFallback  # noqa: E402
 from chassis.replay.session import ReplaySession, boundary_key  # noqa: E402
 
@@ -113,9 +113,13 @@ class ReplayChatModel(BaseChatModel):
         if self.session.has_remaining(BoundaryKind.MODEL, key=key):
             return key, self._from_record(self.session.replay(BoundaryKind.MODEL, key=key).response)
         if self.session.fallback is ReplayFallback.ERROR:
+            exhausted = self.session.has(BoundaryKind.MODEL, key=key)
             raise ReplayMismatch(
-                "model call was not recorded and replay does not fall back to live execution",
+                "recorded model interactions for this key are exhausted"
+                if exhausted
+                else "model call was not recorded and replay does not fall back to live execution",
                 model=self.model_name,
+                reason="exhausted" if exhausted else "missing",
                 recorded=self.session.counts().get(BoundaryKind.MODEL.value, 0),
             )
         return key, None
@@ -202,10 +206,17 @@ def _canonical_value(name: str, value: Any) -> Any:
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
     if isinstance(value, Mapping):
-        return {
-            str(key): _canonical_value(name, item)
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
-        }
+        normalized: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                # str(key) would silently merge {1: ..., "1": ...} onto one entry.
+                raise ConfigurationError(
+                    "invocation option requires string mapping keys",
+                    option=name,
+                    key_type=type(key).__name__,
+                )
+            normalized[key] = _canonical_value(name, item)
+        return dict(sorted(normalized.items()))
     if isinstance(value, (list, tuple)):
         return [_canonical_value(name, item) for item in value]
     if isinstance(value, (set, frozenset)):

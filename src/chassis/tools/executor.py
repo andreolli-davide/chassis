@@ -331,9 +331,15 @@ class ToolExecutor:
             if self._replay.has_remaining(BoundaryKind.TOOL, key=replay_key):
                 replayed = self._replay.replay(BoundaryKind.TOOL, key=replay_key).response
             elif self._replay.fallback is ReplayFallback.ERROR:
+                exhausted = self._replay.has(BoundaryKind.TOOL, key=replay_key)
                 raise ReplayMismatch(
-                    "tool call was not recorded and replay does not fall back to live execution",
+                    "recorded tool interactions for this key are exhausted"
+                    if exhausted
+                    else (
+                        "tool call was not recorded and replay does not fall back to live execution"
+                    ),
                     tool=entry.name,
+                    reason="exhausted" if exhausted else "missing",
                     recorded=self._replay.counts().get(BoundaryKind.TOOL.value, 0),
                 )
 
@@ -364,7 +370,8 @@ class ToolExecutor:
                 )
                 if result.status != "ok":
                     # A recorded failure follows the live failure shape: the
-                    # error hook fires and the after hook does not.
+                    # error hook fires and the after hook does not, and
+                    # raise_on_error raises exactly as it would have live.
                     message = result.error or ""
                     span.record_error(ToolExecutionError(message, tool=entry.name))
                     await self._dispatch(
@@ -372,6 +379,10 @@ class ToolExecutor:
                         {"tool": entry.name, "error": message, "run_id": request.run_id},
                         hook_snapshot,
                     )
+                    if raise_on_error:
+                        if result.status == "timeout":
+                            raise ToolExecutionError(message, tool=entry.name, status="timeout")
+                        raise ToolExecutionError(message, tool=entry.name)
                     return result
             else:
                 try:
