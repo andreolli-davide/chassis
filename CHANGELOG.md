@@ -70,6 +70,19 @@ that a minor release may break the documented surface.
   registration/tool metadata, `ToolPolicy.metadata`, run metadata, or snapshot
   metadata must mutate its own copies instead; published containers now raise at
   every depth.
+- **AgentSpec materialization is transactional and owner-safe** (roadmap R010).
+  Contributions are staged and validated before any desired state is mutated,
+  and a failed materialization restores the exact previous scope and registry    state — including entries a replacement had swapped. A revision that moves to    a new scope withdraws the old one only after the new one materialized, so a
+  failed replacement never destroys the active revision. `install` now refuses
+  to take over a pre-existing user-owned composition scope instead of rewriting
+  it, an agent-owned entry id squatted by a foreign entry is rejected, reserved
+  metadata keys (`chassis.agent`, `chassis.agent_revision`) are rejected at
+  `AgentSpec` construction, and withdrawal removes only the state a revision
+  owns.
+- **Migration note:** code that pointed an `AgentSpec.scope` at an existing
+  user-owned scope relied on implicit takeover; declare the agent's own scope
+  (the default `/agents/<name>`), or empty the user scope first. Specs carrying
+  reserved metadata keys now fail construction.
 
 ## [0.5.1] - 2026-09-22
 

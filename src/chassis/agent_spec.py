@@ -41,7 +41,19 @@ from chassis.capabilities.keys import CapabilityRequirement
 from chassis.core.collections import FrozenDict, freeze
 from chassis.core.errors import ConfigurationError
 
-__all__ = ["AgentRevision", "AgentSpec", "composition_payload"]
+__all__ = [
+    "AGENT_METADATA_KEY",
+    "AGENT_REVISION_METADATA_KEY",
+    "RESERVED_METADATA_KEYS",
+    "AgentRevision",
+    "AgentSpec",
+    "composition_payload",
+]
+
+#: Reserved scope-metadata keys identifying the agent revision a scope materialized.
+AGENT_METADATA_KEY = "chassis.agent"
+AGENT_REVISION_METADATA_KEY = "chassis.agent_revision"
+RESERVED_METADATA_KEYS = (AGENT_METADATA_KEY, AGENT_REVISION_METADATA_KEY)
 
 #: Default parent path under which an agent's scope is created when it declares none.
 DEFAULT_AGENT_ROOT = "/agents"
@@ -187,6 +199,13 @@ class AgentSpec:
     metadata: Mapping[str, Any] = field(default_factory=FrozenDict)
 
     def __post_init__(self) -> None:
+        for key in RESERVED_METADATA_KEYS:
+            if key in self.metadata:
+                raise ConfigurationError(
+                    "agent metadata must not use a reserved key",
+                    agent=self.name,
+                    field=key,
+                )
         object.__setattr__(self, "name", _validate_identifier(self.name, field_name="name"))
         object.__setattr__(
             self, "revision", _validate_identifier(self.revision, field_name="revision")

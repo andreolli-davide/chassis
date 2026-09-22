@@ -138,6 +138,12 @@ scope = harness.current_generation.scopes.get("/agents/finance")
 assert scope.metadata["chassis.agent_revision"] == "17"
 ```
 
+Materialization is transactional and owner-safe: contributions are staged and
+validated before desired state is mutated, a failure restores the exact previous
+scope and registry state, and a revision that moves scope withdraws the old one    only after the new one materialized. `install` refuses to take over a
+pre-existing user-owned scope — an agent owns its `/agents/<name>` scope (or one    its previous revision created) and nothing else — and the `chassis.agent` and
+`chassis.agent_revision` metadata keys are reserved for the harness.
+
 ## 5. Tools and capabilities
 
 Both are **composition visibility**, and both use the same inheritance-plus-narrowing
