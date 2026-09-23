@@ -33,8 +33,7 @@ and logical unload is still distinct from physical disposal.
 runtime API or persisted-format version. It establishes the candidate 1.0
 surface and the release controls needed to review it:
 
-- the package version uses PEP 440 spelling `1.0.0b1` (and the matching eventual
-  tag is `v1.0.0b1`);
+- the package version uses PEP 440 spelling `1.0.0b1` and tag `v1.0.0b1`;
 - the current surface is checked against both the released 0.8.1 baseline and
   `tests/compat/api-baseline-1.0.0b1.json`;
 - beta GitHub releases are marked as prereleases and do not advance the latest
@@ -43,8 +42,8 @@ surface and the release controls needed to review it:
   every current format live in `tests/compat/v1.0.0b1/`. Permanent 1.0 fixtures
   remain a final-release gate, not a claim made by this beta checkpoint.
 
-Install the beta explicitly when it is published; ordinary stable resolution
-does not select a prerelease:
+Install the published beta explicitly; ordinary stable resolution does not
+select a prerelease:
 
 ```bash
 pip install chassis-harness==1.0.0b1

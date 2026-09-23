@@ -20,14 +20,16 @@ runtime generation it started with. LangGraph is the first-class execution engin
 ## Install
 
 ```bash
-pip install chassis-harness                       # the core lifecycle kernel
-pip install "chassis-harness[langgraph]"          # the LangGraph adapter
-pip install "chassis-harness[langsmith]"          # LangSmith telemetry + evaluation
-pip install "chassis-harness[opentelemetry]"      # OpenTelemetry telemetry adapter
-pip install "chassis-harness[langgraph,langsmith,opentelemetry]"
+pip install chassis-harness==1.0.0b1                        # beta core lifecycle kernel
+pip install "chassis-harness[langgraph]==1.0.0b1"           # LangGraph adapter
+pip install "chassis-harness[langsmith]==1.0.0b1"           # LangSmith telemetry + evaluation
+pip install "chassis-harness[opentelemetry]==1.0.0b1"       # OpenTelemetry telemetry adapter
+pip install "chassis-harness[langgraph,langsmith,opentelemetry]==1.0.0b1"
 ```
 
-Python 3.12 or 3.13. The import package is `chassis`.
+Python 3.12 or 3.13. The import package is `chassis`. These commands select the
+published beta explicitly; an unqualified install selects the latest stable
+release, currently 0.9.1.
 
 The core has no dependency on `langgraph`, `langchain-core`, or `langsmith`:
 importing `chassis`, the plugin lifecycle, generations, budgets, and diagnostics all
@@ -174,9 +176,9 @@ what Chassis refuses to promise.
 
 ## Status
 
-Development target: **1.0.0b1**, the first 1.0 beta checkpoint. The latest
-stable release remains **0.9.1** while the candidate API, persisted formats,
-release matrix, documentation hosting, and support policy complete review. The
+Latest beta: **1.0.0b1**, published on 2026-09-22. The latest stable release is
+**0.9.1**; its [documentation archive](https://andreolli-davide.github.io/chassis/0.9.1/)
+remains available while the final 1.0 API and format baselines complete review. The
 surface covered by `tests/test_public_api.py` is classified and checked against
 both the released 0.8.1 contract and the 1.0 beta candidate
 ([compatibility](docs/compatibility.md)); every persisted format has a
@@ -213,16 +215,22 @@ alternative project managers or parallel `requirements.txt` files.
 3. tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
 Prereleases use canonical PEP 440 versions (`1.0.0b1`) and matching tags
-(`v1.0.0b1`). They publish as GitHub prereleases and do not replace the latest
-stable documentation deployment.
+(`v1.0.0b1`). They publish as GitHub prereleases. The documentation homepage
+follows the published beta; the previous stable documentation is preserved at
+[`/0.9.1/`](https://andreolli-davide.github.io/chassis/0.9.1/).
 
 `.github/workflows/release.yml` runs the full check suite, then refuses to build
 unless the tag, the project version, and the changelog agree. It builds and
 smoke-tests the distribution once through the reusable CI matrix, publishes the
 same verified bytes through PyPI trusted publishing, creates the GitHub Release
 with wheel, sdist, SHA-256 digests, and SBOM assets, and deploys documentation
-only from a stable released tag. `workflow_dispatch` runs the complete matrix
-and assembles the release bundle without publishing.
+only from a stable released tag. A separate manual Docs workflow publishes beta
+documentation with the stable archive. Release `workflow_dispatch` runs the
+complete matrix and assembles the release bundle without publishing.
+
+To refresh the beta documentation after a reviewed `main` change, run
+`gh workflow run docs.yml --ref main -f deploy=true`. The deployment includes
+the immutable `v0.9.1` documentation at `/0.9.1/`.
 
 ### Examples
 
@@ -240,7 +248,7 @@ suite runs all of them.
 
 ## Documentation
 
-- Rendered docs: **https://andreolli-davide.github.io/chassis/**
+- [Rendered beta documentation](https://andreolli-davide.github.io/chassis/)
 - [`examples/production_reference/`](examples/production_reference/README.md) — the production
   reference application: one self-contained support-desk system composing configuration, catalog,
   scopes, `AgentSpec`, policy, secrets, invoke and streaming, replay, hot replacement with pinned

@@ -1017,7 +1017,7 @@ Acceptance criteria:
 **Severity:** High. **Affected guarantees:** release provenance and artifact
 quality.
 
-**Status: implementation complete for `1.0.0b1`; remote dry run pending.**
+**Status: implemented and exercised by the `1.0.0b1` tag workflow.**
 Release tags and dry runs call the same reusable workflow as branch CI, covering
 supported Python versions, branch and focused coverage, dependency bounds,
 audit, strict docs, package formats, optional extras, quickstart, and the
@@ -1050,9 +1050,9 @@ Acceptance criteria:
 
 **Severity:** Medium. **Affected guarantees:** the documented public workflow.
 
-**Status: in progress.** Main and prerelease runs now build docs strictly but
-cannot deploy the stable site. Immutable versioned paths and the public-index
-canary remain open.
+**Status: in progress.** The beta documentation is published at the site root
+with the previous stable documentation archived at `/0.9.1/`. Immutable `/1.0/`
+and `/latest/` paths and the public-index canary remain open for final 1.0.
 
 - Publish immutable documentation for `/1.0/` and a movable `/latest/` alias;
   main-branch documentation must not overwrite the released 1.0 site.
@@ -1075,10 +1075,11 @@ Acceptance criteria:
 
 **Severity:** Medium. **Affected guarantees:** compatibility and operations.
 
-**Status: in progress.** The 1.0.0b1 readiness review records the current
-security treatment, bad-beta yank/fix-forward procedure, and external-control
-snapshot. Supported-Python alignment, protected release authority, PyPI
-approval, hosted dry-run evidence, and final maintainer sign-off remain open.
+**Status: beta controls complete; final support horizon pending.** The 1.0.0b1
+readiness review records the current security treatment, bad-beta
+yank/fix-forward procedure, and external controls. Supported Python versions,
+protected release authority, PyPI approval, hosted dry-run evidence, and
+maintainer sign-off were completed for the beta.
 
 - Decide the supported Python versions at release-candidate time, list them in
   package classifiers and documentation, and test each one.

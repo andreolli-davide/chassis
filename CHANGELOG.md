@@ -7,6 +7,11 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
+### Documentation
+
+- The rendered documentation homepage now identifies `1.0.0b1` as the latest
+  beta and links to the preserved `0.9.1` stable documentation archive.
+
 ## [1.0.0b1] - 2026-09-22
 
 First 1.0 beta checkpoint. It freezes a candidate public API for review and
@@ -15,9 +20,9 @@ makes the release workflow prerelease-aware without yet declaring the permanent
 
 ### Changed
 
-- **The development version is now `1.0.0b1`.** Chassis uses the canonical
+- **The first 1.0 beta is `1.0.0b1`.** Chassis uses the canonical
   [PEP 440](https://peps.python.org/pep-0440/) spelling for the release commonly
-  described as 1.0.0-beta 1; its eventual tag is `v1.0.0b1`.
+  described as 1.0.0-beta 1; its tag is `v1.0.0b1`.
 - **The beta supports Python 3.12 and 3.13.** Package metadata now excludes
   untested newer interpreters; support for them requires a future tested release.
 - **The 1.0 beta API has its own checked-in candidate baseline.** Compatibility
@@ -38,12 +43,12 @@ makes the release workflow prerelease-aware without yet declaring the permanent
 - **Prerelease publication no longer advances stable release channels.** A beta
   tag is marked as a GitHub prerelease and does not replace the latest stable
   documentation deployment. Pushes to `main` verify documentation without
-  deploying it; only a stable release may update the stable site.
+  deploying it; a separate, explicit Docs run publishes the beta homepage and
+  preserves the previous stable documentation at `/0.9.1/`.
 - **The beta has an explicit readiness decision record.**
   `docs/1.0-beta-readiness.md` records local validation, API and format review,
-  publication architecture, the read-only external-control snapshot,
-  rollback/yank procedure, deliberate limitations, and the exact blockers that
-  keep the unpublished candidate at NO-GO.
+  publication architecture, external controls, the rollback/yank procedure,
+  deliberate limitations, and maintainer sign-off.
 
 ## [0.9.1] - 2026-09-22
 

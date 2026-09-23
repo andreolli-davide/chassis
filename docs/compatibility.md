@@ -1,7 +1,7 @@
 # Compatibility and deprecation policy
 
-Chassis 1.0.0b1 is the first 1.0 beta checkpoint; 0.9.1 remains the latest
-stable release while it is prepared. Until 1.0.0 final, the documented surface
+Chassis 1.0.0b1 is the published first 1.0 beta checkpoint; 0.9.1 remains the
+latest stable release. Until 1.0.0 final, the documented surface
 is technically pre-1.0, but 0.9.0 was the **last planned release with deliberate
 pre-1.0 compatibility changes**. This page defines what is covered by
 compatibility, what may change, how an API is retired, and how persisted data is

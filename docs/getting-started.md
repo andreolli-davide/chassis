@@ -5,13 +5,14 @@ Five minutes from install to a running agent, and a map of where to go next.
 ## Install
 
 ```bash
-pip install chassis-harness                       # core lifecycle kernel
-pip install "chassis-harness[langgraph]"          # LangGraph adapter + langchain-core
-pip install "chassis-harness[langsmith]"          # LangSmith telemetry + evaluation
+pip install chassis-harness==1.0.0b1                        # beta core lifecycle kernel
+pip install "chassis-harness[langgraph]==1.0.0b1"           # LangGraph adapter + langchain-core
+pip install "chassis-harness[langsmith]==1.0.0b1"           # LangSmith telemetry + evaluation
 ```
 
-The import package is `chassis`; the distribution is `chassis-harness`. Python 3.12
-and 3.13 are supported.
+This guide follows the 1.0.0b1 beta. The import package is `chassis`; the
+distribution is `chassis-harness`. Python 3.12 and 3.13 are supported. For the
+latest stable release, see the [0.9.1 documentation archive](https://andreolli-davide.github.io/chassis/0.9.1/).
 
 The core depends only on `pydantic`, `packaging`, and `pyyaml`; it imports and runs
 without `langgraph`, `langchain-core`, or `langsmith`. This page uses the LangGraph
