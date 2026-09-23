@@ -189,19 +189,26 @@ class AgentRegistry:
             runtime=runtime,
             scope_id=None if scope is None else scope.id,
         )
-        self._entries[registration.registration_id] = registration
-        self._names.setdefault(name, []).append(registration.registration_id)
+        # A runtime that accepts harness services (LangGraph agents do) binds
+        # this harness's telemetry and redaction unless it was built with an
+        # explicit override. Bind before publishing the registration so a
+        # failing binder cannot leave a visible, scope-owned phantom. For a
+        # replacement, the previous registration remains the active one until
+        # the new runtime has finished binding.
+        harness = self._harness
+        if harness is not None:
+            binder = getattr(runtime, "bind_harness_services", None)
+            if callable(binder):
+                binder(harness.telemetry, harness.redactor)
+
+        # Register ownership before publishing: Scope.cleanup can reject a
+        # closing scope, and that failure must also leave the registry intact.
         if scope is not None:
             scope.cleanup(
                 f"agent {name}", self._release, registration.registration_id, kind="agent"
             )
-        # A runtime that accepts harness services (LangGraph agents do) binds
-        # this harness's telemetry and redaction unless it was built with an
-        # explicit override.
-        if self._harness is not None:
-            binder = getattr(runtime, "bind_harness_services", None)
-            if callable(binder):
-                binder(self._harness.telemetry, self._harness.redactor)
+        self._entries[registration.registration_id] = registration
+        self._names.setdefault(name, []).append(registration.registration_id)
         return runtime
 
     def _release(self, registration_id: str) -> bool:

@@ -108,6 +108,53 @@ async def test_replaced_runtimes_release_cleanly_in_either_order() -> None:
     assert "worker" not in registry
 
 
+async def test_a_failing_binder_does_not_publish_or_own_a_registration() -> None:
+    from chassis.agents import AgentRegistry
+    from chassis.core.scope import Scope
+
+    class FailingRuntime(NamedRuntime):
+        def bind_harness_services(self, telemetry: Any, redactor: Any) -> None:
+            raise RuntimeError("binding failed")
+
+    h = Harness(name="agents")
+    registry = AgentRegistry(harness=h)
+    scope = Scope("owner")
+
+    with pytest.raises(RuntimeError, match="binding failed"):
+        registry.register(FailingRuntime("worker"), scope=scope)
+
+    assert "worker" not in registry
+    assert len(registry) == 0
+    assert scope.effects == ()
+    await scope.aclose()
+
+
+async def test_a_failing_replacement_binder_preserves_the_previous_owner() -> None:
+    from chassis.agents import AgentRegistry
+    from chassis.core.scope import Scope
+
+    class FailingRuntime(NamedRuntime):
+        def bind_harness_services(self, telemetry: Any, redactor: Any) -> None:
+            raise RuntimeError("binding failed")
+
+    h = Harness(name="agents")
+    registry = AgentRegistry(harness=h)
+    old_scope = Scope("old")
+    failed_scope = Scope("failed")
+    old = registry.register(NamedRuntime("worker"), scope=old_scope)
+
+    with pytest.raises(RuntimeError, match="binding failed"):
+        registry.register(FailingRuntime("worker"), scope=failed_scope, replace=True)
+
+    assert registry.get("worker") is old
+    assert len(registry) == 1
+    assert len(old_scope.effects) == 1
+    assert failed_scope.effects == ()
+    await failed_scope.aclose()
+    await old_scope.aclose()
+    assert "worker" not in registry
+
+
 async def test_install_materializes_a_scope_and_its_contributions() -> None:
     h = harness()
     revision = h.agents.install(
