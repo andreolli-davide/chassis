@@ -121,7 +121,9 @@ class PluginRegistry:
             entry_id: Stable identity of the desired entry. Defaults to a unique
                 name derived from the manifest, so two installs of the same
                 implementation stay distinguishable.
-            config: Effective configuration, for diagnostics and snapshots.
+            config: Effective configuration, for diagnostics and snapshots. For a
+                plugin instance it must match the configuration used to construct
+                that instance; plugin classes are constructed with this mapping.
             replace: Replace an existing desired entry and bump its revision. A
                 running instance of the previous revision stays alive until no
                 generation can reach it.
@@ -129,6 +131,14 @@ class PluginRegistry:
         """
 
         plugin_instance = plugin(config) if isinstance(plugin, type) else plugin
+        if not isinstance(plugin, type) and config is not None:
+            instance_config = freeze(plugin_instance.config)
+            requested_config = freeze(config)
+            if requested_config != instance_config:
+                raise ConfigurationError(
+                    "configuration for a plugin instance must match its constructed config",
+                    plugin=type(plugin_instance).__name__,
+                )
         manifest = getattr(plugin_instance, "manifest", None)
         if not isinstance(manifest, PluginManifest):
             raise PluginLoadError(
