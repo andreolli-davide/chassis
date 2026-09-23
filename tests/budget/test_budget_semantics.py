@@ -143,6 +143,66 @@ def test_a_report_that_crosses_an_accounted_limit_is_refused() -> None:
     assert governor.consumed(BudgetDimension.TOKENS) == 0
 
 
+def test_record_is_atomic_when_a_later_local_dimension_exceeds_its_limit() -> None:
+    governor = BudgetGovernor(BudgetLimits(model_calls=2, tokens=10, estimated_cost=1.0))
+
+    with pytest.raises(BudgetExceeded) as excinfo:
+        governor.record(model_calls=1, tokens=11, estimated_cost=0.5)
+
+    assert excinfo.value.context["dimension"] == "tokens"
+    assert governor.consumed(BudgetDimension.MODEL_CALLS) == 0
+    assert governor.consumed(BudgetDimension.TOKENS) == 0
+    assert governor.consumed(BudgetDimension.ESTIMATED_COST) == 0
+
+
+def test_record_is_atomic_when_a_parent_dimension_exceeds_its_limit() -> None:
+    parent = BudgetGovernor(BudgetLimits(model_calls=2, tokens=10, estimated_cost=1.0))
+    child = parent.child()
+
+    with pytest.raises(BudgetExceeded) as excinfo:
+        child.record(model_calls=1, tokens=11, estimated_cost=0.5)
+
+    assert excinfo.value.context["dimension"] == "tokens"
+    for dimension in (
+        BudgetDimension.MODEL_CALLS,
+        BudgetDimension.TOKENS,
+        BudgetDimension.ESTIMATED_COST,
+    ):
+        assert child.consumed(dimension) == 0
+        assert parent.consumed(dimension) == 0
+
+
+def test_record_validates_all_dimensions_before_recording_any_usage() -> None:
+    from chassis.core.errors import ConfigurationError
+
+    parent = BudgetGovernor()
+    child = parent.child()
+
+    with pytest.raises(ConfigurationError):
+        child.record(model_calls=1, tokens=1.5, estimated_cost=0.5)  # type: ignore[arg-type]
+
+    for dimension in (
+        BudgetDimension.MODEL_CALLS,
+        BudgetDimension.TOKENS,
+        BudgetDimension.ESTIMATED_COST,
+    ):
+        assert child.consumed(dimension) == 0
+        assert parent.consumed(dimension) == 0
+
+
+def test_successful_record_propagates_all_dimensions_through_ancestors() -> None:
+    root = BudgetGovernor()
+    parent = root.child()
+    child = parent.child()
+
+    child.record(model_calls=1, tokens=40, estimated_cost=0.02)
+
+    for governor in (child, parent, root):
+        assert governor.consumed(BudgetDimension.MODEL_CALLS) == 1
+        assert governor.consumed(BudgetDimension.TOKENS) == 40
+        assert governor.consumed(BudgetDimension.ESTIMATED_COST) == pytest.approx(0.02)
+
+
 def test_recorded_usage_propagates_to_the_parent_allocation() -> None:
     parent = BudgetGovernor(BudgetLimits(tokens=100))
     child = parent.child()

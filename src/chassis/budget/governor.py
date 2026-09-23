@@ -250,12 +250,24 @@ class BudgetGovernor:
             )
         """
 
-        if model_calls:
-            self.consume(BudgetDimension.MODEL_CALLS, amount=model_calls)
-        if tokens:
-            self.consume(BudgetDimension.TOKENS, amount=tokens)
-        if estimated_cost:
-            self.consume(BudgetDimension.ESTIMATED_COST, amount=estimated_cost)
+        charges = (
+            (BudgetDimension.MODEL_CALLS, model_calls),
+            (BudgetDimension.TOKENS, tokens),
+            (BudgetDimension.ESTIMATED_COST, estimated_cost),
+        )
+
+        # Validate and check every charge before mutating any governor. This keeps
+        # one report atomic even when a later dimension or ancestor rejects it.
+        for dimension, amount in charges:
+            self._validate_amount(dimension, amount)
+        for dimension, amount in charges:
+            if amount:
+                self.check(dimension, amount=amount)
+        for dimension, amount in charges:
+            if amount:
+                self._usage.add(dimension, amount)
+                if self._parent is not None:
+                    self._parent._record(dimension, amount)
 
     def _record(self, dimension: BudgetDimension, amount: float) -> None:
         self._usage.add(dimension, amount)
