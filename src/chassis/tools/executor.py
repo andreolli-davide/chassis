@@ -517,9 +517,7 @@ class ToolExecutor:
                     generation_id=request.generation_id,
                     run_id=request.run_id,
                 )
-            elif (
-                self._replay.is_replaying and self._replay.fallback is ReplayFallback.LIVE
-            ):
+            elif self._replay.is_replaying and self._replay.fallback is ReplayFallback.LIVE:
                 self._replay.record_fallback(
                     BoundaryKind.TOOL,
                     key=replay_key,

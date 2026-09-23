@@ -23,6 +23,7 @@ from chassis.runtime import (
     AgentResult,
     HarnessRunContext,
 )
+from chassis.secrets import SecretRedactor
 from chassis.testing import FakeChatModel, TestHarness, fake_tool
 from chassis.tools import ToolPolicy, ToolRequest
 
@@ -141,9 +142,7 @@ async def test_unrecorded_tool_call_fails_by_default_and_can_run_live() -> None:
 
 
 async def test_tool_live_fallback_capture_is_redacted_and_not_replayed_in_session() -> None:
-    redactor = __import__("chassis.secrets", fromlist=["SecretRedactor"]).SecretRedactor(
-        [SECRET]
-    )
+    redactor = SecretRedactor([SECRET])
     replaying = ReplaySession(
         mode=ReplayMode.REPLAY, fallback=ReplayFallback.LIVE, redactor=redactor
     )

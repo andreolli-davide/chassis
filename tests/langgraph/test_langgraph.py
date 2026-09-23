@@ -541,7 +541,7 @@ async def test_langgraph_config_metadata_cannot_override_harness_identity() -> N
             tenant_id="tenant-1",
         )
 
-        config = agent._config(
+        config = agent._config(  # pyright: ignore[reportPrivateUsage]
             AgentRequest(
                 metadata={
                     "chassis_agent": "spoofed-agent",
@@ -557,7 +557,7 @@ async def test_langgraph_config_metadata_cannot_override_harness_identity() -> N
             context,
         )
 
-        assert config["metadata"] == {
+        assert config.get("metadata") == {
             "chassis_agent": "echo-agent",
             "chassis_agent_version": "7",
             "chassis_agent_revision": "17",
@@ -584,7 +584,9 @@ async def test_langgraph_result_metadata_cannot_override_runtime_identity() -> N
             },
         )
 
-        result = agent._result({}, AgentRequest(), context, 0.1)
+        result = agent._result(  # pyright: ignore[reportPrivateUsage]
+            {}, AgentRequest(), context, 0.1
+        )
 
         assert result.metadata == {
             "agent_version": "7",
