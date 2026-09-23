@@ -97,7 +97,9 @@ this order; declared capabilities do.
 
 Ambiguity is diagnosed, not resolved arbitrarily: two providers satisfying one
 requirement make the consumer `PENDING` until a preference is set with
-`prefer_provider` or `provider_preferences` in configuration.
+`prefer_provider` or `provider_preferences` in configuration. Preferences are
+captured when a generation is published; changing one affects runs after the next
+reconciliation, while runs holding an older generation retain its provider choice.
 
 ## Generations
 

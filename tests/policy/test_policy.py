@@ -194,6 +194,9 @@ async def test_ambiguous_scoped_policies_deny_until_a_scope_preference_selects()
 
         # A scope-scoped preference selects the governing policy for that scope.
         harness.prefer_provider("policy", "research-grant", scope="/research")
+        await harness.reconcile()
+        generation = harness.current_generation
+        assert generation is not None
         scoped = harness.run_environment(generation, scope="/research")
         result = await scoped.executor.execute(
             ToolRequest(name="fetch", args={"url": "https://example.test"}),
@@ -230,13 +233,52 @@ async def test_explicit_preference_selects_the_governing_policy() -> None:
     harness.prefer_provider("policy", "denier")
     await harness.start()
     try:
+        generation = harness.current_generation
+        assert generation is not None
         with pytest.raises(PolicyDenied):
             await call_fetch(harness)
 
         harness.prefer_provider("policy", "granter")
+        # Desired preferences do not change a generation already acquired by a run.
+        old_environment = harness.run_environment(generation)
+        with pytest.raises(PolicyDenied):
+            await old_environment.executor.execute(
+                ToolRequest(name="fetch", args={"url": "https://example.test"}),
+                snapshot=harness.tool_snapshot(generation),
+                policy=old_environment.policy,
+            )
+
+        await harness.reconcile()
+        new_generation = harness.current_generation
+        assert new_generation is not None
+        assert new_generation is not generation
         result = await call_fetch(harness)
 
         assert result.content == "fetched"
+    finally:
+        await harness.stop()
+
+
+async def test_published_secret_preference_is_stable_until_reconciliation() -> None:
+    harness = Harness()
+    harness.install(secret_provider("vault-a", {"API_TOKEN": "value-a"}), entry_id="vault-a")
+    harness.install(secret_provider("vault-b", {"API_TOKEN": "value-b"}), entry_id="vault-b")
+    harness.prefer_provider("secrets", "vault-a")
+    await harness.start()
+    try:
+        generation = harness.current_generation
+        assert generation is not None
+
+        harness.prefer_provider("secrets", "vault-b")
+        old_environment = harness.run_environment(generation)
+        assert (await old_environment.secrets.get("API_TOKEN")).reveal() == "value-a"
+
+        await harness.reconcile()
+        new_generation = harness.current_generation
+        assert new_generation is not None
+        assert new_generation is not generation
+        new_environment = harness.run_environment(new_generation)
+        assert (await new_environment.secrets.get("API_TOKEN")).reveal() == "value-b"
     finally:
         await harness.stop()
 

@@ -726,6 +726,8 @@ class Harness:
 
         Programmatic preferences are stored separately from declarative
         configuration preferences and take precedence over them for the same key.
+        The preference is desired state: published generations keep the choice
+        captured at publication until the next reconciliation.
         """
 
         if consumer is not None and scope is not None:
@@ -1026,7 +1028,11 @@ class Harness:
                 snapshot_factory = self._snapshot_factory(instances)
                 current = self._generations.current
                 reuse_current = current is not None and self._same_composition(
-                    current, instances, snapshot_factory, scope_tree
+                    current,
+                    instances,
+                    snapshot_factory,
+                    scope_tree,
+                    self._effective_preferences(),
                 )
             except BaseException as error:
                 span.record_error(error)
@@ -1053,7 +1059,11 @@ class Harness:
                 generation = self._generations.build(
                     snapshot_factory=snapshot_factory,
                     instances=instances,
-                    metadata={"plugins": len(instances), "scopes": len(scope_tree)},
+                    metadata={
+                        "plugins": len(instances),
+                        "scopes": len(scope_tree),
+                        "provider_preferences": self._effective_preferences(),
+                    },
                     scopes=scope_tree,
                 )
                 previous = self._generations.publish(generation)
@@ -1513,6 +1523,7 @@ class Harness:
         instances: tuple[PluginInstance, ...],
         snapshot_factory: Any,
         scope_tree: ScopeTree,
+        preferences: Mapping[str, str],
     ) -> bool:
         """Whether the candidate is composition-identical to the current generation.
 
@@ -1529,6 +1540,8 @@ class Harness:
         # Comparing resolution provenance object-wise would see pre-mount
         # instance ids and churn a generation for an identical composition.
         if not scope_tree.same_observable_composition(current.scopes):
+            return False
+        if current.metadata.get("provider_preferences", {}) != preferences:
             return False
         return snapshot_factory(current.generation_id) == current.snapshot
 
@@ -1814,16 +1827,23 @@ class Harness:
             )
         if len(eligible) == 1:
             return eligible[0].value
-        preferred = self._preferred_provider(key.name, scope)
+        preferred = self._preferred_provider(
+            generation,
+            key.name,
+            resolved_scope.path if resolved_scope is not None else None,
+        )
         if preferred is not None:
             for item in eligible:
                 if preferred in (item.registration_id, item.provider_id):
                     return item.value
-            instance = self._plugin_registry.instance(preferred)
-            if instance is not None:
-                for item in eligible:
-                    if item.provider_id == instance.instance_id:
-                        return item.value
+            preferred_instances = {
+                instance.instance_id
+                for instance in generation.instances
+                if preferred in (instance.entry_id, instance.instance_id)
+            }
+            for item in eligible:
+                if item.provider_id in preferred_instances:
+                    return item.value
         raise CapabilityAmbiguous(
             f"capability {key} has several eligible providers and no explicit preference",
             capability=str(key),
@@ -1832,13 +1852,16 @@ class Harness:
         )
 
     def _preferred_provider(
-        self, capability: str, scope: CompositionScope | str | None
+        self,
+        generation: RuntimeGeneration,
+        capability: str,
+        scope_path: str | None,
     ) -> str | None:
-        """Most specific explicit preference: scope first, then global."""
+        """Most specific preference published with ``generation``."""
 
-        effective = self._effective_preferences()
-        if scope is not None:
-            scoped = effective.get(f"scope:{self._scope_path(scope)}:{capability}")
+        effective = generation.metadata.get("provider_preferences", {})
+        if scope_path is not None:
+            scoped = effective.get(f"scope:{scope_path}:{capability}")
             if scoped is not None:
                 return scoped
         return effective.get(capability)
@@ -2188,7 +2211,11 @@ class Harness:
                 tools=self._tool_registry.entries(),
             )
             would_publish = not self._same_composition(
-                current, instances, self._snapshot_factory(instances), scope_tree
+                current,
+                instances,
+                self._snapshot_factory(instances),
+                scope_tree,
+                preferences,
             )
 
         publication = PlanAction(
