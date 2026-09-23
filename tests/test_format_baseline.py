@@ -75,7 +75,9 @@ def test_the_snapshot_candidate_round_trips_exactly() -> None:
     document = _json("runtime-snapshot.json")
 
     assert document["chassis_version"] == "1.0.0b1"
-    assert RuntimeSnapshot.from_dict(document).to_dict() == document
+    rebuilt = RuntimeSnapshot.from_dict(document)
+    assert rebuilt.plugin_entries is None
+    assert rebuilt.to_dict() == document
 
 
 def test_the_replay_candidate_round_trips_exactly() -> None:
