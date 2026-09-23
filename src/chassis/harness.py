@@ -1780,10 +1780,31 @@ class Harness:
         """
 
         snapshot = generation.snapshot
-        registered = [item for item in snapshot.registrations if item.key.name == key.name]
-        if not registered:
+        all_registered = [item for item in snapshot.registrations if item.key.name == key.name]
+        if not all_registered:
             return default
-        eligible = [item for item in snapshot.providers(key) if isinstance(item.value, expected)]
+        resolved_scope = self._resolved_scope(generation, scope)
+        if resolved_scope is None:
+            registered = all_registered
+        else:
+            visible_provider_ids = resolved_scope.visible.get(key.name, ())
+            registered = [
+                item for item in all_registered if item.provider_id in visible_provider_ids
+            ]
+            # A system provider elsewhere in the composition is still an explicit
+            # requirement. Treat its absence from this scope as a resolution
+            # failure, rather than exposing the harness default (which may be
+            # permissive or read process-wide secrets).
+            if not registered:
+                raise CapabilityVersionMismatch(
+                    f"no provider of {key} is visible in this composition scope",
+                    capability=str(key),
+                    generation_id=generation.generation_id,
+                    providers=[item.provider_id for item in all_registered],
+                )
+        eligible = [
+            item for item in registered if item.key == key and isinstance(item.value, expected)
+        ]
         if not eligible:
             raise CapabilityVersionMismatch(
                 f"no provider of {key} implements the required contract",

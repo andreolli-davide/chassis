@@ -241,6 +241,52 @@ async def test_explicit_preference_selects_the_governing_policy() -> None:
         await harness.stop()
 
 
+async def test_system_policy_and_secrets_are_limited_to_visible_scope_providers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("API_TOKEN", "sk-env-123456")
+    harness = Harness()
+    harness.composition.child("left")
+    harness.composition.child("right")
+    harness.install(
+        policy_provider("left-grant", GrantPolicy(["network.fetch"])),
+        entry_id="left-grant",
+        scope="/left",
+    )
+    harness.install(
+        secret_provider("left-vault", {"API_TOKEN": "sk-left-123456"}),
+        entry_id="left-vault",
+        scope="/left",
+    )
+    harness.install(fetcher(), entry_id="fetcher")
+    await harness.start()
+    try:
+        generation = harness.current_generation
+        assert generation is not None
+        left = harness.run_environment(generation, scope="/left")
+        right = harness.run_environment(generation, scope="/right")
+
+        left_result = await left.executor.execute(
+            ToolRequest(name="fetch", args={"url": "https://example.test"}),
+            snapshot=harness.tool_snapshot(generation, scope="/left"),
+            policy=left.policy,
+        )
+        assert left_result.content == "fetched"
+
+        with pytest.raises(PolicyDenied):
+            await right.executor.execute(
+                ToolRequest(name="fetch", args={"url": "https://example.test"}),
+                snapshot=harness.tool_snapshot(generation, scope="/right"),
+                policy=right.policy,
+            )
+
+        assert (await left.secrets.get("API_TOKEN")).reveal() == "sk-left-123456"
+        with pytest.raises(SecretResolutionError):
+            await right.secrets.get("API_TOKEN")
+    finally:
+        await harness.stop()
+
+
 async def test_ambiguous_secret_providers_never_widen_to_the_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
