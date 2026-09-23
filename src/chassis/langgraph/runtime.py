@@ -278,6 +278,7 @@ class LangGraphAgent:
         )
         metadata = redactor.redact_value(
             {
+                **dict(request.metadata),
                 "chassis_agent": self._definition.name,
                 "chassis_agent_version": self._definition.version,
                 "chassis_agent_revision": run_context.agent_revision,
@@ -285,7 +286,6 @@ class LangGraphAgent:
                 "chassis_run_id": run_context.run_id,
                 "chassis_user_id": run_context.user_id,
                 "chassis_tenant_id": run_context.tenant_id,
-                **dict(request.metadata),
             }
         )
         return {
@@ -311,9 +311,9 @@ class LangGraphAgent:
             interrupts=_interrupts(raw),
             duration_seconds=duration,
             metadata={
+                **dict(run_context.metadata),
                 "agent_version": self._definition.version,
                 "runtime": "langgraph",
-                **dict(run_context.metadata),
             },
         )
 

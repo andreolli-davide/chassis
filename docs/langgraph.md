@@ -207,6 +207,13 @@ result.text       # text of the most recent message with textual content:
                   # (joined)
 ```
 
+Harness identity fields in LangGraph config metadata (`chassis_agent`,
+`chassis_agent_version`, `chassis_agent_revision`, `chassis_generation_id`,
+`chassis_run_id`, `chassis_user_id`, and `chassis_tenant_id`) are authoritative.
+Request metadata with those keys is replaced by the harness values. Result
+metadata likewise reserves `agent_version` and `runtime` for the runtime adapter;
+other run metadata remains available in the result.
+
 ## Testing graphs
 
 `TestHarness.agent(...)` wires the harness's telemetry and redactor for you, and

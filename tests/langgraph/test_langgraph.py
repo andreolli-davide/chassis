@@ -24,7 +24,7 @@ from chassis.langgraph import (
     harness_tool_node,
 )
 from chassis.plugins.lifecycle import PluginState
-from chassis.runtime import HarnessRunContext
+from chassis.runtime import AgentRequest, HarnessRunContext
 from chassis.testing import FakeChatModel, FakePolicy, TestHarness, fake_tool
 from chassis.tools import ToolPolicy
 
@@ -525,6 +525,72 @@ async def test_agent_spec_binds_to_a_langgraph_agent_definition() -> None:
         assert result.text == "hello from finance"
         assert result.metadata["runtime"] == "langgraph"
         assert result.metadata["snapshot_digest"]
+
+
+async def test_langgraph_config_metadata_cannot_override_harness_identity() -> None:
+    async with TestHarness() as harness:
+        await harness.start()
+        generation = harness.current_generation
+        assert generation is not None
+        agent = LangGraphAgent(agent_definition(version="7"))
+        context = HarnessRunContext.new(
+            generation=generation,
+            agent="echo-agent",
+            agent_revision="17",
+            user_id="user-1",
+            tenant_id="tenant-1",
+        )
+
+        config = agent._config(
+            AgentRequest(
+                metadata={
+                    "chassis_agent": "spoofed-agent",
+                    "chassis_agent_version": "spoofed-version",
+                    "chassis_agent_revision": "spoofed-revision",
+                    "chassis_generation_id": "spoofed-generation",
+                    "chassis_run_id": "spoofed-run",
+                    "chassis_user_id": "spoofed-user",
+                    "chassis_tenant_id": "spoofed-tenant",
+                    "request_label": "kept",
+                }
+            ),
+            context,
+        )
+
+        assert config["metadata"] == {
+            "chassis_agent": "echo-agent",
+            "chassis_agent_version": "7",
+            "chassis_agent_revision": "17",
+            "chassis_generation_id": generation.generation_id,
+            "chassis_run_id": context.run_id,
+            "chassis_user_id": "user-1",
+            "chassis_tenant_id": "tenant-1",
+            "request_label": "kept",
+        }
+
+
+async def test_langgraph_result_metadata_cannot_override_runtime_identity() -> None:
+    async with TestHarness() as harness:
+        await harness.start()
+        generation = harness.current_generation
+        assert generation is not None
+        agent = LangGraphAgent(agent_definition(version="7"))
+        context = HarnessRunContext.new(
+            generation=generation,
+            metadata={
+                "agent_version": "spoofed-version",
+                "runtime": "spoofed-runtime",
+                "label": "kept",
+            },
+        )
+
+        result = agent._result({}, AgentRequest(), context, 0.1)
+
+        assert result.metadata == {
+            "agent_version": "7",
+            "runtime": "langgraph",
+            "label": "kept",
+        }
 
 
 # --------------------------------------------------------------------------
