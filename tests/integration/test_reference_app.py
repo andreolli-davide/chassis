@@ -23,7 +23,7 @@ EXPECTED_LINES = [
     "[8] secret absent from replay records, snapshot, and diagnostics",
     "[9] recording replayed 15 records without live calls",
     "[10] provider replaced while the old run stayed pinned to its generation",
-    "[11] snapshot 08eba156a7d3 attributed; 1 live generation(s), 4 instance(s)",
+    "[11] snapshot 1fcfc8b0e13f attributed; 1 live generation(s), 4 instance(s)",
     "[12] failed setup rolled back every effect; the previous generation stayed current",
     "[13] graceful shutdown; 4 instance(s) returned to baseline",
     "support desk: every scenario held",
