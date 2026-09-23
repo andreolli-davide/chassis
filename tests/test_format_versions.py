@@ -78,6 +78,54 @@ def test_a_snapshot_record_round_trips_exactly() -> None:
     assert rebuilt.runtime_instance_ids == ("plugin_x", "plugin_y")
 
 
+def test_snapshot_entries_are_hash_significant_and_old_records_still_load() -> None:
+    old_payload = snapshot_record().to_dict()
+    old_record = RuntimeSnapshot.from_dict(old_payload)
+    assert old_record.plugin_entries is None
+    assert RuntimeSnapshot.from_dict(old_payload).semantic_digest() == old_record.semantic_digest()
+
+    first = snapshot_record(
+        plugins={"shared": "2.0.0"},
+        plugin_entries=(
+            {"entry_id": "a", "name": "shared", "version": "1.0.0"},
+            {"entry_id": "b", "name": "shared", "version": "2.0.0"},
+        ),
+    )
+    second = snapshot_record(
+        plugins={"shared": "2.0.0"},
+        plugin_entries=(
+            {"entry_id": "a", "name": "shared", "version": "1.1.0"},
+            {"entry_id": "b", "name": "shared", "version": "2.0.0"},
+        ),
+    )
+    assert first.plugins == second.plugins
+    assert first.semantic_digest() != second.semantic_digest()
+    assert first.digest() != second.digest()
+    assert RuntimeSnapshot.from_dict(first.to_dict()).to_dict() == first.to_dict()
+
+
+def test_snapshot_rejects_duplicate_plugin_entry_ids() -> None:
+    payload = snapshot_record(
+        plugin_entries=(
+            {"entry_id": "same", "name": "one", "version": "1.0.0"},
+            {"entry_id": "same", "name": "two", "version": "2.0.0"},
+        )
+    ).to_dict()
+
+    with pytest.raises(FormatError) as excinfo:
+        RuntimeSnapshot.from_dict(payload)
+    assert excinfo.value.context["reason"] == "corrupted"
+
+
+def test_snapshot_rejects_null_plugin_entries() -> None:
+    payload = snapshot_record().to_dict()
+    payload["plugin_entries"] = None
+
+    with pytest.raises(FormatError) as excinfo:
+        RuntimeSnapshot.from_dict(payload)
+    assert excinfo.value.context["reason"] == "corrupted"
+
+
 def test_a_recording_round_trips_exactly() -> None:
     session = recording_document()
 

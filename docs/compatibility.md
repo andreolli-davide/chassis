@@ -128,6 +128,12 @@ because a format's compatibility lifecycle is independent of the code's:
 | Planning exports | `PlanResult.to_dict()` | documented shape | `PLAN_FORMAT_VERSION` |
 | Reconciliation and diagnostics exports | `ReconcileResult`, `ConfigApplyResult`, `GenerationPressureReport` `to_dict()` | documented shape | `DIAGNOSTICS_FORMAT_VERSION` |
 
+Snapshot format 1 keeps `plugins` as the name-to-version compatibility map and
+adds `plugin_entries`, a list of `{entry_id, name, version}` records. Readers
+accept format 1 documents without `plugin_entries`; those older records retain
+their prior semantic digest behavior, since the individual entry identities
+cannot be reconstructed from the collapsed map.
+
 ### The 1.0 beta format candidates
 
 `tests/compat/v1.0.0b1/` contains one deterministic candidate for every family

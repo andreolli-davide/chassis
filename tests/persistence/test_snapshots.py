@@ -35,6 +35,14 @@ def consumer_plugin() -> type:  # type: ignore[type-arg]
     return memory
 
 
+def named_version_plugin(version: str):  # type: ignore[no-untyped-def]
+    @plugin(name="shared", version=version)
+    async def shared(ctx: PluginContext) -> None:
+        return None
+
+    return shared
+
+
 async def test_snapshot_describes_the_generation() -> None:
     async with TestHarness() as harness:
         harness.provide(MODEL, "model")
@@ -55,6 +63,30 @@ async def test_snapshot_describes_the_generation() -> None:
         assert snapshot.plugin_graph_hash
         assert snapshot.tool_schema_hash
         assert snapshot.digest() == snapshot.digest()
+
+
+async def test_snapshot_preserves_all_entries_with_repeated_manifest_names() -> None:
+    async with TestHarness() as harness:
+        harness.install(named_version_plugin("1.0.0"), entry_id="shared-old")
+        harness.install(named_version_plugin("2.0.0"), entry_id="shared-current")
+        await harness.start()
+
+        generation = harness.current_generation
+        assert generation is not None
+        snapshot = harness.snapshot_for(generation)
+        payload = snapshot.to_dict()
+
+        assert snapshot.plugins == {
+            generation.instances[-1].manifest.name: generation.instances[-1].manifest.version
+        }
+        assert payload["plugin_entries"] == [
+            {"entry_id": "shared-current", "name": "shared", "version": "2.0.0"},
+            {"entry_id": "shared-old", "name": "shared", "version": "1.0.0"},
+        ]
+        restored = type(snapshot).from_dict(payload)
+        assert restored.to_dict() == payload
+        assert restored.digest() == snapshot.digest()
+        assert restored.semantic_digest() == snapshot.semantic_digest()
 
 
 async def test_snapshot_digest_changes_with_composition() -> None:

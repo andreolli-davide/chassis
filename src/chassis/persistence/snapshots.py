@@ -81,9 +81,18 @@ class RuntimeSnapshot:
     scopes: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
     runtime_instance_ids: tuple[str, ...] = ()
     semantic_scopes: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
+    # ``plugins`` remains the compatibility projection keyed by manifest name.
+    # This list preserves every installed entry, including repeated names.
+    plugin_entries: tuple[Mapping[str, str], ...] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "plugins", frozen_mapping(self.plugins))
+        if self.plugin_entries is not None:
+            object.__setattr__(
+                self,
+                "plugin_entries",
+                tuple(frozen_mapping(entry) for entry in self.plugin_entries),
+            )
         object.__setattr__(self, "capabilities", frozen_mapping(self.capabilities))
         object.__setattr__(self, "runtime_instance_ids", tuple(self.runtime_instance_ids))
         if not isinstance(self.semantic_scopes, MappingProxyType):
@@ -111,6 +120,23 @@ class RuntimeSnapshot:
                 "agent": self.agent,
                 "agent_revision": self.agent_revision,
                 "plugins": dict(sorted(self.plugins.items())),
+                **(
+                    {
+                        "plugin_entries": [
+                            dict(entry)
+                            for entry in sorted(
+                                self.plugin_entries,
+                                key=lambda item: (
+                                    item["entry_id"],
+                                    item["name"],
+                                    item["version"],
+                                ),
+                            )
+                        ]
+                    }
+                    if self.plugin_entries is not None
+                    else {}
+                ),
                 "capabilities": {
                     name: list(versions) for name, versions in sorted(self.capabilities.items())
                 },
@@ -184,6 +210,23 @@ class RuntimeSnapshot:
             return tuple(items)
 
         plugins = value("plugins", (Mapping,))
+        plugin_entries = document.get("plugin_entries")
+        if "plugin_entries" in document and plugin_entries is None:
+            raise corrupt("'plugin_entries' must be a list when present")
+        if plugin_entries is not None and (
+            not isinstance(plugin_entries, (list, tuple))
+            or not all(
+                isinstance(entry, Mapping)
+                and set(entry) == {"entry_id", "name", "version"}
+                and all(isinstance(entry[key], str) for key in ("entry_id", "name", "version"))
+                for entry in plugin_entries
+            )
+        ):
+            raise corrupt("'plugin_entries' must contain entry_id, name, and version strings")
+        if plugin_entries is not None:
+            entry_ids = [entry["entry_id"] for entry in plugin_entries]
+            if len(set(entry_ids)) != len(entry_ids):
+                raise corrupt("'plugin_entries' must have unique entry_id values")
         capabilities = value("capabilities", (Mapping,))
         metadata = value("metadata", (Mapping,), optional=True) or {}
         if not all(
@@ -207,6 +250,9 @@ class RuntimeSnapshot:
             sequence=sequence,
             agent_runtime=value("agent_runtime", (str,)),
             plugins=dict(plugins),
+            plugin_entries=(
+                None if plugin_entries is None else tuple(dict(entry) for entry in plugin_entries)
+            ),
             capabilities={name: tuple(items) for name, items in capabilities.items()},
             config_hash=value("config_hash", (str,)),
             plugin_graph_hash=value("plugin_graph_hash", (str,)),
@@ -233,7 +279,7 @@ class RuntimeSnapshot:
         share a semantic digest.
         """
 
-        return {
+        composition: dict[str, Any] = {
             "plugins": dict(sorted(self.plugins.items())),
             "capabilities": {
                 name: list(versions) for name, versions in sorted(self.capabilities.items())
@@ -243,6 +289,15 @@ class RuntimeSnapshot:
             "tool_schema_hash": self.tool_schema_hash,
             "scopes": self.semantic_scopes,
         }
+        if self.plugin_entries:
+            composition["plugin_entries"] = [
+                dict(entry)
+                for entry in sorted(
+                    self.plugin_entries,
+                    key=lambda item: (item["entry_id"], item["name"], item["version"]),
+                )
+            ]
+        return composition
 
     def semantic_digest(self) -> str:
         """Stable hash of the semantic composition only (see :meth:`semantic_composition`)."""
@@ -313,6 +368,14 @@ class RuntimeSnapshot:
                 instance.manifest.name: instance.manifest.version
                 for instance in generation.instances
             },
+            plugin_entries=tuple(
+                {
+                    "entry_id": instance.entry_id,
+                    "name": instance.manifest.name,
+                    "version": instance.manifest.version,
+                }
+                for instance in generation.instances
+            ),
             capabilities=_capability_versions(generation),
             config_hash=_config_hash(generation, effective_redactor),
             plugin_graph_hash=_plugin_graph_hash(generation),

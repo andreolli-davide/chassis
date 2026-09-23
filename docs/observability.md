@@ -286,6 +286,14 @@ capability view in effect, and the resolved selection of every requirement, usin
 identities and instance ids only. Scope *metadata* is never included, and
 configuration values never appear anywhere in a snapshot.
 
+`plugins` is retained as the compatibility map from manifest name to version.
+When multiple installed entries share a manifest name, that map can represent
+only one version. `plugin_entries` records every installed entry as
+`{entry_id, name, version}`; it participates in the full and semantic snapshot
+digests. Readers accept older snapshot documents without this additive field,
+and their plugin entry list is empty because older documents did not preserve
+that information.
+
 The `scopes` field names the runtime instance ids that provide a capability;
 `semantic_scopes` names the provider *entry* ids instead, so it survives a
 separate materialisation of the same composition. Both are part of the record:
