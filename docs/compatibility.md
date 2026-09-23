@@ -1,6 +1,7 @@
 # Compatibility and deprecation policy
 
-Chassis 1.0.0b1 is the published first 1.0 beta checkpoint; 0.9.1 remains the
+Chassis 1.0.0b2 is the current unpublished candidate. 1.0.0b1 remains the
+published beta until b2 is released; 0.9.1 remains the
 latest stable release. Until 1.0.0 final, the documented surface
 is technically pre-1.0, but 0.9.0 was the **last planned release with deliberate
 pre-1.0 compatibility changes**. This page defines what is covered by
@@ -32,7 +33,7 @@ documented module fails the suite) and the compatibility checker below.
 
 Provisional names are listed there with `"stability": "provisional"`.
 Everything not listed is internal by default. Every documented name selected
-for 1.0.0b1 is stable; provisional is reserved for surface that must ship before
+for 1.0.0b2 is stable; provisional is reserved for surface that must ship before
 it can settle.
 
 ## The API baseline and the compatibility check
@@ -53,12 +54,14 @@ The same tool checks the current tree against a baseline:
 ```bash
 uv run python scripts/api_compat.py check tests/compat/api-baseline-0.8.1.json
 uv run python scripts/api_compat.py check tests/compat/api-baseline-1.0.0b1.json
+uv run python scripts/api_compat.py check tests/compat/api-baseline-1.0.0b2.json
 ```
 
 The released 0.8.1 baseline preserves the existing compatibility promise. The
-1.0.0b1 baseline is generated from this beta implementation and pins the exact
-candidate surface under review; it is not the permanent 1.0 baseline. That
-baseline is generated from the final release candidate once the review closes.
+1.0.0b1 baseline preserves the published first-beta surface. The 1.0.0b2
+baseline is generated from this candidate implementation and pins its exact
+surface under review; it is not the permanent 1.0 baseline. The permanent
+baseline will be generated from the final release candidate once review closes.
 
 It exits non-zero and prints a deterministic, machine-readable report when it
 finds:
@@ -136,7 +139,7 @@ cannot be reconstructed from the collapsed map.
 
 ### The 1.0 beta format candidates
 
-`tests/compat/v1.0.0b1/` contains one deterministic candidate for every family
+`tests/compat/v1.0.0b2/` contains the current deterministic candidate for every family
 above: runtime snapshot, replay recording, declarative configuration, planning,
 reconciliation, configuration-apply, and generation-pressure diagnostics. Its
 `manifest.json` maps families to files and format versions; `SHA256SUMS` records
@@ -147,10 +150,12 @@ ids and clocks replaced by deterministic stand-ins and set-derived diagnostics
 ordered by semantic identity:
 
 ```bash
-uv run python tests/compat/v1.0.0b1/generate.py --check
+uv run python tests/compat/v1.0.0b2/generate.py --check
 ```
 
-`tests/test_format_baseline.py` runs that check in CI, proves exact round-trips
+The historical b1 candidates remain under `tests/compat/v1.0.0b1/` and are
+tested for continued snapshot and replay readability. `tests/test_format_baseline.py`
+runs the b2 check in CI, proves exact round-trips
 for snapshot and replay (the families with public readers), parses the
 configuration fixture, and checks representative nested planning,
 reconciliation, and diagnostics structures. These are review candidates; the
@@ -199,10 +204,10 @@ against them field by field.
 
 **Support horizon.** A persisted format version stays readable — directly or by
 migration — for at least **two minor releases** after the release that
-superseded it. The 1.0.0b1 implementation continues to read artifacts written by
+superseded it. The 1.0.0b2 implementation continues to read artifacts written by
 0.8.1 as described above and in [migration.md](migration.md). The final 1.0.0
 release will check in the first permanent fixture for every documented format
-family; the checked-in 1.0.0b1 candidates are the review material for those
+family; the checked-in b2 candidates are the review material for those
 schemas.
 
 ## What compatibility does not cover

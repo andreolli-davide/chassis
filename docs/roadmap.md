@@ -972,7 +972,7 @@ Acceptance criteria:
 
 ## 1.0.0 — stable surface and release governance
 
-**Status: in progress (`1.0.0b1`).** 1.0 freezes the reviewed runtime contract
+**Status: in progress (`1.0.0b2` source candidate).** 1.0 freezes the reviewed runtime contract
 rather than adding a new execution framework. Feature work that does not
 directly establish the stable surface or its release safety moves to a later
 minor release. The first beta checkpoint has selected a candidate API baseline,
@@ -989,10 +989,11 @@ blockers.
 surface.
 
 **Status: beta candidates complete; permanent baselines pending.**
-`api-baseline-1.0.0b1.json` pins the candidate surface, while
-`tests/compat/v1.0.0b1/` deterministically covers snapshot, replay,
+`api-baseline-1.0.0b2.json` pins the current candidate surface, while
+`tests/compat/v1.0.0b2/` deterministically covers snapshot, replay,
 configuration, planning, reconciliation, config-apply, and generation-pressure
-formats. The permanent API and per-format baselines remain final-release gates.
+formats. The published b1 baselines remain as historical compatibility checks.
+The permanent API and per-format baselines remain final-release gates.
 
 - Review every stable public export and signature one final time; remove only an
   API deprecated during the documented 0.9.x window.

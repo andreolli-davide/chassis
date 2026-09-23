@@ -91,10 +91,11 @@ input. The dry run executes the same reusable CI matrix as a tag, builds the
 wheel and sdist once, verifies every package smoke, and assembles the exact
 bundle that a tag would promote without publishing it.
 
-When a persisted document shape changes during beta review, regenerate all
-candidate fixtures with
-`uv run python tests/compat/v1.0.0b1/generate.py`. Never hand-edit a generated
-fixture: `tests/test_format_baseline.py` reproduces the set byte-for-byte and
+When a persisted document shape changes during beta review, regenerate the
+current candidate fixtures with
+`uv run python tests/compat/v1.0.0b2/generate.py`. Keep the published b1
+fixtures untouched. Never hand-edit a generated fixture:
+`tests/test_format_baseline.py` reproduces the current set byte-for-byte and
 will reject drift, missing format families, or stale checksums.
 
 ## Conduct

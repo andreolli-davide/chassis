@@ -176,18 +176,21 @@ what Chassis refuses to promise.
 
 ## Status
 
-Latest beta: **1.0.0b1**, published on 2026-09-22. The latest stable release is
+Latest published beta: **1.0.0b1**, published on 2026-09-22. **1.0.0b2 is an
+unpublished release candidate**; until it is released, use the explicit b1
+install commands above for the published beta. The latest stable release is
 **0.9.1**; its [documentation archive](https://andreolli-davide.github.io/chassis/0.9.1/)
-remains available while the final 1.0 API and format baselines complete review. The
-surface covered by `tests/test_public_api.py` is classified and checked against
-both the released 0.8.1 contract and the 1.0 beta candidate
-([compatibility](docs/compatibility.md)); every persisted format has a
-deterministic candidate fixture under `tests/compat/v1.0.0b1/`.
+remains available. The surface covered by `tests/test_public_api.py` is
+classified and checked against the released 0.8.1 contract and the current b2
+candidate ([compatibility](docs/compatibility.md)); every persisted format has
+a deterministic current fixture under `tests/compat/v1.0.0b2/`, with b1
+fixtures preserved as historical candidate artifacts.
 [migrations](docs/migration.md) lists
 the 0.9 → 1.0 beta, 0.8 → 0.9, 0.8 → 0.8.1, 0.7 → 0.8,
 0.6 → 0.7, 0.5.1 → 0.6, 0.5 → 0.5.1, 0.4 → 0.5, 0.3 → 0.4, 0.2 → 0.3, and
 0.1 → 0.2 changes. The release reviews are recorded in
-[1.0-beta-readiness.md](docs/1.0-beta-readiness.md) (1.0.0b1),
+[1.0-beta2-readiness.md](docs/1.0-beta2-readiness.md) (unpublished b2 candidate),
+[1.0-beta-readiness.md](docs/1.0-beta-readiness.md) (published 1.0.0b1 review),
 [production-readiness.md](docs/production-readiness.md) (0.9.0), and
 [beta-readiness.md](docs/beta-readiness.md) (0.8.0).
 

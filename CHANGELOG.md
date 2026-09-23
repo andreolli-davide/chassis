@@ -12,6 +12,38 @@ that a minor release may break the documented surface.
 - The rendered documentation homepage now identifies `1.0.0b1` as the latest
   beta and links to the preserved `0.9.1` stable documentation archive.
 
+## [1.0.0b2] - Unpublished candidate
+
+Second 1.0 beta candidate. It fixes correctness issues found during the b1
+review; b1 remains the published beta until this candidate is released.
+
+### Fixed
+
+- **Plugin configuration and registration now preserve identity boundaries.**
+  Reusing one plugin instance with mismatched configuration is rejected, and
+  a failing agent-service binder leaves no registration behind.
+- **Snapshots retain duplicate plugin entries.** Entry identity is preserved
+  rather than collapsed by plugin name, and reference snapshot digests are
+  refreshed for the resulting shape.
+- **LangGraph metadata and scoped system providers remain authoritative.**
+  Caller metadata cannot overwrite harness-owned fields, and system provider
+  preferences remain pinned to the active generation and isolated by scope.
+- **Replay records live tool and model fallbacks without replaying their own
+  response.** Fallback results are captured at the live boundary and do not
+  replay within the session that produced them.
+- **Cooperative budget reports are atomic.** A rejected report no longer
+  consumes any of its earlier dimensions, including in ancestor budgets.
+- **Hook failure policy applies to invalid transforms.** Invalid hook results
+  now follow the hook's configured failure behavior.
+- **Configuration schema versions reject booleans.** Python's `True == 1`
+  behavior can no longer make a boolean pass as schema version 1.
+
+### Documentation
+
+- Added migration notes for the b1-to-b2 correctness fixes and refreshed the
+  current installation and documentation pointers for this unpublished
+  candidate. The published b1 remains the latest beta until b2 is released.
+
 ## [1.0.0b1] - 2026-09-22
 
 First 1.0 beta checkpoint. It freezes a candidate public API for review and

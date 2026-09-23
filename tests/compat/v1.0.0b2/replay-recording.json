@@ -1,0 +1,172 @@
+{
+  "fallback": "error",
+  "format_version": 1,
+  "metadata": {
+    "dataset": "compat-fixtures",
+    "produced_by": "chassis-harness 1.0.0b2"
+  },
+  "mode": "record",
+  "records": [
+    {
+      "created_at": 1790000000.0,
+      "generation_id": "gen_0001",
+      "key": "dc1af2e05671f74fb33f71c8456f9e2c",
+      "kind": "tool",
+      "request": {
+        "args": {
+          "order": "A-1"
+        },
+        "tool": "lookup_order"
+      },
+      "response": {
+        "artifact": null,
+        "content": {
+          "order": "A-1",
+          "status": "shipped"
+        },
+        "error": null,
+        "name": "lookup_order",
+        "redacted": false,
+        "status": "ok"
+      },
+      "run_id": "run_fixture_1",
+      "sequence": 0
+    },
+    {
+      "created_at": 1790000000.0,
+      "generation_id": null,
+      "key": "4edc01b6e849b21545ed1cf97abb3522",
+      "kind": "snapshot",
+      "request": {},
+      "response": {
+        "agent": "support-agent",
+        "agent_revision": null,
+        "agent_runtime": "unknown",
+        "capabilities": {
+          "database": [
+            "1"
+          ],
+          "memory": [
+            "1"
+          ]
+        },
+        "chassis_version": "1.0.0b2",
+        "config_hash": "026c0f789da26ade6afdf81a0ab7ff7e981e357801bf1257b459f0535e901650",
+        "format_version": 1,
+        "generation_id": "gen_0001",
+        "graph_definition_hash": null,
+        "metadata": {
+          "dataset": "compat-fixtures"
+        },
+        "plugin_entries": [
+          {
+            "entry_id": "memory",
+            "name": "memory",
+            "version": "2.1.0"
+          },
+          {
+            "entry_id": "orders-db",
+            "name": "orders-db",
+            "version": "1.0.0"
+          }
+        ],
+        "plugin_graph_hash": "031f4b7e9efaa7d9df24106beb9c85cd9f5d94d8543d2fb236d87d9e2881da38",
+        "plugins": {
+          "memory": "2.1.0",
+          "orders-db": "1.0.0"
+        },
+        "prompt_hash": null,
+        "runtime_instance_ids": [
+          "plugin_fixture_1",
+          "plugin_fixture_0"
+        ],
+        "scopes": {
+          "root": "/",
+          "scopes": [
+            {
+              "capabilities": null,
+              "children": [],
+              "entries": [
+                "memory",
+                "orders-db"
+              ],
+              "parent": null,
+              "path": "/",
+              "providers": {
+                "database": [
+                  "plugin_fixture_1"
+                ],
+                "memory": [
+                  "plugin_fixture_0"
+                ]
+              },
+              "selections": [
+                {
+                  "consumer": "memory",
+                  "provider": "orders-db",
+                  "provider_scope": "/",
+                  "requirement": "database <2,>=1",
+                  "status": "resolved"
+                }
+              ],
+              "tools": null,
+              "visible_tools": []
+            }
+          ]
+        },
+        "semantic_scopes": {
+          "root": "/",
+          "scopes": [
+            {
+              "capabilities": null,
+              "children": [],
+              "entries": [
+                "memory",
+                "orders-db"
+              ],
+              "parent": null,
+              "path": "/",
+              "providers": {
+                "database": [
+                  "orders-db"
+                ],
+                "memory": [
+                  "memory"
+                ]
+              },
+              "selections": [
+                {
+                  "consumer": "memory",
+                  "provider": "orders-db",
+                  "provider_scope": "/",
+                  "requirement": "database <2,>=1",
+                  "status": "resolved"
+                }
+              ],
+              "tools": null,
+              "visible_tools": []
+            }
+          ]
+        },
+        "sequence": 1,
+        "tool_schema_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "run_id": null,
+      "sequence": 1
+    },
+    {
+      "created_at": 1790000000.0,
+      "generation_id": null,
+      "key": "e68bc44571edfd3cf1a5dbb92d9c0add",
+      "kind": "lifecycle",
+      "request": {
+        "event": "generation.publish",
+        "generation_id": "gen_0001",
+        "sequence": 1
+      },
+      "response": null,
+      "run_id": null,
+      "sequence": 2
+    }
+  ]
+}

@@ -25,11 +25,11 @@ def _step(job: dict[str, Any], name: str) -> dict[str, Any]:
     return next(step for step in job["steps"] if step.get("name") == name)
 
 
-def test_the_development_version_is_the_canonical_first_1_0_beta() -> None:
+def test_the_development_version_is_the_canonical_second_1_0_beta() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     version = Version(project["version"])
 
-    assert str(version) == "1.0.0b1"
+    assert str(version) == "1.0.0b2"
     assert version.is_prerelease is True
 
 

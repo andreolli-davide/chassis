@@ -1,0 +1,34 @@
+{
+  "candidate": true,
+  "fixtures": {
+    "config_apply": {
+      "file": "config-apply.json",
+      "format_version": 1
+    },
+    "configuration": {
+      "file": "configuration.yaml",
+      "schema_version": 1
+    },
+    "diagnostics": {
+      "file": "generation-pressure.json",
+      "format_version": 1
+    },
+    "planning": {
+      "file": "planning.json",
+      "format_version": 1
+    },
+    "reconciliation": {
+      "file": "reconciliation.json",
+      "format_version": 1
+    },
+    "replay": {
+      "file": "replay-recording.json",
+      "format_version": 1
+    },
+    "snapshot": {
+      "file": "runtime-snapshot.json",
+      "format_version": 1
+    }
+  },
+  "package_version": "1.0.0b2"
+}

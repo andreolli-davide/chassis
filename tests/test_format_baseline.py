@@ -1,4 +1,4 @@
-"""The 1.0 beta format candidates match the implementation exactly."""
+"""The current 1.0 beta candidate matches, and b1 remains readable."""
 
 from __future__ import annotations
 
@@ -19,11 +19,16 @@ from chassis.persistence import (
 from chassis.replay import BoundaryKind, ReplaySession
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURES = ROOT / "tests" / "compat" / "v1.0.0b1"
+FIXTURES = ROOT / "tests" / "compat" / "v1.0.0b2"
+B1_FIXTURES = ROOT / "tests" / "compat" / "v1.0.0b1"
 
 
 def _json(name: str) -> dict[str, Any]:
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+
+
+def _b1_json(name: str) -> dict[str, Any]:
+    return json.loads((B1_FIXTURES / name).read_text(encoding="utf-8"))
 
 
 def test_the_generator_reproduces_every_checked_in_candidate_byte_for_byte() -> None:
@@ -42,7 +47,7 @@ def test_the_generator_reproduces_every_checked_in_candidate_byte_for_byte() -> 
 def test_the_manifest_covers_every_documented_format_family() -> None:
     manifest = _json("manifest.json")
 
-    assert manifest["package_version"] == "1.0.0b1"
+    assert manifest["package_version"] == "1.0.0b2"
     assert manifest["candidate"] is True
     assert set(manifest["fixtures"]) == {
         "configuration",
@@ -74,9 +79,12 @@ def test_every_versioned_candidate_declares_the_current_format() -> None:
 def test_the_snapshot_candidate_round_trips_exactly() -> None:
     document = _json("runtime-snapshot.json")
 
-    assert document["chassis_version"] == "1.0.0b1"
+    assert document["chassis_version"] == "1.0.0b2"
     rebuilt = RuntimeSnapshot.from_dict(document)
-    assert rebuilt.plugin_entries is None
+    assert [dict(entry) for entry in rebuilt.plugin_entries or ()] == [
+        {"entry_id": "memory", "name": "memory", "version": "2.1.0"},
+        {"entry_id": "orders-db", "name": "orders-db", "version": "1.0.0"},
+    ]
     assert rebuilt.to_dict() == document
 
 
@@ -108,7 +116,7 @@ def test_operational_candidates_exercise_representative_nested_shapes() -> None:
     applied = _json("config-apply.json")
     pressure = _json("generation-pressure.json")
 
-    assert planning["chassis_version"] == "1.0.0b1"
+    assert planning["chassis_version"] == "1.0.0b2"
     assert planning["actions"][-1]["action"] == "publish"
     assert reconciliation["plan"]["edges"] == [["orders-db", "memory"]]
     assert reconciliation["impact"]["counts"] == {"added": 2}
@@ -128,3 +136,17 @@ def test_candidate_fixtures_contain_no_secret_or_machine_specific_material() -> 
         assert "sk-" not in text, path.name
         assert "/Users/" not in text, path.name
         assert "/home/" not in text, path.name
+
+
+def test_published_b1_snapshot_and_replay_candidates_remain_readable() -> None:
+    snapshot_document = _b1_json("runtime-snapshot.json")
+    snapshot = RuntimeSnapshot.from_dict(snapshot_document)
+    assert snapshot.to_dict() == snapshot_document
+
+    replay_document = _b1_json("replay-recording.json")
+    replay = ReplaySession.from_dict(replay_document)
+    assert replay.to_dict() == replay_document
+
+    config = load_config(B1_FIXTURES / "configuration.yaml")
+    assert config.version == 1
+    assert [entry.id for entry in config.plugins] == ["orders-db", "memory"]

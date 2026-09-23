@@ -10,7 +10,10 @@ pip install "chassis-harness[langgraph]==1.0.0b1"           # LangGraph adapter 
 pip install "chassis-harness[langsmith]==1.0.0b1"           # LangSmith telemetry + evaluation
 ```
 
-This guide follows the 1.0.0b1 beta. The import package is `chassis`; the
+This guide describes the current 1.0.0b2 candidate. The pip commands above
+install the published 1.0.0b1 beta; b2 is not published yet. To try the b2
+candidate from a source checkout, run `uv sync` and then
+`uv run python examples/quickstart.py`. The import package is `chassis`; the
 distribution is `chassis-harness`. Python 3.12 and 3.13 are supported. For the
 latest stable release, see the [0.9.1 documentation archive](https://andreolli-davide.github.io/chassis/0.9.1/).
 

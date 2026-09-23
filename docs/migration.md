@@ -1,6 +1,7 @@
 # Migrating between versions
 
-Chassis 1.0.0b1 is the first 1.0 beta checkpoint. Each section lists every
+Chassis 1.0.0b2 is the current unpublished candidate; 1.0.0b1 remains the
+published beta until b2 is released. Each section lists every
 change that can break a caller from the previous version, why it was made, and
 what to do instead. Lifecycle behaviour is unchanged across these releases:
 published generations are still immutable, publication is still transactional,
@@ -8,6 +9,8 @@ and logical unload is still distinct from physical disposal.
 
 - [0.9 → 1.0 beta](#09-10-beta): no runtime migration; candidate API freeze and
   prerelease delivery rules
+- [1.0.0b1 → 1.0.0b2](#100b1-100b2): correctness fixes; no persisted-format
+  version changes
 - [0.8 → 0.9](#08-09): the compatibility contract, versioned persisted
   formats, the planning and telemetry contracts, and the deprecation machinery
 - [0.8 → 0.8.1](#08-081): review follow-ups for redaction, replay,
@@ -27,9 +30,30 @@ and logical unload is still distinct from physical disposal.
 - [0.2 → 0.3](#02-03): composition scopes, explain and diff diagnostics
 - [0.1 → 0.2](#01-02): optional extras, tool protocol, lease identity, budgets
 
+## 1.0.0b1 → 1.0.0b2
+
+**No application migration or persisted-format migration is required.** b2
+fixes runtime correctness issues in plugin identity and registration, snapshot
+entry attribution, LangGraph metadata ownership, generation scoped provider
+selection, live replay fallback recording, cooperative budget reporting, hook
+failure handling, and configuration schema-version validation. The package
+version advances to `1.0.0b2`; the public API and persisted format version
+numbers do not change. Snapshot exports now include `plugin_entries`, preserving
+entry identity when multiple entries use one plugin name. Existing b1 snapshots
+and replay recordings remain readable; applications that validate snapshot
+keys exactly should accept this added field. The b1 API and format candidates
+remain in the repository as historical review artifacts, while b2 is the
+current candidate baseline.
+
+Until b2 is published, install the published beta with:
+
+```bash
+pip install chassis-harness==1.0.0b1
+```
+
 ## 0.9 → 1.0 beta
 
-**No application migration is required for 1.0.0b1.** The first beta changes no
+**No application migration was required for 1.0.0b1.** The first beta changed no
 runtime API or persisted-format version. It establishes the candidate 1.0
 surface and the release controls needed to review it:
 
@@ -42,7 +66,7 @@ surface and the release controls needed to review it:
   every current format live in `tests/compat/v1.0.0b1/`. Permanent 1.0 fixtures
   remain a final-release gate, not a claim made by this beta checkpoint.
 
-Install the published beta explicitly; ordinary stable resolution does not
+At that release, install the published beta explicitly; ordinary stable resolution did not
 select a prerelease:
 
 ```bash

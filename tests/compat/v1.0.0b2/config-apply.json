@@ -1,0 +1,32 @@
+{
+  "applied": [
+    {
+      "action": "add",
+      "entry_id": "memory",
+      "plugin": "memory",
+      "reason": "entry is desired but not installed"
+    },
+    {
+      "action": "add",
+      "entry_id": "orders-db",
+      "plugin": "orders-db",
+      "reason": "entry is desired but not installed"
+    }
+  ],
+  "changes": [
+    {
+      "action": "add",
+      "entry_id": "memory",
+      "plugin": "memory",
+      "reason": "entry is desired but not installed"
+    },
+    {
+      "action": "add",
+      "entry_id": "orders-db",
+      "plugin": "orders-db",
+      "reason": "entry is desired but not installed"
+    }
+  ],
+  "format_version": 1,
+  "version": 1
+}
