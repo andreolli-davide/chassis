@@ -95,6 +95,43 @@ class ReplaySession:
         self.records.append(record)
         return record
 
+    def record_fallback(
+        self,
+        kind: BoundaryKind,
+        *,
+        key: str,
+        request: Mapping[str, Any] | None = None,
+        response: Any = None,
+        generation_id: str | None = None,
+        run_id: str | None = None,
+    ) -> ReplayRecord:
+        """Capture one live result produced by a ``LIVE`` replay fallback.
+
+        This is deliberately separate from :meth:`record`: replay sessions do
+        not record their ordinary activity. The appended record is marked
+        consumed in this session, so a repeated key falls back live again rather
+        than replaying the result it just captured.
+        """
+
+        if not self.is_replaying or self.fallback is not ReplayFallback.LIVE:
+            raise RuntimeError("fallback capture requires replay mode with LIVE fallback")
+        if kind not in (BoundaryKind.TOOL, BoundaryKind.MODEL):
+            raise ValueError("fallback capture is supported only for tool and model boundaries")
+        record = ReplayRecord(
+            kind=kind,
+            sequence=len(self.records),
+            key=key,
+            request=self.redactor.redact_value(dict(request or {})),
+            response=self.redactor.redact_value(response),
+            generation_id=generation_id,
+            run_id=run_id,
+        )
+        self.records.append(record)
+        cursor = f"{kind.value}:{key}"
+        matches = sum(item.kind is kind and item.key == key for item in self.records)
+        self._cursor[cursor] = matches
+        return record
+
     def bind_redactor(self, redactor: SecretRedactor) -> None:
         """Adopt ``redactor`` and re-scrub everything already held.
 

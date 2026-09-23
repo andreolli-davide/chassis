@@ -506,14 +506,28 @@ class ToolExecutor:
         """Record a completed call when the session is recording."""
 
         if self._replay is not None:
-            self._replay.record(
-                BoundaryKind.TOOL,
-                key=replay_key,
-                request={"tool": entry.name, "args": args},
-                response=result.to_payload(),
-                generation_id=request.generation_id,
-                run_id=request.run_id,
-            )
+            record_request = {"tool": entry.name, "args": args}
+            response = result.to_payload()
+            if self._replay.is_recording:
+                self._replay.record(
+                    BoundaryKind.TOOL,
+                    key=replay_key,
+                    request=record_request,
+                    response=response,
+                    generation_id=request.generation_id,
+                    run_id=request.run_id,
+                )
+            elif (
+                self._replay.is_replaying and self._replay.fallback is ReplayFallback.LIVE
+            ):
+                self._replay.record_fallback(
+                    BoundaryKind.TOOL,
+                    key=replay_key,
+                    request=record_request,
+                    response=response,
+                    generation_id=request.generation_id,
+                    run_id=request.run_id,
+                )
         return result
 
     def _timeout_for(self, entry: RegisteredTool) -> float | None:

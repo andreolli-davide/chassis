@@ -84,12 +84,16 @@ class ReplayChatModel(BaseChatModel):
         kwargs: Mapping[str, Any],
         result: ChatResult,
     ) -> None:
-        self.session.record(
-            BoundaryKind.MODEL,
-            key=key,
-            request=self._request(messages, stop, kwargs),
-            response=_serialize(result),
-        )
+        request = self._request(messages, stop, kwargs)
+        response = _serialize(result)
+        if self.session.is_recording:
+            self.session.record(
+                BoundaryKind.MODEL, key=key, request=request, response=response
+            )
+        elif self.session.is_replaying and self.session.fallback is ReplayFallback.LIVE:
+            self.session.record_fallback(
+                BoundaryKind.MODEL, key=key, request=request, response=response
+            )
 
     def _from_record(self, payload: Any) -> ChatResult:
         return ChatResult(

@@ -41,6 +41,13 @@ async def test_live_mode_records_nothing() -> None:
     assert harness_session.is_replaying is False
 
 
+def test_fallback_capture_rejects_non_boundary_record_kinds() -> None:
+    replaying = session(ReplayMode.REPLAY, fallback=ReplayFallback.LIVE)
+
+    with pytest.raises(ValueError, match="tool and model"):
+        replaying.record_fallback(BoundaryKind.LIFECYCLE, key="lifecycle:test")
+
+
 async def test_tool_call_is_recorded_and_replayed_without_executing() -> None:
     calls: list[tuple[str, dict[str, Any]]] = []
     recording = session(ReplayMode.RECORD)
@@ -130,6 +137,41 @@ async def test_unrecorded_tool_call_fails_by_default_and_can_run_live() -> None:
     assert result is not None
     assert result.content == "live"
     assert calls == [("echo", {"text": "hi"})]
+    assert replaying.counts() == {"tool": 1}
+
+
+async def test_tool_live_fallback_capture_is_redacted_and_not_replayed_in_session() -> None:
+    redactor = __import__("chassis.secrets", fromlist=["SecretRedactor"]).SecretRedactor(
+        [SECRET]
+    )
+    replaying = ReplaySession(
+        mode=ReplayMode.REPLAY, fallback=ReplayFallback.LIVE, redactor=redactor
+    )
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    async with TestHarness(replay=replaying, redactor=redactor) as harness:
+        harness.install_tools(
+            fake_tool(
+                "echo",
+                result=SECRET,
+                parameters={"text": (str, ...)},
+                calls=calls,
+            )
+        )
+        await harness.reconcile()
+        generation = harness.current_generation
+        assert generation is not None
+        snapshot = harness.tool_snapshot(generation)
+        request = ToolRequest(name="echo", args={"text": "hi"})
+
+        first = await harness.tool_executor.execute(request, snapshot=snapshot)
+        second = await harness.tool_executor.execute(request, snapshot=snapshot)
+        assert first.content == SECRET
+        assert second.content == SECRET
+
+    assert calls == [("echo", {"text": "hi"}), ("echo", {"text": "hi"})]
+    assert replaying.counts() == {"tool": 2}
+    assert all(SECRET not in str(record.to_dict()) for record in replaying.records)
 
 
 async def test_replay_still_enforces_policy() -> None:
@@ -202,6 +244,22 @@ async def test_model_boundary_records_and_replays() -> None:
     replayed_model = ReplayChatModel(session=replaying, inner=None, model_name="fake-model")
 
     assert (await replayed_model.ainvoke([HumanMessage("hi")])).content == "first answer"
+
+
+async def test_model_live_fallback_capture_is_not_replayed_in_session() -> None:
+    from langchain_core.messages import HumanMessage
+
+    replaying = ReplaySession(mode=ReplayMode.REPLAY, fallback=ReplayFallback.LIVE)
+    inner = FakeChatModel(responses=["first live", "second live"])
+    model = ReplayChatModel(session=replaying, inner=inner, model_name="fake-model")
+
+    first = await model.ainvoke([HumanMessage("hi")])
+    second = await model.ainvoke([HumanMessage("hi")])
+
+    assert first.content == "first live"
+    assert second.content == "second live"
+    assert replaying.counts() == {"model": 2}
+    assert replaying.has_remaining(BoundaryKind.MODEL, key=replaying.records[0].key) is False
 
 
 async def test_model_replay_refuses_a_different_request() -> None:

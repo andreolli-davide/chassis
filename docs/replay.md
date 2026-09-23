@@ -82,8 +82,15 @@ Unrecorded operations follow an explicit policy:
 
 ```python
 ReplaySession(mode=ReplayMode.REPLAY, fallback=ReplayFallback.ERROR)  # default: raise ReplayMismatch
-ReplaySession(mode=ReplayMode.REPLAY, fallback=ReplayFallback.LIVE)   # run live, and record it
+ReplaySession(mode=ReplayMode.REPLAY, fallback=ReplayFallback.LIVE)   # run live, and capture fallback results
 ```
+
+Only completed live boundary results reached through `ReplayFallback.LIVE` are
+captured; replay-mode activity that was served from an existing record is not
+copied. Captured results are redacted and appended to the session recording.
+They are considered consumed by the current session, so a repeated call with
+the same key continues to run live. Saving the session and opening it in a new
+replay session makes those captured results available for replay.
 
 `ReplayMismatch` carries the mismatch dimensions (`kind`, `key`, count of recorded
 interactions of that kind) so a failed replay explains itself, and distinguishes
