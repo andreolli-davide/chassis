@@ -150,7 +150,7 @@ jobs:
         run: |
           {
             printf '%s\n' "\`\`\`bash" "pip install chassis-harness==$VERSION" "\`\`\`" ""
-            printf -- '- Stable documentation: https://andreolli-davide.github.io/chassis/\n'
+            printf -- '- Documentation: https://andreolli-davide.github.io/chassis/\n'
             printf -- '- PyPI: https://pypi.org/project/chassis-harness/%s/\n\n' "$VERSION"
             # The dollar expression belongs to awk, not the shell.
             # shellcheck disable=SC2016

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from packaging.version import Version
@@ -14,7 +14,11 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 
 
 def _workflow(name: str = "release.yml") -> dict[str, Any]:
-    return yaml.safe_load((WORKFLOWS / name).read_text(encoding="utf-8"))
+    workflow: dict[str | bool, Any] = yaml.safe_load((WORKFLOWS / name).read_text(encoding="utf-8"))
+    # PyYAML's YAML 1.1 loader interprets the Actions `on` key as true.
+    if True in workflow:
+        workflow["on"] = workflow.pop(True)
+    return cast("dict[str, Any]", workflow)
 
 
 def _step(job: dict[str, Any], name: str) -> dict[str, Any]:
@@ -87,13 +91,27 @@ def test_release_reuses_the_complete_ci_matrix_and_promotes_one_build() -> None:
         assert download["with"]["name"] == "release-bundle"
 
 
-def test_main_verifies_docs_but_only_a_release_can_deploy_them() -> None:
-    docs = _workflow("docs.yml")["jobs"]
+def test_docs_deployment_is_explicit_and_archives_the_previous_stable_release() -> None:
+    workflow = _workflow("docs.yml")
+    docs = workflow["jobs"]
     ci = _workflow("ci.yml")["jobs"]
 
-    assert docs["deploy"]["if"] == "inputs.deploy == true"
-    assert _step(docs["build"], "Configure Pages")["if"] == "inputs.deploy == true"
-    assert _step(docs["build"], "Upload the site")["if"] == "inputs.deploy == true"
+    triggers = workflow["on"]
+    assert triggers["workflow_dispatch"]["inputs"]["deploy"]["default"] is False
+    deploy_condition = (
+        "inputs.deploy == true && ((github.event_name == 'push' && "
+        "startsWith(github.ref, 'refs/tags/v')) || "
+        "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))"
+    )
+    assert docs["deploy"]["if"] == deploy_condition
+    assert _step(docs["build"], "Configure Pages")["if"] == deploy_condition
+    assert _step(docs["build"], "Upload the site")["if"] == deploy_condition
+    stable_checkout = _step(docs["build"], "Check out the 0.9.1 documentation")
+    assert stable_checkout["with"]["ref"] == "v0.9.1"
+    assert stable_checkout["if"] == "inputs.deploy == true"
+    archive_script = _step(docs["build"], "Build the immutable 0.9.1 archive")["run"]
+    assert '--site-dir "$GITHUB_WORKSPACE/site/0.9.1"' in archive_script
+    assert "mkdocs build --strict" in archive_script
     documentation = ci["documentation"]
     assert documentation["runs-on"] == "ubuntu-latest"
     docs_commands = "\n".join(step.get("run", "") for step in documentation["steps"])
