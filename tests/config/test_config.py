@@ -84,6 +84,40 @@ def test_json_and_mapping_sources_parse() -> None:
     assert from_mapping == from_json
 
 
+@pytest.mark.parametrize("version", [True, False])
+def test_boolean_schema_versions_are_rejected(version: bool) -> None:
+    with pytest.raises(ConfigurationError):
+        parse_config({"version": version, "plugins": []})
+    with pytest.raises(ValueError):
+        HarnessConfig.model_validate({"version": version})
+
+
+def test_schema_version_keeps_integer_string_coercion() -> None:
+    assert HarnessConfig.model_validate({"version": "1"}).version == 1
+
+
+@pytest.mark.parametrize("config_version", [True, False])
+def test_boolean_plugin_config_versions_are_rejected(config_version: bool) -> None:
+    with pytest.raises(ConfigurationError):
+        parse_config(
+            {
+                "plugins": [
+                    {
+                        "id": "a",
+                        "plugin": "x",
+                        "config": {"config_version": config_version},
+                    }
+                ]
+            }
+        )
+
+
+def test_integer_versions_remain_valid() -> None:
+    assert parse_config({"version": 1, "plugins": []}).version == 1
+    entry = PluginEntryConfig(id="a", plugin="x", config={"config_version": 0})
+    assert entry.config_version == 0
+
+
 def test_configuration_loads_from_a_file(tmp_path: Path) -> None:
     path = tmp_path / "harness.yaml"
     path.write_text(YAML, encoding="utf-8")

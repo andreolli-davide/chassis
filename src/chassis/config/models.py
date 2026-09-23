@@ -55,7 +55,9 @@ class PluginEntryConfig(BaseModel):
         # so every stored container is deep-frozen and copied: no nested
         # structure stays mutable or aliases the caller's input.
         declared = self.config.get("config_version")
-        if declared is not None and (not isinstance(declared, int) or declared < 0):
+        if declared is not None and (
+            not isinstance(declared, int) or isinstance(declared, bool) or declared < 0
+        ):
             raise ValueError("config_version must be a non-negative integer")
         object.__setattr__(self, "config", freeze(self.config))
         object.__setattr__(self, "provider_preference", freeze(self.provider_preference))
@@ -86,6 +88,13 @@ class HarnessConfig(BaseModel):
     version: int = 1
     plugins: tuple[PluginEntryConfig, ...] = ()
     provider_preferences: Mapping[str, str] = Field(default_factory=dict)
+
+    @field_validator("version", mode="before")
+    @classmethod
+    def _reject_boolean_schema_version(cls, value: Any) -> Any:
+        if isinstance(value, bool):
+            raise ValueError("configuration schema version must be an integer")
+        return value
 
     @field_validator("version")
     @classmethod

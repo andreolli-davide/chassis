@@ -92,7 +92,11 @@ def migrate_config(payload: Mapping[str, Any]) -> Mapping[str, Any]:
     """
 
     version = payload.get("version", 1)
-    migration = _CONFIG_MIGRATIONS.get(version) if isinstance(version, int) else None
+    migration = (
+        _CONFIG_MIGRATIONS.get(version)
+        if isinstance(version, int) and not isinstance(version, bool)
+        else None
+    )
     if migration is None:
         raise ConfigurationError(
             "unsupported configuration schema version",
