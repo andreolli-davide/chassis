@@ -162,6 +162,60 @@ async def test_failing_handler_can_fail_loudly() -> None:
     assert isinstance(excinfo.value.__cause__, RuntimeError)
 
 
+async def test_invalid_transform_is_recorded_and_keeps_last_valid_payload() -> None:
+    seen: list[dict[str, Any]] = []
+
+    async def invalid(payload: Mapping[str, Any]) -> Any:
+        return "not a mapping"
+
+    async def following(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        seen.append(dict(payload))
+        return {"value": payload["value"] + "-following"}
+
+    registry = HookRegistry()
+    scope = Scope("hooks")
+    registry.register(
+        scope=scope,
+        event=HookEvent.BEFORE_TOOL_EXECUTE,
+        handler=invalid,
+        mode=HookMode.TRANSFORM,
+    )
+    registry.register(
+        scope=scope,
+        event=HookEvent.BEFORE_TOOL_EXECUTE,
+        handler=following,
+        mode=HookMode.TRANSFORM,
+    )
+
+    result = await registry.dispatch(HookEvent.BEFORE_TOOL_EXECUTE, {"value": "original"})
+
+    assert seen == [{"value": "original"}]
+    assert dict(result.payload) == {"value": "original-following"}
+    assert not result.ok
+    assert isinstance(result.failures[0].error, TypeError)
+    assert "did not return a mapping" in str(result.failures[0].error)
+
+
+async def test_invalid_transform_can_fail_loudly() -> None:
+    async def invalid(payload: Mapping[str, Any]) -> Any:
+        return "not a mapping"
+
+    registry = HookRegistry()
+    registry.register(
+        scope=Scope("hooks"),
+        event=HookEvent.BEFORE_TOOL_EXECUTE,
+        handler=invalid,
+        mode=HookMode.TRANSFORM,
+        error_policy=HookErrorPolicy.RAISE,
+    )
+
+    with pytest.raises(HookExecutionError) as excinfo:
+        await registry.dispatch(HookEvent.BEFORE_TOOL_EXECUTE, {"value": "original"})
+
+    assert excinfo.value.context["event"] == "before_tool_execute"
+    assert isinstance(excinfo.value.__cause__, TypeError)
+
+
 async def test_registration_is_removed_when_its_scope_closes() -> None:
     registry = HookRegistry()
     scope = Scope("owner")

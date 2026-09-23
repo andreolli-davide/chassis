@@ -137,6 +137,9 @@ the control plane it aggregates into the transition's report.
 
 Ordering is priority first, then registration order. Error semantics are per
 registration: record and continue, or fail loudly with `HookExecutionError`.
+An invalid `TRANSFORM` return (anything other than a mapping or `None`) follows
+the same policy; under `RECORD`, the dispatch keeps the last valid payload for
+the next handler.
 
 Budget limits are validated at construction: non-negative and finite, with
 integer amounts for count dimensions (fractions are rejected, never truncated).

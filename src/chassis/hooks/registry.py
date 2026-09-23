@@ -215,11 +215,21 @@ class HookRegistry:
                 continue
             if registration.mode is HookMode.TRANSFORM:
                 if not isinstance(result, Mapping):
-                    raise HookExecutionError(
-                        f"transform hook {registration.handler_name} did not return a mapping",
-                        event=event.value,
-                        handler=registration.handler_name,
+                    error = TypeError("transform hook did not return a mapping")
+                    if registration.error_policy is HookErrorPolicy.RAISE:
+                        raise HookExecutionError(
+                            f"transform hook {registration.handler_name} did not return a mapping",
+                            event=event.value,
+                            handler=registration.handler_name,
+                            owner=registration.owner_id,
+                        ) from error
+                    failures.append(
+                        CleanupFailure(
+                            description=f"hook {event.value} ({registration.handler_name})",
+                            error=error,
+                        )
                     )
+                    continue
                 # TRANSFORM replaces the payload, exactly as documented: keys the
                 # mapping does not carry are removed, and the replacement is
                 # deep-frozen like the initial payload.
