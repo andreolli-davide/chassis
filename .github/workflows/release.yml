@@ -84,14 +84,39 @@ jobs:
           test -f "dist/chassis_harness-${VERSION}.tar.gz"
           (cd dist && sha256sum -- * | sort -k 2) > SHA256SUMS
 
+      # Syft does not catalog a Python distribution inside its wheel archive
+      # when scanning dist/ directly. Scan the verified wheel's contents.
+      - name: Extract the verified wheel for SBOM generation
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: unzip -q "dist/chassis_harness-${VERSION}-py3-none-any.whl" -d sbom-input
+
       # The SBOM must live outside dist/: pypa/gh-action-pypi-publish publishes
       # every file in the packages directory and rejects non-distributions.
       - name: Generate an SBOM for the distribution
         uses: anchore/sbom-action@v0
         with:
-          path: dist
+          path: sbom-input
           format: cyclonedx-json
           output-file: sbom.cdx.json
+
+      - name: Verify the SBOM identifies the published package
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          bom = json.loads(Path("sbom.cdx.json").read_text())
+          assert bom["bomFormat"] == "CycloneDX"
+          assert any(
+              component.get("name") == "chassis-harness"
+              and component.get("version") == os.environ["VERSION"]
+              for component in bom.get("components", [])
+          ), "SBOM does not catalog the release distribution"
+          PY
 
       # Every publishing job downloads this one immutable workflow artifact.
       # PyPI receives dist/; GitHub receives the same files plus digests and SBOM.
