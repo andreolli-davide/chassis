@@ -20,11 +20,11 @@ runtime generation it started with. LangGraph is the first-class execution engin
 ## Install
 
 ```bash
-pip install chassis-harness==1.0.0b1                        # beta core lifecycle kernel
-pip install "chassis-harness[langgraph]==1.0.0b1"           # LangGraph adapter
-pip install "chassis-harness[langsmith]==1.0.0b1"           # LangSmith telemetry + evaluation
-pip install "chassis-harness[opentelemetry]==1.0.0b1"       # OpenTelemetry telemetry adapter
-pip install "chassis-harness[langgraph,langsmith,opentelemetry]==1.0.0b1"
+pip install chassis-harness==1.0.0b2                        # beta core lifecycle kernel
+pip install "chassis-harness[langgraph]==1.0.0b2"           # LangGraph adapter
+pip install "chassis-harness[langsmith]==1.0.0b2"           # LangSmith telemetry + evaluation
+pip install "chassis-harness[opentelemetry]==1.0.0b2"       # OpenTelemetry telemetry adapter
+pip install "chassis-harness[langgraph,langsmith,opentelemetry]==1.0.0b2"
 ```
 
 Python 3.12 or 3.13. The import package is `chassis`. These commands select the
@@ -176,9 +176,7 @@ what Chassis refuses to promise.
 
 ## Status
 
-Latest published beta: **1.0.0b1**, published on 2026-09-22. **1.0.0b2 is an
-unpublished release candidate**; until it is released, use the explicit b1
-install commands above for the published beta. The latest stable release is
+Latest published beta: **1.0.0b2**, published on 2026-09-24. The latest stable release is
 **0.9.1**; its [documentation archive](https://andreolli-davide.github.io/chassis/0.9.1/)
 remains available. The surface covered by `tests/test_public_api.py` is
 classified and checked against the released 0.8.1 contract and the current b2
@@ -189,7 +187,7 @@ fixtures preserved as historical candidate artifacts.
 the 0.9 → 1.0 beta, 0.8 → 0.9, 0.8 → 0.8.1, 0.7 → 0.8,
 0.6 → 0.7, 0.5.1 → 0.6, 0.5 → 0.5.1, 0.4 → 0.5, 0.3 → 0.4, 0.2 → 0.3, and
 0.1 → 0.2 changes. The release reviews are recorded in
-[1.0-beta2-readiness.md](docs/1.0-beta2-readiness.md) (unpublished b2 candidate),
+[1.0-beta2-readiness.md](docs/1.0-beta2-readiness.md) (published 1.0.0b2 review),
 [1.0-beta-readiness.md](docs/1.0-beta-readiness.md) (published 1.0.0b1 review),
 [production-readiness.md](docs/production-readiness.md) (0.9.0), and
 [beta-readiness.md](docs/beta-readiness.md) (0.8.0).

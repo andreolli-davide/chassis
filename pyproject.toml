@@ -42,7 +42,7 @@ Homepage = "https://github.com/andreolli-davide/chassis"
 Repository = "https://github.com/andreolli-davide/chassis"
 Issues = "https://github.com/andreolli-davide/chassis/issues"
 Changelog = "https://github.com/andreolli-davide/chassis/blob/main/CHANGELOG.md"
-Documentation = "https://github.com/andreolli-davide/chassis/tree/main/docs"
+Documentation = "https://andreolli-davide.github.io/chassis/"
 
 [dependency-groups]
 dev = [

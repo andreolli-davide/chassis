@@ -1,7 +1,6 @@
 # Migrating between versions
 
-Chassis 1.0.0b2 is the current unpublished candidate; 1.0.0b1 remains the
-published beta until b2 is released. Each section lists every
+Chassis 1.0.0b2 is the current published beta. Each section lists every
 change that can break a caller from the previous version, why it was made, and
 what to do instead. Lifecycle behaviour is unchanged across these releases:
 published generations are still immutable, publication is still transactional,
@@ -45,10 +44,10 @@ keys exactly should accept this added field. The b1 API and format candidates
 remain in the repository as historical review artifacts, while b2 is the
 current candidate baseline.
 
-Until b2 is published, install the published beta with:
+Install the current beta with:
 
 ```bash
-pip install chassis-harness==1.0.0b1
+pip install chassis-harness==1.0.0b2
 ```
 
 ## 0.9 → 1.0 beta

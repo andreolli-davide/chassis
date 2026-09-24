@@ -972,7 +972,7 @@ Acceptance criteria:
 
 ## 1.0.0 — stable surface and release governance
 
-**Status: in progress (`1.0.0b2` source candidate).** 1.0 freezes the reviewed runtime contract
+**Status: in progress (`1.0.0b2` published beta).** 1.0 freezes the reviewed runtime contract
 rather than adding a new execution framework. Feature work that does not
 directly establish the stable surface or its release safety moves to a later
 minor release. The first beta checkpoint has selected a candidate API baseline,

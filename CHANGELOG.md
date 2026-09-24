@@ -7,15 +7,9 @@ that a minor release may break the documented surface.
 
 ## [Unreleased]
 
-### Documentation
+## [1.0.0b2] - 2026-09-24
 
-- The rendered documentation homepage now identifies `1.0.0b1` as the latest
-  beta and links to the preserved `0.9.1` stable documentation archive.
-
-## [1.0.0b2] - Unpublished candidate
-
-Second 1.0 beta candidate. It fixes correctness issues found during the b1
-review; b1 remains the published beta until this candidate is released.
+Second 1.0 beta. It fixes correctness issues found during the b1 review.
 
 ### Fixed
 
@@ -41,8 +35,8 @@ review; b1 remains the published beta until this candidate is released.
 ### Documentation
 
 - Added migration notes for the b1-to-b2 correctness fixes and refreshed the
-  current installation and documentation pointers for this unpublished
-  candidate. The published b1 remains the latest beta until b2 is released.
+  current installation and documentation pointers. The rendered documentation
+  homepage links to the preserved `0.9.1` stable documentation archive.
 
 ## [1.0.0b1] - 2026-09-22
 

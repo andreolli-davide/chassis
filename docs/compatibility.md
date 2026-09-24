@@ -1,7 +1,6 @@
 # Compatibility and deprecation policy
 
-Chassis 1.0.0b2 is the current unpublished candidate. 1.0.0b1 remains the
-published beta until b2 is released; 0.9.1 remains the
+Chassis 1.0.0b2 is the current published beta; 0.9.1 remains the
 latest stable release. Until 1.0.0 final, the documented surface
 is technically pre-1.0, but 0.9.0 was the **last planned release with deliberate
 pre-1.0 compatibility changes**. This page defines what is covered by

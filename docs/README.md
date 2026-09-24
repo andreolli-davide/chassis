@@ -2,18 +2,16 @@
 
 Rendered at **https://andreolli-davide.github.io/chassis/**.
 
-Latest published beta: **1.0.0b1**, published on 2026-09-22. Install it explicitly with
-`pip install chassis-harness==1.0.0b1`; see its
-[PyPI page](https://pypi.org/project/chassis-harness/1.0.0b1/) and
-[GitHub Release](https://github.com/andreolli-davide/chassis/releases/tag/v1.0.0b1).
+Latest published beta: **1.0.0b2**, published on 2026-09-24. Install it explicitly with
+`pip install chassis-harness==1.0.0b2`; see its
+[PyPI page](https://pypi.org/project/chassis-harness/1.0.0b2/) and
+[GitHub Release](https://github.com/andreolli-davide/chassis/releases/tag/v1.0.0b2).
 
 Latest stable: **0.9.1**. Its documentation remains available in the
 [0.9.1 archive](https://andreolli-davide.github.io/chassis/0.9.1/). An
 unqualified `pip install chassis-harness` still selects the stable release.
 
-**1.0.0b2 is an unpublished candidate.** The documentation in this checkout
-describes b2 behavior; the install command above remains on b1 until b2 is
-released.
+This documentation describes the published 1.0.0b2 beta.
 
 New here? Start with [getting-started.md](getting-started.md), then use the guides
 below for task-oriented detail.
@@ -34,7 +32,7 @@ below for task-oriented detail.
 | [roadmap.md](roadmap.md) | ordered 0.5.1–1.0 plan, acceptance criteria, release gates, and finding traceability |
 | [compatibility.md](compatibility.md) | surface classes, the API baseline and compatibility check, deprecations, persisted format versions |
 | [1.0-beta-readiness.md](1.0-beta-readiness.md) | the published 1.0.0b1 decision record: candidate API/formats, validation, publication controls, and sign-off |
-| [1.0-beta2-readiness.md](1.0-beta2-readiness.md) | the 1.0.0b2 source-candidate review and remaining publication steps |
+| [1.0-beta2-readiness.md](1.0-beta2-readiness.md) | the 1.0.0b2 release review and publication record |
 | [production-readiness.md](production-readiness.md) | the 0.9.0 compatibility and operational review: domains, validation matrix, audit resolutions, limitations |
 | [observability.md](observability.md) | tracing, snapshots, canonical hashing, redaction, evaluation |
 | [security.md](security.md) | trust model, policy, secrets, and what Chassis is *not* |
